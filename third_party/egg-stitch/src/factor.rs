@@ -1,4 +1,5 @@
 use egg::Id;
+use std::sync::Arc;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 /// One factor of a match location's substitution set: a relation over a subset
@@ -18,7 +19,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 #[derive(Debug, Clone)]
 pub struct Factor {
     pub slots: Vec<usize>,
-    pub rows: Vec<Vec<Id>>,
+    pub rows: Arc<Vec<Vec<Id>>>,
 }
 
 impl Factor {
@@ -32,7 +33,7 @@ impl Factor {
         }
         rows.sort_unstable();
         rows.dedup();
-        Some(Self { slots, rows })
+        Some(Self { slots, rows: Arc::new(rows) })
     }
 
     /// Position of `slot` within `self.slots`, or `None` if not covered.
@@ -67,7 +68,7 @@ impl Factor {
         let single: Vec<usize> = (0..n)
             .map(|p| {
                 let mut set: FxHashSet<u64> = FxHashSet::default();
-                for r in &self.rows {
+                for r in self.rows.iter() {
                     set.insert(id(r[p]));
                 }
                 set.len()
@@ -90,7 +91,7 @@ impl Factor {
                     continue;
                 }
                 let mut set: FxHashSet<u64> = FxHashSet::default();
-                for r in &self.rows {
+                for r in self.rows.iter() {
                     set.insert((id(r[p]) << 32) | id(r[q]));
                 }
                 if set.len() < single[p] * single[q] {
@@ -121,7 +122,7 @@ impl Factor {
         // once a split candidate exists — off the hot pairwise path.
         let proj_block = |cols: &[usize]| -> usize {
             let mut set: FxHashSet<Vec<Id>> = FxHashSet::default();
-            for r in &self.rows {
+            for r in self.rows.iter() {
                 set.insert(cols.iter().map(|&c| r[c]).collect());
             }
             set.len()
@@ -156,9 +157,9 @@ pub fn factors_product(factors: &[Factor]) -> Vec<Vec<Id>> {
     let arity: usize = factors.iter().map(|f| f.slots.len()).sum();
     let mut acc: Vec<Vec<Id>> = vec![vec![Id::from(0); arity]];
     for f in factors {
-        let mut next: Vec<Vec<Id>> = Vec::with_capacity(acc.len() * f.rows.len());
+        let mut next: Vec<Vec<Id>> = Vec::with_capacity(crate::matching::count_product(acc.len(), f.rows.len()));
         for base in &acc {
-            for row in &f.rows {
+            for row in f.rows.iter() {
                 let mut t = base.clone();
                 for (p, &slot) in f.slots.iter().enumerate() {
                     t[slot] = row[p];
@@ -175,7 +176,7 @@ pub fn factors_product(factors: &[Factor]) -> Vec<Vec<Id>> {
 pub(crate) fn visit_factor_product(factors: &[Factor], mut visit: impl FnMut(&[Id])) {
     fn visit_layer(factors: &[Factor], assignment: &mut [Id], visit: &mut impl FnMut(&[Id])) {
         if let Some((factor, rest)) = factors.split_first() {
-            for row in &factor.rows {
+            for row in factor.rows.iter() {
                 for (&slot, &id) in factor.slots.iter().zip(row) {
                     assignment[slot] = id;
                 }
@@ -207,7 +208,7 @@ pub fn rebuild_factor(slots: Vec<usize>, src_rows: &[Vec<Id>], min_rows: usize, 
     if rows.is_empty() {
         return None;
     }
-    Some(Factor { slots, rows }.decompose(min_rows))
+    Some(Factor { slots, rows: Arc::new(rows) }.decompose(min_rows))
 }
 
 #[cfg(test)]

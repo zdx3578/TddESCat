@@ -193,7 +193,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         if let Some(typed) = &shared.egraph.analysis.typed {
             typed.check();
             if nodes.len() >= typed.max_live_states && !heap.is_empty() {
-                std::panic::panic_any(crate::lang::SearchBudgetStop("managed_bytes"));
+                std::panic::panic_any(crate::lang::SearchBudgetStop("state_limit"));
             }
         }
         // Check cutoffs before popping so a node isn't discarded from the frontier.
@@ -249,7 +249,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 if let Some(typed) = &shared.egraph.analysis.typed
                     && nodes.len().saturating_add(actions.len()) > typed.max_live_states
                 {
-                    std::panic::panic_any(crate::lang::SearchBudgetStop("managed_bytes"));
+                    std::panic::panic_any(crate::lang::SearchBudgetStop("state_limit"));
                 }
                 actions.into_iter().map(|(a, _)| nodes[node_id].state.apply_action(&a, &shared, true, Some(&rank))).collect()
             }

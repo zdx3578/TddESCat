@@ -70,6 +70,14 @@
         },
         "protocol_version": {
           "const": "tddescat.learn.v1"
+        },
+        "build_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "binary_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
         }
       },
       "required": [
@@ -77,7 +85,9 @@
         "source_git_tree",
         "cargo_lock_sha256",
         "rust_version",
-        "protocol_version"
+        "protocol_version",
+        "build_sha256",
+        "binary_sha256"
       ],
       "additionalProperties": false
     }

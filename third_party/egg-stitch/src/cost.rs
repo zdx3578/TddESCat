@@ -360,7 +360,7 @@ impl RewriteScratch {
         for (i, m) in search_state.matches.iter().enumerate() {
             self.eclass_to_match_idx.insert(m.root_eclass, i);
             for f in &m.factors {
-                for row in &f.rows {
+                for row in f.rows.iter() {
                     for &v in row {
                         self.arg_to_match_roots.entry(v).or_default().push(m.root_eclass);
                     }
@@ -533,6 +533,9 @@ pub fn compute_size_for_candidate<F: LanguageFamily, O: StitchOp>(egraph: &Stitc
 /// `S_k` is sorted ascending (`enumerate_candidates`), enabling the binary
 /// search.
 pub(crate) fn filter_factors_by_candidate<L: StitchLanguage>(egraph: &StitchEgraph<L>, m: &MatchAtEClass, variable_indices: &[Vec<i32>], var_depth: &[u32]) -> Option<Vec<Factor>> {
+    if var_depth.iter().all(|&depth| depth == 0) {
+        return Some(m.factors.clone());
+    }
     let mut out = Vec::with_capacity(m.factors.len());
     for f in &m.factors {
         let rows: Vec<Vec<Id>> = f
@@ -655,7 +658,7 @@ pub fn compute_lower_bound<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
         for f in &m.factors {
             for (p, &k) in f.slots.iter().enumerate() {
                 if var_frozen[k] {
-                    for row in &f.rows {
+                    for row in f.rows.iter() {
                         arg_to_match_roots.entry(egraph.find(row[p])).or_default().push(root);
                     }
                 }
@@ -685,6 +688,9 @@ pub fn compute_lower_bound<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
 /// the wrap-lams, then wrapped under `variable_indices[k].len()` λs before
 /// being passed in.
 pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(mut egraph: StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>, candidate: &CostCandidate, fn_name: &str) -> StitchEgraph<F::Apply<O>> {
+    if egraph.analysis.typed.is_some() {
+        return apply_typed::<F, O>(egraph, search_state, candidate, fn_name);
+    }
     let variable_indices = &candidate.variable_indices;
     let var_depth = &search_state.pattern.var_depth;
     // Defer unions until all shifts are done. A mid-loop `union` shrinks
@@ -716,6 +722,47 @@ pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(mut egraph: Stitch
         egraph.union(x, root_eclass);
     }
     egraph.rebuild();
+    egraph
+}
+
+fn apply_typed<F: LanguageFamily, O: StitchOp>(
+    mut egraph: StitchEgraph<F::Apply<O>>,
+    search_state: &SearchState<F, O>,
+    candidate: &CostCandidate,
+    fn_name: &str,
+) -> StitchEgraph<F::Apply<O>> {
+    assert!(search_state.pattern.var_depth.iter().all(|&depth| depth == 0));
+    assert!(candidate.variable_indices.iter().all(Vec::is_empty));
+    let limits = std::sync::Arc::clone(egraph.analysis.typed.as_ref().unwrap());
+    // Matches and slot ids come from the immutable search snapshot. With no
+    // binders there is no free-variable shift to redo after a merge. Resolve
+    // each saved id in the rebuilt graph before using it in the next chunk.
+    let mut block = Vec::with_capacity(limits.apply_chunk_rows);
+    let mut visited = 0usize;
+    let flush = |graph: &mut StitchEgraph<F::Apply<O>>, block: &mut Vec<(Id, Vec<Id>)>| {
+        for (root, arguments) in block.drain(..) {
+            limits.check();
+            let root = graph.find(root);
+            let arguments = arguments.into_iter().map(|id| graph.find(id)).collect();
+            let call = F::add_stub_application::<O>(fn_name, arguments, graph);
+            assert_eq!(graph[call].data.sort, graph[root].data.sort);
+            assert_eq!(graph[call].data.fv, graph[root].data.fv);
+            graph.union(call, root);
+        }
+        graph.rebuild();
+        limits.check_graph(graph.total_size());
+    };
+    for site in &search_state.matches {
+        crate::factor::visit_factor_product(&site.factors, |args| {
+            visited = crate::matching::count_sum(visited, 1);
+            limits.check_rows(visited);
+            block.push((site.root_eclass, args.to_vec()));
+            if block.len() == limits.apply_chunk_rows {
+                flush(&mut egraph, &mut block);
+            }
+        });
+    }
+    flush(&mut egraph, &mut block);
     egraph
 }
 

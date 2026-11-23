@@ -114,6 +114,7 @@ function publication_from(base, checkpoint, result; current_version, current_evi
     cost["engine_reported_post_rewrite_baseline"] = result["cost"]["post_rewrite_baseline"]
     return Dict(
         "schema_version"=>1, "input_sha256"=>checkpoint.input_sha, "round_index"=>result["round_index"],
+        "engine_pin"=>checkpoint.manifest["engine_pin"],
         "library_version"=>accepted.snapshot.version, "base_version"=>base.version,
         "evidence_snapshot_id"=>current_evidence, "signature"=>checkpoint.signature,
         "slot_context"=>checkpoint.manifest["slot_context"], "library"=>accepted.snapshot.entries,

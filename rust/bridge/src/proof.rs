@@ -52,11 +52,12 @@ struct Work {
 
 impl Work {
     fn use_node(&mut self) {
+        crate::resources::check();
         if Instant::now() >= self.deadline {
             std::panic::panic_any(SearchBudgetStop("deadline"));
         }
         if self.remaining == 0 {
-            std::panic::panic_any(SearchBudgetStop("managed_bytes"));
+            std::panic::panic_any(SearchBudgetStop("proof_limit"));
         }
         self.remaining -= 1;
     }
@@ -141,7 +142,7 @@ impl Marked {
     ) -> Self {
         work.use_node();
         if site.len() > 96 {
-            std::panic::panic_any(SearchBudgetStop("managed_bytes"));
+            std::panic::panic_any(SearchBudgetStop("proof_limit"));
         }
         self.children = self
             .children

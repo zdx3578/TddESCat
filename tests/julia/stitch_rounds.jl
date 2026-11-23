@@ -44,13 +44,13 @@ function frame_origins(signature, programs, library)
     return records
 end
 
-function execute(name, texts, library; config=CONFIG, source_origins=nothing)
+function execute(name, texts, library; config=CONFIG, source_origins=nothing, hard_memory=536870912)
     job = joinpath(RUN, name * "-input")
     output = joinpath(RUN, name * "-output")
     origins = isnothing(source_origins) ? frame_origins(signature, texts, library) : source_origins
     freeze_stitch_job(job, name, "snapshot-" * name, library, signature, texts, origins, [];
                       repo_root=ROOT, config_path=config)
-    command = `$PYTHON -m tddesc_tools.stitch --job $job --output $output --binary $WORKER`
+    command = `$PYTHON -m tddesc_tools.stitch --job $job --output $output --binary $WORKER --hard-memory $hard_memory`
     return (; job, output, code=run(ignorestatus(command)).exitcode)
 end
 
@@ -125,13 +125,14 @@ end
     @test_throws ErrorException TC.publish_stitch!(directory, result; current_evidence="snapshot-positive")
     @test TC.read_published_stitch(directory).publication == digest
     missing = execute("missing", ["($lib c32 c33)"], empty; source_origins=[])
-    @test missing.code == 20 && isempty(readdir(missing.output))
+    @test missing.code == 20 && isempty(filter(n->startswith(n,"round-"),readdir(missing.output)))
     invalid = execute("wrong-sort", ["(f (g other) c03)"], empty)
-    @test invalid.code == 20 && isempty(readdir(invalid.output))
+    @test invalid.code == 20 && isempty(filter(n->startswith(n,"round-"),readdir(invalid.output)))
     cutoff = joinpath(RUN, "cutoff.toml")
     write(cutoff, replace(read(CONFIG, String), "max_steps = 20000" => "max_steps = 1"))
     stopped = execute("bounded", batch(0), empty; config=cutoff)
-    @test stopped.code == 22 && isempty(readdir(stopped.output))
+    @test stopped.code == 22 && isempty(filter(n->startswith(n,"round-"),readdir(stopped.output)))
+    @test TC.read_json(joinpath(stopped.output,"metrics.json"))["stop_reason"] == "step_budget"
     mixed = execute("mixed-sort", [batch(0); "(extra other)"], empty)
     @test mixed.code == 0
     m = first(read_stitch_rounds(mixed.job, mixed.output).verified)
@@ -144,6 +145,24 @@ end
     mkpath(joinpath(interrupted.output, "round-000002.tmp"))
     prior = only(read_stitch_rounds(interrupted.job, interrupted.output).verified)
     @test prior["cost"]["final_total"] == "54"
+    @test TC.read_json(joinpath(interrupted.output,"metrics.json"))["complete_rounds"] == 1
+    small_chunks = joinpath(RUN,"small-chunks.toml")
+    write(small_chunks, replace(read(CONFIG,String),"apply_chunk_rows = 128"=>"apply_chunk_rows = 1"))
+    chunked = execute("chunked",batch(0),empty;config=small_chunks)
+    @test chunked.code == 0
+    new = first(read_stitch_rounds(chunked.job,chunked.output).verified)
+    for key in ("proofs","calls","definitions","rewritten_programs","cost")
+        @test new[key] == learned[key]
+    end
+    measured = TC.read_json(joinpath(chunked.output,"metrics.json"))
+    @test measured["managed_byte_limit"] == 268435456
+    @test all(key -> measured["phases"][key]["peak_live_bytes"] > 0,
+        ["load","graph","search","apply","extract","proof","serialize","commit"])
+    low = joinpath(RUN,"low-memory.toml")
+    write(low, replace(read(CONFIG,String),"managed_bytes = 268435456"=>"managed_bytes = 8192"))
+    memory = execute("managed-stop",batch(0),empty;config=low)
+    @test memory.code == 22
+    @test TC.read_json(joinpath(memory.output,"metrics.json"))["stop_reason"] == "managed_bytes"
     println(JSON.json(Dict("batch_one" => learned["cost"], "batch_two" => old["cost"],
                            "library_definition" => lib, "second_batch_calls" => length(old["calls"]))))
 end

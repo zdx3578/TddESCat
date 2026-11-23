@@ -105,7 +105,7 @@ tree_sha1 = "8fbb34ecb3d53975795381cb250101c722249214"
 archive = "egg-stitch-source.tar"
 archive_sha256 = "86fcd0579c481225f36a8669e9e9cf25af3750a364891a607a3d0fdf5afae585"
 local_path = "third_party/egg-stitch"
-build_sha256 = "8cea956146fbe12cd62c03ea9a8c5b1dfce988e9e553d766c7628179dea95bac"
+build_sha256 = "6df2729d8371ccd600d10488cedfd7c70734d1007ac7584d90b8df7994581aee"
 license = "GPL-3.0-or-later"
 license_path = "LICENSE"
 

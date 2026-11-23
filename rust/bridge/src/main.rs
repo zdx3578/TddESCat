@@ -2,6 +2,7 @@ mod codec;
 mod engine;
 mod proof;
 mod protocol;
+mod resources;
 
 use anyhow::{Context, Result, ensure};
 use clap::Parser;
@@ -69,6 +70,7 @@ impl Write for BoundedOutput {
             std::panic::panic_any(SearchBudgetStop("output_budget"));
         }
         self.data.extend_from_slice(buf);
+        resources::check();
         Ok(buf.len())
     }
     fn flush(&mut self) -> io::Result<()> {
@@ -97,6 +99,8 @@ impl Job {
         let root = parent.canonicalize()?;
         let (manifest, input_sha) = Manifest::load(&args.manifest)?;
         let config = Config::load(&manifest.config_file.read(&root)?)?;
+        resources::limit(config.budget.managed_bytes);
+        resources::check();
         let mut registry =
             Registry::new(manifest.signature_file.json(&root)?, &manifest.slot_context)?;
         let rules: Vec<serde_json::Value> = manifest.rules_file.json(&root)?;
@@ -147,10 +151,7 @@ impl Job {
         let deadline = start + Duration::from_millis(self.config.budget.wall_ms);
         let mut steps_left = self.config.max_steps;
         let pre = engine::corpus_cost(&self.original);
-        let input_load = pre.saturating_mul(256);
-        if input_load > self.config.budget.managed_bytes as u64 {
-            std::panic::panic_any(SearchBudgetStop("managed_bytes"));
-        }
+        resources::check();
         let mut programs = self.original.clone();
         let mut parent = None;
         let mut new_cost = 0u64;
@@ -190,6 +191,7 @@ impl Job {
                 definitions.push(def);
             }
             programs = result.programs;
+            let span = resources::phase(resources::Phase::Proof);
             let (proofs, calls) = proof::verify(
                 &self.original,
                 &programs,
@@ -198,6 +200,8 @@ impl Job {
                 self.config.budget.max_relation_nodes,
                 deadline,
             )?;
+            drop(span);
+            resources::check();
             let corpus = engine::corpus_cost(&programs);
             let total = corpus
                 .checked_add(self.old_cost)
@@ -216,6 +220,7 @@ impl Job {
                 ratio_numerator: ratio.to_string(),
                 ratio_denominator: total.to_string(),
             };
+            let span = resources::phase(resources::Phase::Serialize);
             let data = LearningResult {
                 protocol_version: PROTOCOL,
                 codec_version: CODEC,
@@ -239,9 +244,11 @@ impl Job {
                 limit: self.config.budget.max_output_bytes,
             };
             serde_json::to_writer(&mut bytes, &data)?;
+            drop(span);
             if Instant::now() >= deadline {
                 std::panic::panic_any(SearchBudgetStop("deadline"));
             }
+            let span = resources::phase(resources::Phase::Commit);
             parent = Some(commit(
                 output,
                 round_index,
@@ -250,6 +257,7 @@ impl Job {
                 &bytes.data,
                 result.expansions,
             )?);
+            drop(span);
             *committed = round_index;
             if !result.exhausted {
                 std::panic::panic_any(SearchBudgetStop("step_budget"));
@@ -263,6 +271,14 @@ impl Job {
 }
 
 fn main() {
+    if std::env::args().skip(1).eq(["--identity".to_owned()]) {
+        let identity = serde_json::json!({
+            "build_sha256": protocol::BUILD_SHA,
+            "binary_sha256": protocol::running_binary_sha().expect("worker binary"),
+        });
+        println!("{identity}");
+        return;
+    }
     let args = Arguments::parse();
     let start = Instant::now();
     let default_hook = std::panic::take_hook();
@@ -272,27 +288,49 @@ fn main() {
         }
     }));
     let mut committed = 0;
-    let code = match Job::load(&args) {
-        Err(err) => {
-            eprintln!("invalid_input: {err:#}");
-            20
+    let mut reason = None;
+    let result = catch_unwind(AssertUnwindSafe(|| -> Result<i32> {
+        let span = resources::phase(resources::Phase::Load);
+        let job = match Job::load(&args) {
+            Ok(job) => job,
+            Err(error) => {
+                eprintln!("invalid_input: {error:#}");
+                reason = Some("invalid_input");
+                return Ok(20);
+            }
+        };
+        drop(span);
+        job.run(&args.output, start, &mut committed)?;
+        Ok(0)
+    }));
+    let code = match result {
+        Ok(Ok(code)) => code,
+        Ok(Err(error)) => {
+            reason = Some("invariant_violation");
+            eprintln!("invariant_violation: {error:#}");
+            21
         }
-        Ok(job) => match catch_unwind(AssertUnwindSafe(|| {
-            job.run(&args.output, start, &mut committed)
-        })) {
-            Ok(Ok(())) => 0,
-            Ok(Err(err)) => {
-                eprintln!("invariant_violation: {err:#}");
+        Err(payload) => match payload.downcast::<SearchBudgetStop>() {
+            Ok(stop) => {
+                reason = Some(stop.0);
+                eprintln!("{}: {committed} committed rounds", stop.0);
+                if committed == 0 { 22 } else { 10 }
+            }
+            Err(_) => {
+                reason = Some("invariant_violation");
                 21
             }
-            Err(payload) => match payload.downcast::<SearchBudgetStop>() {
-                Ok(reason) => {
-                    eprintln!("{}: {committed} committed rounds", reason.0);
-                    if committed == 0 { 22 } else { 10 }
-                }
-                Err(_) => 21,
-            },
         },
     };
+    let profile = resources::report(code, reason, committed);
+    if args.output.is_dir() {
+        let temporary = args.output.join("metrics.json.tmp");
+        let final_path = args.output.join("metrics.json");
+        if let Err(error) = fs::write(&temporary, profile.to_string())
+            .and_then(|()| fs::rename(&temporary, &final_path))
+        {
+            eprintln!("Unable to save resource metrics: {error}");
+        }
+    }
     std::process::exit(code);
 }

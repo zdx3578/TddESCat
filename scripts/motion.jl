@@ -63,7 +63,8 @@ function collect_training(cfg, run, request)
     TC.atomic_json(joinpath(run, "source-bindings.json"), corpus.bindings)
     freeze_stitch_job(joinpath(run, "learn-input"), "frame-motion", snapshot, LibrarySnapshot(),
         corpus.signature, corpus.programs, corpus.origins, corpus.slots;
-        repo_root=ROOT, config_path=joinpath(ROOT, "config", "stitch.toml"))
+        repo_root=ROOT, config_path=joinpath(ROOT, "config", "stitch.toml"),
+        engine_identity=TC.read_json(joinpath(run,"engine-identity.json")))
     return (training_events=length(corpus.programs), snapshot)
 end
 

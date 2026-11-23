@@ -215,6 +215,7 @@ dependencies = [
  "egg",
  "getrandom",
  "libtest-mimic",
+ "num-bigint",
  "priority-queue",
  "rand",
  "rustc-hash",

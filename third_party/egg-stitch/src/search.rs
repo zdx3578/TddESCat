@@ -236,7 +236,7 @@ pub struct SearchState<F: LanguageFamily, O: StitchOp> {
 /// Computes the total number of (distinct) substitutions across all matches —
 /// the sum over match locations of each location's factored product size.
 fn total_substs(matches: &[MatchAtEClass]) -> usize {
-    matches.iter().map(|m| m.num_substs()).sum()
+    matches.iter().map(|m| m.num_substs()).fold(0, crate::matching::count_sum)
 }
 
 /// Returns a copy of `f` with every slot strictly above `threshold` shifted by
@@ -395,8 +395,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                     let mut slots: Vec<usize> = fa.slots.iter().chain(&fb.slots).copied().collect();
                     slots.sort_unstable();
                     let mut rows: Vec<Vec<Id>> = Vec::new();
-                    for ra in &fa.rows {
-                        for rb in &fb.rows {
+                    for ra in fa.rows.iter() {
+                        for rb in fb.rows.iter() {
                             if pred(ra[sp], rb[dp]) {
                                 // Reassemble the joint row in ascending slot order.
                                 let mut joint = vec![Id::from(0); slots.len()];
@@ -434,7 +434,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // rows (not the materialised product) suffices.
         for m in &self.matches {
             let (fi, pos) = m.locate_slot(k);
-            for row in &m.factors[fi].rows {
+            for row in m.factors[fi].rows.iter() {
                 let id = shared.egraph.find(row[pos]);
                 match first {
                     None => first = Some(id),
@@ -798,8 +798,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             // per-row node contributions by that multiplier. `support` adds the
             // usage factor on top; the rank stats deliberately omit it.
             let w = m.num_substs() / f.rows.len();
-            let wu = usage(m.root_eclass) * w;
-            for row in &f.rows {
+            let wu = crate::matching::count_product(usage(m.root_eclass), w);
+            for row in f.rows.iter() {
                 for (disc, arity, count) in &shared.eclass_shapes[usize::from(row[pos])] {
                     if invalid_literal_expansion(disc, d_k) {
                         continue;
@@ -813,16 +813,16 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                     let key = (disc.clone(), *arity);
                     match shape_idx.get(&key) {
                         Some(&idx) => {
-                            shapes[idx].support += count * wu;
-                            shapes[idx].expand_enodes += count * w;
-                            shapes[idx].substs += w;
+                            shapes[idx].support = crate::matching::count_sum(shapes[idx].support, crate::matching::count_product(*count, wu));
+                            shapes[idx].expand_enodes = crate::matching::count_sum(shapes[idx].expand_enodes, crate::matching::count_product(*count, w));
+                            shapes[idx].substs = crate::matching::count_sum(shapes[idx].substs, w);
                         }
                         None => {
                             shape_idx.insert(key.clone(), shapes.len());
                             shapes.push(VarShape {
                                 shape: key,
-                                support: count * wu,
-                                expand_enodes: count * w,
+                                support: crate::matching::count_product(*count, wu),
+                                expand_enodes: crate::matching::count_product(*count, w),
                                 substs: w,
                             });
                         }
@@ -980,16 +980,16 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                             typed.check_rows(fa.rows.len().saturating_mul(fb.rows.len()));
                         }
                         let mut pairs = 0usize;
-                        for ra in &fa.rows {
-                            for rb in &fb.rows {
+                        for ra in fa.rows.iter() {
+                            for rb in fb.rows.iter() {
                                 if pred(ra[pi], rb[pj]) {
                                     pairs += 1;
                                 }
                             }
                         }
-                        pairs * (total / (fa.rows.len() * fb.rows.len()))
+                        crate::matching::count_product(pairs, total / crate::matching::count_product(fa.rows.len(), fb.rows.len()))
                     };
-                    (s + usage(m.root_eclass) * c, r + c)
+                    (crate::matching::count_sum(s, crate::matching::count_product(usage(m.root_eclass), c)), crate::matching::count_sum(r, c))
                 });
                 if support == 0 {
                     continue;

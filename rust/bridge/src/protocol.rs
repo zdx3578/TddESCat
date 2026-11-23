@@ -9,11 +9,26 @@ use std::{
 };
 
 pub const PROTOCOL: &str = "tddescat.learn.v1";
+pub const BUILD_SHA: &str = env!("TDDESC_BUILD_SHA256");
 pub const CODEC: &str = "typed-free-slots.v1";
 const MAX_DOCUMENT_BYTES: usize = 4 * 1024 * 1024;
 
 pub fn digest(data: &[u8]) -> String {
     format!("{:x}", Sha256::digest(data))
+}
+
+pub fn running_binary_sha() -> Result<String> {
+    let mut input = File::open(std::env::current_exe()?)?;
+    let mut digest = Sha256::new();
+    let mut buf = [0u8; 65_536];
+    loop {
+        let len = input.read(&mut buf)?;
+        if len == 0 {
+            break;
+        }
+        digest.update(&buf[..len]);
+    }
+    Ok(format!("{:x}", digest.finalize()))
 }
 
 pub fn identifier(value: &str) -> bool {
@@ -121,6 +136,8 @@ pub struct EnginePin {
     cargo_lock_sha256: String,
     rust_version: String,
     protocol_version: String,
+    build_sha256: String,
+    binary_sha256: String,
 }
 
 impl Manifest {
@@ -150,7 +167,9 @@ impl Manifest {
                 && upstream["revision"].as_str() == Some(&pin.upstream_commit)
                 && upstream["tree_sha1"].as_str() == Some(&pin.source_git_tree)
                 && pin.cargo_lock_sha256 == digest(include_bytes!("../../../Cargo.lock"))
-                && pin.rust_version == "1.90.0",
+                && pin.rust_version == "1.90.0"
+                && pin.build_sha256 == BUILD_SHA
+                && pin.binary_sha256 == running_binary_sha()?,
             "worker source or ABI pin mismatch"
         );
         Ok((job, digest(&data)))
@@ -189,7 +208,13 @@ pub struct Budget {
     pub max_live_states: usize,
     pub max_relation_nodes: usize,
     pub max_output_bytes: usize,
+    #[serde(default = "default_apply_chunk_rows")]
+    pub apply_chunk_rows: usize,
     check_every_work_units: usize,
+}
+
+fn default_apply_chunk_rows() -> usize {
+    128
 }
 
 impl Config {
@@ -213,6 +238,7 @@ impl Config {
                 && (1..=2_000_000).contains(&c.budget.max_relation_nodes)
                 && (1..=MAX_DOCUMENT_BYTES).contains(&c.budget.max_output_bytes)
                 && (1..=1_073_741_824).contains(&c.budget.managed_bytes)
+                && (1..=8192).contains(&c.budget.apply_chunk_rows)
                 && c.budget.check_every_work_units == 128,
             "unsupported budget range"
         );

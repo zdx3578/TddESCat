@@ -8,4 +8,6 @@ local_changes = [
     "Use the workspace lock with a local egg path and add the bridge as a workspace member.",
     "Check monomorphic types on e-classes, search seeds, expansions, reuse, and definition application.",
     "Bound the typed frontier and stream exact factor assignments during final application.",
+    "Share immutable factor rows, check machine-width counts, and expose exact arbitrary-precision substitution counts.",
+    "Rebuild the first-order e-graph between bounded application chunks and measure managed allocation through the bridge.",
 ]

@@ -13,7 +13,45 @@ from .contracts import Contracts
 from .isolation import sandbox
 
 
-def run_worker(root, job, output, binary):
+def build_identity(root, binary):
+    result = subprocess.run(
+        [str(binary), "--identity"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=8,
+    )
+    pin = json.loads(result.stdout)
+    files = [
+        root / name
+        for name in (
+            "Cargo.toml",
+            "Cargo.lock",
+            "rust-toolchain.toml",
+            "rust/bridge/Cargo.toml",
+            "rust/bridge/build.rs",
+            "third_party/egg-stitch/Cargo.toml",
+            "third_party/egg/Cargo.toml",
+        )
+    ]
+    for directory in (
+        "rust/bridge/src",
+        "third_party/egg-stitch/src",
+        "third_party/egg/src",
+    ):
+        files.extend(path for path in (root / directory).rglob("*") if path.is_file())
+    digest = hashlib.sha256()
+    for path in sorted(files):
+        digest.update(path.relative_to(root).as_posix().encode() + b"\0")
+        digest.update(hashlib.sha256(path.read_bytes()).digest())
+    with binary.open("rb") as stream:
+        built = hashlib.file_digest(stream, "sha256").hexdigest()
+    if pin != {"build_sha256": digest.hexdigest(), "binary_sha256": built}:
+        raise ValueError("Configured worker was built from different local sources")
+    return pin
+
+
+def run_worker(root, job, output, binary, *, hard_memory=None):
     manifest_file = job / "manifest.json"
     manifest = json.loads(manifest_file.read_bytes())
     contracts = Contracts(root / "protocol/v1")
@@ -34,6 +72,9 @@ def run_worker(root, job, output, binary):
         raise ValueError("Worker deadline is outside the supported range")
     if type(memory) is not int or not 1 <= memory <= 1_073_741_824:
         raise ValueError("Worker memory is outside the supported range")
+    hard_memory = memory if hard_memory is None else hard_memory
+    if type(hard_memory) is not int or hard_memory <= 0:
+        raise ValueError("Worker hard memory cap must be positive")
     controller = shutil.which("systemd-run")
     if controller is None or not Path("/sys/fs/cgroup/cgroup.controllers").is_file():
         raise RuntimeError("The worker requires a cgroup v2 systemd user manager")
@@ -48,7 +89,7 @@ def run_worker(root, job, output, binary):
         "--pipe",
         "--collect",
         "-p",
-        f"MemoryMax={memory}",
+        f"MemoryMax={hard_memory}",
         "-p",
         "MemorySwapMax=0",
         "-p",
@@ -59,7 +100,15 @@ def run_worker(root, job, output, binary):
         "NoNewPrivileges=yes",
         "--",
         *sandbox(
-            [str(binary), "--manifest", str(manifest_file), "--output", str(output)],
+            [
+                "/usr/bin/time",
+                "-v",
+                str(binary),
+                "--manifest",
+                str(manifest_file),
+                "--output",
+                str(output),
+            ],
             read=(binary, job),
             write=(output,),
             offline=True,
@@ -96,10 +145,15 @@ def main():
     parser.add_argument("--job", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--binary", type=Path, required=True)
+    parser.add_argument("--hard-memory", type=int)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[3]
     return run_worker(
-        root, args.job.resolve(), args.output.resolve(), args.binary.resolve()
+        root,
+        args.job.resolve(),
+        args.output.resolve(),
+        args.binary.resolve(),
+        hard_memory=args.hard_memory,
     )
 
 

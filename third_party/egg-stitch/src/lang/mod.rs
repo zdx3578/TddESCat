@@ -110,6 +110,8 @@ pub struct TypedSearch {
     pub max_egraph_nodes: usize,
     pub max_live_states: usize,
     pub max_relation_nodes: usize,
+    pub apply_chunk_rows: usize,
+    pub check_managed: fn(),
 }
 
 #[derive(Clone, Debug)]
@@ -117,6 +119,7 @@ pub struct SearchBudgetStop(pub &'static str);
 
 impl TypedSearch {
     pub fn check(&self) {
+        (self.check_managed)();
         if Instant::now() >= self.deadline {
             std::panic::panic_any(SearchBudgetStop("deadline"));
         }
@@ -125,14 +128,14 @@ impl TypedSearch {
     pub fn check_rows(&self, nodes: usize) {
         self.check();
         if nodes > self.max_relation_nodes {
-            std::panic::panic_any(SearchBudgetStop("managed_bytes"));
+            std::panic::panic_any(SearchBudgetStop("relation_limit"));
         }
     }
 
     pub fn check_graph(&self, nodes: usize) {
         self.check();
         if nodes > self.max_egraph_nodes {
-            std::panic::panic_any(SearchBudgetStop("managed_bytes"));
+            std::panic::panic_any(SearchBudgetStop("egraph_limit"));
         }
     }
 }

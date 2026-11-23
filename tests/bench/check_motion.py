@@ -14,7 +14,7 @@ from tddesc_tools.run import (
     runtime_paths,
     write_json,
 )
-from tddesc_tools.stitch import run_worker
+from tddesc_tools.stitch import build_identity, run_worker
 from tests.bench.check_evidence import solver_process
 
 
@@ -148,6 +148,8 @@ def main(task_path, run):
     run = run.resolve()
     task = read_task(task_path)
     public, private = run / "public", run / "private"
+    binary = root / "target/release/tddesc-stitch"
+    write_json(public / "engine-identity.json", build_identity(root, binary))
     runtime = runtime_paths(root)
     plan = read_plan(task["judge_config"])
     selected = scenes(plan, plan["training_seeds"][0])

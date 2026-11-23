@@ -38,6 +38,8 @@ class SchemaContracts(unittest.TestCase):
                 "source_git_tree": "3" * 40,
                 "cargo_lock_sha256": "4" * 64,
                 "rust_version": "1.90.0",
+                "build_sha256": "5" * 64,
+                "binary_sha256": "6" * 64,
                 "protocol_version": "tddescat.learn.v1",
             },
         }

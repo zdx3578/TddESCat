@@ -1,14 +1,23 @@
 function freeze_stitch_job(directory, job_id, snapshot_id, library::LibrarySnapshot,
-                           signature, programs, origins, slots; repo_root, config_path)
+                           signature, programs, origins, slots; repo_root, config_path=nothing,
+                           config_text=nothing, engine_identity=nothing)
+    xor(isnothing(config_path), isnothing(config_text)) || error("Provide one worker configuration source")
+    config = isnothing(config_text) ? read(config_path, String) : config_text
     mkpath(directory)
     isempty(readdir(directory)) || error("The frozen job directory must be fresh")
     upstream = TOML.parsefile(joinpath(repo_root, "third_party", "egg-stitch", "UPSTREAM.toml"))
+    if isnothing(engine_identity)
+        worker = joinpath(repo_root, "target", "release", "tddesc-stitch")
+        engine_identity = JSON.parse(read(Cmd([worker, "--identity"]), String))
+    end
     engine = Dict(
         "upstream_commit" => upstream["revision"],
         "source_git_tree" => upstream["tree_sha1"],
         "cargo_lock_sha256" => content_hash(read(joinpath(repo_root, "Cargo.lock"))),
         "rust_version" => TOML.parsefile(joinpath(repo_root, "rust-toolchain.toml"))["toolchain"]["channel"],
         "protocol_version" => LEARN_PROTOCOL,
+        "build_sha256" => engine_identity["build_sha256"],
+        "binary_sha256" => engine_identity["binary_sha256"],
     )
     manifest = Dict{String,Any}(
         "job_id" => job_id, "evidence_snapshot_id" => snapshot_id, "library_base_version" => library.version,
@@ -21,7 +30,7 @@ function freeze_stitch_job(directory, job_id, snapshot_id, library::LibrarySnaps
         ("origins", "json", JSON.json(origins)),
         ("initial_library", "json", JSON.json(library.entries)),
         ("rules", "json", "[]"),
-        ("config", "toml", read(config_path, String)),
+        ("config", "toml", config),
     )
         filename = name * "." * extension
         atomic_write(joinpath(directory, filename), data)

@@ -3,6 +3,7 @@ use crate::{
         Definition, LibraryEntry, Registry, Term, definitions, dependencies, program, stable_id,
     },
     protocol::Config,
+    resources::{self, Phase},
 };
 use anyhow::{Context, Result, ensure};
 use egg::{Applier, EGraph, FromOp, Id, Pattern, PatternAst, Rewrite, Subst, Symbol, Var};
@@ -184,6 +185,8 @@ fn make_graph(
         max_egraph_nodes: c.budget.max_egraph_nodes,
         max_live_states: c.budget.max_live_states,
         max_relation_nodes: c.budget.max_relation_nodes,
+        apply_chunk_rows: c.budget.apply_chunk_rows,
+        check_managed: resources::check,
     });
     let mut graph = Graph::new(StitchAnalysis {
         weights: Weights::default(),
@@ -242,8 +245,12 @@ pub fn search(
     args.max_arity = config.max_arity;
     args.num_steps = Some(step_limit);
     args.normalize();
+    let graph_phase = resources::phase(Phase::Graph);
     let data = make_graph(config, &registry, input, library, order, deadline)?;
+    drop(graph_phase);
+    let search_phase = resources::phase(Phase::Search);
     let result = best_first::best_first(data, &args);
+    drop(search_phase);
     let mut data = result.data;
     let mut found = None;
     let baseline_cost = result.original_size as u64;
@@ -287,16 +294,19 @@ pub fn search(
         def.check(&registry)?;
         registry.register(&temporary_name, &def.parameter_sorts, &def.result_sort)?;
         Arc::make_mut(data.egraph.analysis.typed.as_mut().unwrap()).ports = registry.ports.clone();
+        let apply_phase = resources::phase(Phase::Apply);
         data.egraph = cost::build_rewritten_egraph(
             data.egraph,
             &selection.state,
             &selection.selection.candidate,
             &temporary_name,
         );
+        drop(apply_phase);
         expected = cost as u64 - def.body.cost();
         found = Some((temporary_name, def));
     }
     assert_expense(&data.egraph);
+    let extract_phase = resources::phase(Phase::Extract);
     let programs = io::extract_programs(&data.egraph, data.root)
         .iter()
         .map(|text| program(text, &registry))
@@ -305,6 +315,8 @@ pub fn search(
         programs.len() == input.len() && corpus_cost(&programs) == expected,
         "engine and independent output cost disagree"
     );
+    resources::check();
+    drop(extract_phase);
     Ok(Round {
         baseline_cost,
         programs,

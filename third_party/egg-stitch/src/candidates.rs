@@ -131,7 +131,7 @@ pub fn enumerate_candidates<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgrap
     let mut generators: Vec<Vec<(usize, Vec<i32>)>> = Vec::new();
     for m in &search_state.matches {
         for f in &m.factors {
-            for row in &f.rows {
+            for row in f.rows.iter() {
                 let mut g: Vec<(usize, Vec<i32>)> = Vec::new();
                 for (pos, &k) in f.slots.iter().enumerate() {
                     let d_k = var_depth[k];
