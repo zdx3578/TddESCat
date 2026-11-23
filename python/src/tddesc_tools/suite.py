@@ -40,6 +40,13 @@ def parse_suite(path):
         tasks[identifier] = {**task, "config": config_path}
     if not tasks:
         raise ValueError("Suite must have tasks")
+    prior = definition.get("prerequisite_suite")
+    if prior is not None and (
+        not isinstance(prior, str)
+        or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]*", prior)
+        or prior == definition["suite_id"]
+    ):
+        raise ValueError("Invalid prerequisite suite")
     remaining = dict(tasks)
     order = []
     ready = set()
@@ -57,24 +64,64 @@ def parse_suite(path):
     return definition, order
 
 
+def verified_prerequisite(contracts, suite_path, previous_path, identifier):
+    if previous_path is None or not previous_path.is_file():
+        return False
+    previous = json.loads(previous_path.read_bytes())
+    contracts.validate("acceptance", previous)
+    if previous["suite_id"] != identifier or previous["status"] != "PASS":
+        return False
+    definition_path = suite_path.parent / (identifier + ".toml")
+    _, expected = parse_suite(definition_path)
+    grades = {task["id"]: task for task in previous["tasks"]}
+    root = previous_path.resolve().parent.parent
+    provenance_path = root / "public/provenance.json"
+    if not provenance_path.is_file():
+        return False
+    provenance = json.loads(provenance_path.read_bytes())
+    if (
+        provenance.get("suite_config_sha256")
+        != sha256(definition_path.read_bytes()).hexdigest()
+    ):
+        return False
+    for task in expected:
+        if not task["required"]:
+            continue
+        name = task["id"]
+        result = grades.get(name, {})
+        if result.get("status") != "PASS":
+            return False
+        child = root / "tasks" / name / "public"
+        report, manifest = child / "acceptance.json", child / "manifest.json"
+        if not report.is_file() or not manifest.is_file():
+            return False
+        if report.relative_to(root).as_posix() not in result["assertion_refs"]:
+            return False
+        report_bytes = report.read_bytes()
+        if provenance.get(name) != {
+            "acceptance_sha256": sha256(report_bytes).hexdigest(),
+            "manifest_sha256": sha256(manifest.read_bytes()).hexdigest(),
+        }:
+            return False
+        grade = json.loads(report_bytes)
+        contracts.validate("acceptance", grade)
+        if grade["status"] != "PASS":
+            return False
+    return True
+
+
 def run_suite(root, path, run, runtime, prerequisite=None):
     suite, ordered = parse_suite(path)
     contracts = Contracts(root / "protocol/v1")
     required_previous = suite.get("prerequisite_suite")
-    previous = None
-    if prerequisite is not None:
-        previous = json.loads(prerequisite.read_bytes())
-        contracts.validate("acceptance", previous)
-    upstream_pass = required_previous is None or (
-        previous is not None
-        and previous["suite_id"] == required_previous
-        and previous["status"] == "PASS"
+    upstream_pass = required_previous is None or verified_prerequisite(
+        contracts, path, prerequisite, required_previous
     )
     origin = {
         "worktree_sha256": worktree_digest(root),
         "suite_config_sha256": sha256(path.read_bytes()).hexdigest(),
         "prerequisite_sha256": None
-        if prerequisite is None
+        if prerequisite is None or not prerequisite.is_file()
         else sha256(prerequisite.read_bytes()).hexdigest(),
     }
     ledger = {}
@@ -132,7 +179,7 @@ def run_suite(root, path, run, runtime, prerequisite=None):
         "tasks": graded,
     }
     contracts.validate("acceptance", report)
-    write_json(run / "public/acceptance.json", report)
     write_json(run / "public/provenance.json", origin)
+    write_json(run / "public/acceptance.json", report)
     print(f"{status} {run}", flush=True)
     return {"PASS": 0, "BLOCKED": 3}.get(status, 1)

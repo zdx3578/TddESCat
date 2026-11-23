@@ -1,0 +1,16 @@
+schema_version = 1
+suite_id = "phase2_policy"
+artifact_root = "../../runs"
+prerequisite_suite = "phase1"
+
+[[tasks]]
+id = "finite_policy"
+config = "finite_policy.toml"
+required = true
+depends_on = []
+
+[[tasks]]
+id = "planning_composition"
+config = "planning_composition.toml"
+required = true
+depends_on = ["finite_policy"]

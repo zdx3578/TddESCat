@@ -1,0 +1,6 @@
+schema_version = 1
+kind = "movement_covariance"
+output_name = "movement-covariance"
+timeout_seconds = 360
+environment_config = "../bench_server.toml"
+judge_config = "../bench_scenarios.toml"

@@ -25,6 +25,8 @@ CASES = {
     "M08": (("click-interior", 4, 6),),
 }
 
+DIRECTION_REMAP = {1: 3, 2: 4, 3: 1, 4: 2}
+
 
 def heldout(by_name, case):
     if case == "M01":
@@ -72,6 +74,20 @@ def with_push(scene, push_example):
     )
 
 
+def relabel_scene(scene):
+    def remap(action):
+        return DIRECTION_REMAP.get(action, action)
+
+    return replace(
+        scene,
+        moves=tuple((remap(action), dx, dy) for action, dx, dy in scene.moves),
+        prefix=tuple(
+            remap(action) if isinstance(action, int) else action
+            for action in scene.prefix
+        ),
+    )
+
+
 def captured_rows(episode, folder):
     return [
         json.loads(path.read_bytes())
@@ -79,7 +95,9 @@ def captured_rows(episode, folder):
     ]
 
 
-def verify_core(root, episode, scene, case, *, planning=False, joint_push=False):
+def verify_core(
+    root, episode, scene, case, *, planning=False, joint_push=False, direction=1
+):
     result = load(episode, "public-run.json")
     summary = result["learned"]
     assert result["prior_publication"] and summary["models"] > 0
@@ -112,7 +130,7 @@ def verify_core(root, episode, scene, case, *, planning=False, joint_push=False)
         assert all(key.startswith("translation-") for key in first["expected"])
     elif case == "M05":
         assert decisions[0]["reason"] == "establishes_observed_condition", decisions[0]
-        assert [row["action"]["id"] for row in predicted[:2]] == [5, 1]
+        assert [row["action"]["id"] for row in predicted[:2]] == [5, direction]
         assert list(first["expected"])[0].startswith("pigment-")
         if joint_push:
             assert len(predicted[1]["expected"]) == 2
@@ -135,7 +153,9 @@ def verify_core(root, episode, scene, case, *, planning=False, joint_push=False)
         )
         assert "resource_precondition" in decisions[1]["candidates"][-1]["reason"]
     elif case == "M08":
-        assert [row["action"]["id"] for row in predicted[:2]] == [6, 1], predicted[:2]
+        assert [row["action"]["id"] for row in predicted[:2]] == [6, direction], (
+            predicted[:2]
+        )
         assert decisions[0]["reason"] == "tests_changed_role_selection"
         chosen = next(iter(first["expected"].values()))
         assert any(
@@ -180,16 +200,28 @@ def main(config, run):
     task = read_task(config)
     runtime = runtime_paths(root)
     plan = read_plan(task["judge_config"])
-    by_name = {s.variant: s for s in scenes(plan, plan["training_seeds"][0])}
+    covariance = task["kind"] == "movement_covariance"
+    seed = plan["training_seeds"][1 if covariance else 0]
+    by_name = {s.variant: s for s in scenes(plan, seed)}
     click_training = by_name["click-interior"]
     by_name["click-interior"] = replace(click_training, moves=((1, 1, 0),))
     joint_push = task["kind"] == "planning_composition"
     planning = task["kind"] == "planning_public" or joint_push
     selected = {"M05": CASES["M05"]} if planning else CASES
+    if covariance:
+        selected = {case: CASES[case] for case in ("M05", "M08")}
+        for variant in ("panel-open", "panel-toggle"):
+            scene = by_name[variant]
+            by_name[variant] = replace(
+                scene, switch=replace(scene.switch, panel=(20, 1))
+            )
     if joint_push:
         for variant in ("panel-open", "panel-toggle"):
             by_name[variant] = with_push(by_name[variant], by_name["push-open"])
     targets = {case: heldout(by_name, case) for case in selected}
+    if covariance:
+        by_name = {name: relabel_scene(scene) for name, scene in by_name.items()}
+        targets = {case: relabel_scene(scene) for case, scene in targets.items()}
     all_scenes = {s.public_id: s for s in [*by_name.values(), *targets.values()]}
     if joint_push:
         target = targets["M05"]
@@ -255,10 +287,19 @@ def main(config, run):
             code = supervise(root, cfg, episode)
             assert code == 0, (episode / "solver.log").read_text()
             summary = verify_core(
-                root, episode, scene, case, planning=planning, joint_push=joint_push
+                root,
+                episode,
+                scene,
+                case,
+                planning=planning,
+                joint_push=joint_push,
+                direction=DIRECTION_REMAP[1] if covariance else 1,
             )
             summary["wall_seconds"] = monotonic() - started
             summary["fixture"] = scene.variant
+            if covariance:
+                summary["palette_seed"] = seed
+                summary["action_number_map"] = DIRECTION_REMAP
             write_json(episode / "verified.json", summary)
             assert summary["wrong_confidence"] == 0, summary
             append_assertion(
