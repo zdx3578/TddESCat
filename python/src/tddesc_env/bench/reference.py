@@ -9,6 +9,47 @@ from .scenario import Command, Scene, State
 def transition(scene: Scene, state: State, action: Command) -> State:
     if action == 0:
         return scene.start_state
+    mode = scene.dynamics
+    if isinstance(action, int) and action not in available_actions(scene, state):
+        raise ValueError("Action outside finite domain")
+    if action == 7 and mode.startswith("undo-"):
+        positions = state.positions
+        if state.previous_positions is not None:
+            positions = (
+                (state.previous_positions[0], *positions[1:])
+                if mode == "undo-first"
+                else state.previous_positions
+            )
+        return replace(
+            state, positions=positions, flagged=True, previous_positions=None
+        )
+    if action == 5 and mode in ("latched", "flash", "flash-closed"):
+        return replace(state, flagged=mode != "flash-closed")
+    if action == 5 and mode == "decoy-switch":
+        return replace(state, flagged=not state.flagged)
+    if action == 5 and mode == "autonomous":
+        return advance_peer(scene, state)
+    result = rigid_transition(scene, state, action)
+    if mode == "autonomous":
+        return advance_peer(scene, result)
+    if mode == "charge-still" and action == 1:
+        return replace(result, resource=max(0, result.resource - 1))
+    if mode == "action-domain" and action == 1:
+        return replace(result, flagged=True)
+    if result.positions != state.positions:
+        if mode.startswith("undo-"):
+            return replace(result, previous_positions=state.positions)
+        if mode in ("latched", "flash", "flash-closed"):
+            return replace(result, flagged=False)
+    return result
+
+
+def advance_peer(scene, state):
+    first, (x, y) = state.positions
+    return replace(state, positions=(first, (min(x + 1, scene.logical_size[0] - 1), y)))
+
+
+def rigid_transition(scene, state, action):
     if action == 5 and scene.switch:
         return replace(state, switch_on=not state.switch_on)
     if action == 5 and scene.resource:
@@ -43,7 +84,12 @@ def transition(scene: Scene, state: State, action: Command) -> State:
     left, top, right, bottom = scene.active
     floor = {(x, y) for y in range(top, bottom) for x in range(left, right)}
     floor.difference_update(scene.blocked, scene.holes)
-    if scene.switch and state.switch_on is False:
+    allowed = (
+        state.flagged
+        if scene.dynamics in ("latched", "flash", "flash-closed")
+        else state.switch_on
+    )
+    if scene.switch and not allowed:
         floor.difference_update(scene.switch.gate_cells)
     footprints = [
         {(x + u, y + v) for u, v, _ in shape}
@@ -102,7 +148,7 @@ def transition(scene: Scene, state: State, action: Command) -> State:
     )
 
 
-def logical_colors(scene, state):
+def logical_colors(scene, state, *, signal=False):
     colors = {(x, y): color for x, y, color in scene.static}
     if scene.switch:
         left, top = scene.switch.panel
@@ -120,13 +166,26 @@ def logical_colors(scene, state):
         rectangle = {(u, v) for u in range(x - 1, x + 3) for v in range(y - 1, y + 3)}
         inside = {(x, y), (x + 1, y), (x, y + 1), (x + 1, y + 1)}
         colors.update(dict.fromkeys(rectangle - inside, scene.selection_color))
+    if scene.signal and (
+        signal
+        or (
+            state.flagged
+            and (scene.dynamics.startswith("undo-") or scene.dynamics == "decoy-switch")
+        )
+    ):
+        x, y, color = scene.signal
+        colors[(x, y)] = color
     for (x, y), body in zip(state.positions, scene.bodies, strict=True):
         colors.update({(x + u, y + v): color for u, v, color in body})
     return colors
 
 
-def screen_geometry(scene):
+def screen_geometry(scene, state=None):
     left, top, width, height = scene.viewport
+    if state is not None and scene.dynamics == "tracking":
+        x = state.positions[0][0]
+        if x > 18:
+            left = min(x - 18, scene.logical_size[0] - width)
     scale = 64 // max(width, height)
     return (
         left,
@@ -139,9 +198,9 @@ def screen_geometry(scene):
     )
 
 
-def render(scene: Scene, state: State):
-    colors = logical_colors(scene, state)
-    left, top, width, height, scale, start_x, start_y = screen_geometry(scene)
+def render(scene: Scene, state: State, *, signal=False):
+    colors = logical_colors(scene, state, signal=signal)
+    left, top, width, height, scale, start_x, start_y = screen_geometry(scene, state)
     screen = [[scene.letterbox] * 64 for _ in range(64)]
     for y in range(height):
         for x in range(width):
@@ -150,6 +209,28 @@ def render(scene: Scene, state: State):
             for row in range(dest_y, dest_y + scale):
                 screen[row][dest_x : dest_x + scale] = [color] * scale
     return screen
+
+
+def render_response(scene, state, action, outcome):
+    if action == 5 and scene.dynamics in ("latched", "flash", "flash-closed"):
+        first = state
+        if scene.dynamics.startswith("flash"):
+            x, y = state.positions[0]
+            first = replace(state, positions=((x + 1, y), *state.positions[1:]))
+        return [
+            render(scene, first),
+            render(scene, state, signal=True),
+            render(scene, outcome),
+        ]
+    return [render(scene, outcome)]
+
+
+def available_actions(scene, state):
+    return tuple(
+        action
+        for action in scene.actions
+        if not (scene.dynamics == "action-domain" and state.flagged and action == 1)
+    )
 
 
 def reachable(scene):
@@ -166,7 +247,7 @@ def reachable(scene):
 
 
 def concrete_actions(scene, state):
-    actions = [action for action in scene.actions if action != 6]
+    actions = [action for action in available_actions(scene, state) if action != 6]
     if scene.selection_color is None:
         return actions
     left, top, _, _, zoom, px, py = screen_geometry(scene)

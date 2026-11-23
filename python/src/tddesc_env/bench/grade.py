@@ -1,6 +1,5 @@
 """Verify synthetic environment behavior against hand checks and a separate oracle."""
 
-from dataclasses import replace
 from hashlib import sha256
 
 import requests
@@ -8,7 +7,6 @@ from arcengine import ActionInput, GameAction
 
 from . import reference
 from .game import ShapeGame
-from .scenario import State
 
 
 def frame_hash(frame):
@@ -16,20 +14,9 @@ def frame_hash(frame):
 
 
 def engine_transition(scene, state, action):
-    switch = replace(scene.switch, initial=state.switch_on) if scene.switch else None
-    resource = (
-        replace(scene.resource, initial=state.resource) if scene.resource else None
-    )
-    game = ShapeGame(
-        replace(
-            scene,
-            start=state.positions,
-            switch=switch,
-            resource=resource,
-            initial_selection=state.selected,
-        )
-    )
+    game = ShapeGame(scene)
     game.perform_action(ActionInput(id=GameAction.RESET), raw=True)
+    game.restore(state)
     if action == 0:
         value = game.perform_action(ActionInput(id=GameAction.RESET), raw=True)
     else:
@@ -37,9 +24,11 @@ def engine_transition(scene, state, action):
         value = game.perform_action(
             ActionInput(id=GameAction.from_id(number), data=coords), raw=True
         )
-    return State(tuple(game.positions), game.switch_on, game.resource, game.selected), [
-        frame.tolist() for frame in value.frame
-    ]
+    return (
+        game.snapshot(),
+        [frame.tolist() for frame in value.frame],
+        value.available_actions,
+    )
 
 
 def finite_engine_check(scene):
@@ -48,8 +37,12 @@ def finite_engine_check(scene):
         states += 1
         for action in reference.concrete_actions(scene, state):
             outcome = reference.transition(scene, state, action)
-            actual, frames = engine_transition(scene, state, action)
-            if outcome != actual or frames != [reference.render(scene, outcome)]:
+            actual, frames, actions = engine_transition(scene, state, action)
+            if (
+                outcome != actual
+                or frames != reference.render_response(scene, state, action, outcome)
+                or actions != list(reference.available_actions(scene, outcome))
+            ):
                 raise AssertionError(
                     (scene.case, scene.variant, state, action, outcome, actual)
                 )
@@ -279,6 +272,7 @@ def hand_checks(by_variant, public_frames=None):
         )
     assert at("click-overlap-a", 0) == at("click-overlap-b", 0)
 
+    boundary = boundary_hand_checks(by_variant, at)
     return {
         "M01": move_groups,
         "M02": {
@@ -309,7 +303,92 @@ def hand_checks(by_variant, public_frames=None):
             "diagonal_counts_4_8": [2, 1],
             "contact_components": counts,
         },
+        **boundary,
     }
+
+
+def boundary_hand_checks(scenes, at):
+    narrow, wide = scenes["walk-narrow-bridge"], scenes["walk-wide-bridge"]
+    assert at(narrow.variant, 0) == at(narrow.variant, 1)
+    assert at(wide.variant, 0) != at(wide.variant, 1)
+    assert all(s.positions[0][0] < 16 for s in reference.reachable(wide))
+    assert (
+        at("latch-untriggered", 0)
+        == at("latch-triggered", 0)
+        == at("latch-triggered", 1)
+    )
+    assert at("latch-untriggered", 1) == at("latch-untriggered", 0)
+    assert at("latch-triggered", 2) != at("latch-triggered", 1)
+    assert at("latch-triggered", 2) == at("latch-triggered", 3)
+    pushed = scenes["undo-push-and-charge"]
+    after = reference.transition(pushed, pushed.start_state, 1)
+    undo = reference.transition(pushed, after, 7)
+    assert after.positions != pushed.start and undo.positions == pushed.start
+    assert (pushed.start_state.resource, after.resource, undo.resource) == (1, 0, 0)
+    assert at("undo-empty", 0) != at("undo-empty", 1)
+    assert (
+        at("stationary-domain", 0)
+        == at("stationary-domain", 1)
+        == at("stationary-domain", 2)
+    )
+    assert at("stationary-charge", 0) != at("stationary-charge", 1)
+    assert at("stationary-identical", 0) == at("stationary-identical", 1)
+    assert at("flash-positive", 0) == at("flash-positive", 1) == at("flash-negative", 1)
+    assert at("flash-positive", 2) != at("flash-negative", 2)
+    assert at("tracking-landmarks", 0) != at("tracking-landmarks", 1)
+    assert at("tracking-without-landmarks", 0) == at("tracking-without-landmarks", 1)
+    peer = scenes["autonomous-peer"]
+    advanced = reference.transition(peer, peer.start_state, 5)
+    assert (
+        peer.start[0] == advanced.positions[0]
+        and peer.start[1] != advanced.positions[1]
+    )
+    assert at("indistinguishable-gate", 0) == at("indistinguishable-decoy", 0)
+    assert at("indistinguishable-gate", 1) == at("indistinguishable-decoy", 1)
+    assert at("indistinguishable-gate", 2) != at("indistinguishable-decoy", 2)
+    return {
+        "M03": {"narrow_entry": False, "wide_entry": True, "walk_to_island": False},
+        "M07": {"equal_last_frame_before_motion": True, "latch_consumed": True},
+        "M09": {"resources": [1, 0, 0], "restored_positions": undo.positions},
+        "M10": {"identical_frames_after_domain_change": True, "remaining_actions": [2]},
+        "M11": {"same_endpoint": True, "different_next_motion": True},
+        "M12": {
+            "above_tracking_threshold": True,
+            "autonomous_without_actor_motion": True,
+        },
+        "M14": {"same_prefix_actions": [0, 1], "first_distinguishing_action": 5},
+    }
+
+
+def boundary_trace_checks(traces):
+    def records(variant):
+        return [
+            entry["response"] for entry in traces[variant] if "/cmd/" in entry["path"]
+        ]
+
+    latch = records("latch-triggered")
+    assert len(latch[1]["frame"]) == 3 and latch[1]["frame"][-1] == latch[0]["frame"][0]
+    positive, negative = records("flash-positive"), records("flash-negative")
+    left, right = positive[1]["frame"], negative[1]["frame"]
+    assert len(left) == len(right) == 3
+    assert left[0] == right[0] and left[0] != left[-1]
+    assert left[-1] == right[-1] and left[1] != right[1]
+    domain = records("stationary-domain")
+    assert domain[0]["available_actions"] == [1, 2] and domain[1][
+        "available_actions"
+    ] == [2]
+    gate, decoy = records("indistinguishable-gate"), records("indistinguishable-decoy")
+    public_fields = (
+        "frame",
+        "state",
+        "levels_completed",
+        "win_levels",
+        "available_actions",
+    )
+    for a, b in zip(gate[:2], decoy[:2], strict=True):
+        assert all(a[key] == b[key] for key in public_fields)
+        assert a["action_input"]["id"] == b["action_input"]["id"]
+    assert gate[2]["frame"] != decoy[2]["frame"]
 
 
 def http_trace(url, scene):
@@ -346,14 +425,18 @@ def http_trace(url, scene):
                 "/api/cmd/" + ("RESET" if number == 0 else f"ACTION{number}"), body
             )
             expected_state = reference.transition(scene, state, action)
-            expected_frame = reference.render(scene, expected_state)
+            expected_frames = reference.render_response(
+                scene, state, action, expected_state
+            )
             assert response["game_id"] == scene.public_id
             assert len(response["guid"]) > 0 and (
                 guid is None or guid == response["guid"]
             )
             assert response["state"] == "NOT_FINISHED"
             assert response["levels_completed"] == 0 and response["win_levels"] == 1
-            assert response["available_actions"] == list(scene.actions)
+            assert response["available_actions"] == list(
+                reference.available_actions(scene, expected_state)
+            )
             assert response["action_input"]["id"] == number
             if number == 6:
                 echo = response["action_input"]["data"]
@@ -361,7 +444,7 @@ def http_trace(url, scene):
                     type(echo[key]) is int and echo[key] == value
                     for key, value in coordinates.items()
                 )
-            assert response["frame"] == [expected_frame], (
+            assert response["frame"] == expected_frames, (
                 scene.case,
                 scene.variant,
                 state,
@@ -369,7 +452,7 @@ def http_trace(url, scene):
             )
             state = expected_state
             guid = response["guid"]
-            frames.append(response["frame"][0])
+            frames.append(response["frame"][-1])
         call("/api/scorecard/close", {"card_id": card})
     return frames, trace
 

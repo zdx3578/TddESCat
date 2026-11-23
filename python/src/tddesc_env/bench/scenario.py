@@ -15,6 +15,8 @@ class State:
     switch_on: bool = False
     resource: int = 0
     selected: int = 0
+    flagged: bool = False
+    previous_positions: tuple[Point, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -58,6 +60,8 @@ class Scene:
     resource: Resource | None = None
     selection_color: int | None = None
     initial_selection: int = 0
+    dynamics: str = "static"
+    signal: Cell | None = None
 
     @property
     def start_state(self):
@@ -70,9 +74,14 @@ class Scene:
 
     @property
     def actions(self):
-        extra = ((5,) if self.switch or self.resource else ()) + (
+        interact = (
+            self.switch or self.resource or self.dynamics in ("autonomous", "flash")
+        )
+        extra = ((5,) if interact else ()) + (
             (6,) if self.selection_color is not None else ()
         )
+        if self.dynamics.startswith("undo-"):
+            extra += (7,)
         return tuple(entry[0] for entry in self.moves) + extra
 
     @classmethod
@@ -88,6 +97,8 @@ class Scene:
         data["bodies"] = tuple(
             tuple(tuple(cell) for cell in cells) for cells in data["bodies"]
         )
+        if data.get("signal") is not None:
+            data["signal"] = tuple(data["signal"])
         for name, cls_part in (("switch", Switch), ("resource", Resource)):
             if data.get(name) is not None:
                 spec = data[name]

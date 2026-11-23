@@ -3,7 +3,7 @@
 import numpy as np
 from arcengine import ARCBaseGame, Camera, GameAction, Level, Sprite
 
-from .scenario import Scene
+from .scenario import Scene, State
 
 
 class ShapeGame(ARCBaseGame):
@@ -13,6 +13,9 @@ class ShapeGame(ARCBaseGame):
         self.switch_on = scene.start_state.switch_on
         self.resource = scene.start_state.resource
         self.selected = scene.initial_selection
+        self.flagged = False
+        self.previous_positions = None
+        self.animation_frame = 0
         self._moves = {number: (dx, dy) for number, dx, dy in scene.moves}
         x0, y0, width, height = scene.viewport
         camera = Camera(
@@ -40,7 +43,12 @@ class ShapeGame(ARCBaseGame):
         scene = self.scene
         left, top, right, bottom = scene.active
         occupied = set(scene.blocked) | set(scene.holes)
-        if scene.switch and not self.switch_on:
+        gate_open = (
+            self.flagged
+            if scene.dynamics in ("latched", "flash", "flash-closed")
+            else self.switch_on
+        )
+        if scene.switch and not gate_open:
             occupied.update(scene.switch.gate_cells)
         return not support & occupied and all(
             left <= u < right and top <= v < bottom for u, v in support
@@ -111,12 +119,63 @@ class ShapeGame(ARCBaseGame):
         if len(matches) == 1:
             self.selected = matches[0]
 
+    def snapshot(self):
+        return State(
+            tuple(self.positions),
+            self.switch_on,
+            self.resource,
+            self.selected,
+            self.flagged,
+            self.previous_positions,
+        )
+
+    def restore(self, state):
+        self.positions = list(state.positions)
+        self.switch_on = state.switch_on
+        self.resource = state.resource
+        self.selected = state.selected
+        self.flagged = state.flagged
+        self.previous_positions = state.previous_positions
+        self._available_actions = list(self.scene.actions)
+        if self.scene.dynamics == "action-domain" and self.flagged:
+            self._available_actions.remove(1)
+        self._update_camera()
+
+    def _update_camera(self):
+        if self.scene.dynamics == "tracking":
+            maximum = self.scene.logical_size[0] - self.scene.viewport[2]
+            self.camera.x = min(maximum, max(0, self.positions[0][0] - 18))
+
     def step(self):
+        scene = self.scene
+        action = self.action.id.value
+        mode = scene.dynamics
+        if action == 5 and mode in ("latched", "flash", "flash-closed"):
+            self.flagged = mode != "flash-closed"
+            self._render(
+                display_offset=1
+                if mode.startswith("flash") and self.animation_frame == 0
+                else 0,
+                flash=self.animation_frame == 1 and scene.signal is not None,
+            )
+            self.animation_frame += 1
+            if self.animation_frame == 3:
+                self.animation_frame = 0
+                self.complete_action()
+            return
+        before = tuple(self.positions)
         if self.action.id == GameAction.RESET:
-            self.positions = list(self.scene.start)
-            self.switch_on = self.scene.start_state.switch_on
-            self.resource = self.scene.start_state.resource
-            self.selected = self.scene.initial_selection
+            self.restore(scene.start_state)
+        elif action == 7:
+            if self.previous_positions is not None:
+                if mode == "undo-first":
+                    self.positions[0] = self.previous_positions[0]
+                else:
+                    self.positions = list(self.previous_positions)
+            self.previous_positions = None
+            self.flagged = True
+        elif action == 5 and mode == "decoy-switch":
+            self.flagged = not self.flagged
         elif self.action.id == GameAction.ACTION5 and self.scene.switch:
             self.switch_on = not self.switch_on
         elif self.action.id == GameAction.ACTION5 and self.scene.resource:
@@ -126,8 +185,30 @@ class ShapeGame(ARCBaseGame):
             and self.scene.selection_color is not None
         ):
             self._click()
-        elif self.positions and self.action.id.value in self._moves:
-            self._shift(*self._moves[self.action.id.value])
+        elif self.positions and action in self._moves:
+            self._shift(*self._moves[action])
+            if tuple(self.positions) != before and mode.startswith("undo-"):
+                self.previous_positions = before
+            if tuple(self.positions) != before and mode in (
+                "latched",
+                "flash",
+                "flash-closed",
+            ):
+                self.flagged = False
+        if action != 0:
+            if mode == "charge-still" and action == 1:
+                self.resource = max(0, self.resource - 1)
+            elif mode == "action-domain" and action == 1 and not self.flagged:
+                self.flagged = True
+                self._available_actions.remove(1)
+            elif mode == "autonomous":
+                x, y = self.positions[1]
+                self.positions[1] = min(x + 1, self.scene.logical_size[0] - 1), y
+        self._update_camera()
+        self._render()
+        self.complete_action()
+
+    def _render(self, *, display_offset=0, flash=False):
         view = self.current_level.get_sprites()[0].pixels
         view.fill(-1)
         for x, y, color in self.scene.static:
@@ -142,16 +223,31 @@ class ShapeGame(ARCBaseGame):
             x, y = self.scene.resource.panel
             for i in range(self.resource):
                 view[y, x + i * 2] = self.scene.resource.color
+        if self.scene.signal is not None and (
+            flash
+            or (
+                self.flagged
+                and (
+                    self.scene.dynamics.startswith("undo-")
+                    or self.scene.dynamics == "decoy-switch"
+                )
+            )
+        ):
+            x, y, color = self.scene.signal
+            view[y, x] = color
         if self.scene.selection_color is not None:
             x, y = self.positions[self.selected]
             width, height = self.scene.logical_size
             for u, v in self._border(x, y):
                 if 0 <= u < width and 0 <= v < height:
                     view[v, u] = self.scene.selection_color
-        for shape, (x, y) in zip(self.scene.bodies, self.positions, strict=True):
+        for role, (shape, (x, y)) in enumerate(
+            zip(self.scene.bodies, self.positions, strict=True)
+        ):
             for dx, dy, color in shape:
-                view[y + dy, x + dx] = color
-        self.complete_action()
+                pixel = x + dx + (display_offset if role == 0 else 0)
+                if pixel < view.shape[1]:
+                    view[y + dy, pixel] = color
 
     @staticmethod
     def _border(x, y):

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from .scenario import Resource, Scene, Switch
 
-CASES = ("M01", "M02", "M04", "M05", "M06", "M08", "M13")
+CASES = tuple(f"M{index:02}" for index in range(1, 15))
 DIRECTIONS = ((1, 1, 0), (2, -1, 0), (3, 0, -1), (4, 0, 1))
 
 
@@ -317,6 +317,167 @@ def scenes(plan, seed):
                 prefix=((6, *points[difference]), 1),
             )
         )
+    # The mask marks geometry. A same-colored display occupies a separate part
+    # of the viewport without becoming a traversable cell.
+    left = {(x, y) for x in range(2, 5 + shift) for y in range(5, 9)}
+    right = {(x, y) for x in range(9 + shift, 13 + shift) for y in range(5, 9)}
+    island = {(x, y) for x in range(16, 19) for y in range(5, 9)}
+    panel_pixels = {(x, y) for x in range(16, 19) for y in range(2, 4)}
+    for name, bridge_y in (("walk-narrow-bridge", (6,)), ("walk-wide-bridge", (6, 7))):
+        bridge = {(x, y) for x in range(5 + shift, 9 + shift) for y in bridge_y}
+        floor = left | bridge | right | island
+        holes = {(x, y) for x in range(1, 22) for y in range(1, 16)} - floor
+        parts.append(
+            item(
+                "M03",
+                name,
+                active=(1, 1, 22, 16),
+                holes=tuple(sorted(holes)),
+                static=tuple(
+                    (*point, detail) for point in sorted(floor | panel_pixels)
+                ),
+                prefix=(1, 1, 1, 1, 1, 1),
+            )
+        )
+    hidden_gate = replace(panel, initial=False)
+    for name, prefix in (("latch-untriggered", (1,)), ("latch-triggered", (5, 1, 1))):
+        parts.append(
+            item(
+                "M07",
+                name,
+                **common,
+                switch=hidden_gate,
+                static=divider,
+                dynamics="latched",
+                signal=(19, 1, detail),
+                prefix=prefix,
+            )
+        )
+    for name, hue, mode in (
+        ("flash-positive", detail, "flash"),
+        ("flash-negative", body, "flash-closed"),
+    ):
+        parts.append(
+            item(
+                "M11",
+                name,
+                **common,
+                switch=hidden_gate,
+                static=divider,
+                dynamics=mode,
+                signal=(19, 1, hue),
+                prefix=(5, 1),
+            )
+        )
+    still = (3 + shift, 6)
+    parts.extend(
+        [
+            item(
+                "M09",
+                "undo-first",
+                active=(2, 6, 10, 8),
+                moves=((1, 1, 0),),
+                dynamics="undo-first",
+                signal=(17, 1, detail),
+                prefix=(1, 7),
+            ),
+            item(
+                "M09",
+                "undo-empty",
+                active=(2, 6, 10, 8),
+                moves=((1, 1, 0),),
+                dynamics="undo-all",
+                signal=(17, 1, detail),
+                prefix=(7,),
+            ),
+            item(
+                "M09",
+                "undo-push-and-charge",
+                active=(2, 6, 10, 8),
+                moves=((1, 1, 0),),
+                bodies=(square, obstacle),
+                start=push_start,
+                pushable=True,
+                dynamics="undo-all",
+                resource=Resource((18, 1), ((5 + shift, 6), (5 + shift, 7)), detail, 1),
+                prefix=(1, 7),
+            ),
+            item(
+                "M10",
+                "stationary-charge",
+                active=(still[0], 6, still[0] + 2, 8),
+                moves=((1, 1, 0),),
+                resource=Resource((18, 1), (), detail, 1),
+                dynamics="charge-still",
+                prefix=(1,),
+            ),
+            item(
+                "M10",
+                "stationary-domain",
+                active=(still[0], 6, still[0] + 2, 8),
+                moves=((1, 1, 0), (2, -1, 0)),
+                dynamics="action-domain",
+                prefix=(1, 2),
+            ),
+            item(
+                "M10",
+                "stationary-identical",
+                active=(still[0], 6, still[0] + 2, 8),
+                moves=((1, 1, 0),),
+                prefix=(1,),
+            ),
+            item(
+                "M12",
+                "tracking-landmarks",
+                logical_size=(40, 20),
+                active=(16, 6, 28, 8),
+                start=((18, 6),),
+                moves=((1, 1, 0), (2, -1, 0)),
+                static=((3, 2, detail), (7, 11, wall), (19, 17, detail)),
+                dynamics="tracking",
+                prefix=(1, 1, 2),
+            ),
+            item(
+                "M12",
+                "tracking-without-landmarks",
+                logical_size=(40, 20),
+                active=(16, 6, 28, 8),
+                start=((18, 6),),
+                moves=((1, 1, 0), (2, -1, 0)),
+                dynamics="tracking",
+                prefix=(1, 1, 2),
+            ),
+            item(
+                "M12",
+                "autonomous-peer",
+                active=(2, 6, 12, 8),
+                start=((3, 6), (6, 10)),
+                bodies=(square, ((0, 0, detail),)),
+                moves=((1, 1, 0), (2, -1, 0)),
+                dynamics="autonomous",
+                prefix=(5, 1),
+            ),
+            item(
+                "M14",
+                "indistinguishable-gate",
+                **common,
+                switch=hidden_gate,
+                static=divider,
+                signal=(16, 1, body),
+                prefix=(1, 5, 1),
+            ),
+            item(
+                "M14",
+                "indistinguishable-decoy",
+                **common,
+                switch=hidden_gate,
+                static=divider,
+                dynamics="decoy-switch",
+                signal=(16, 1, body),
+                prefix=(1, 5, 1),
+            ),
+        ]
+    )
     return parts
 
 

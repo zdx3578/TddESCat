@@ -6,6 +6,7 @@ from pathlib import Path
 
 from tddesc_env.bench.build import materialize, read_plan, scenes
 from tddesc_env.bench.grade import (
+    boundary_trace_checks,
     compare_repeated_traces,
     finite_engine_check,
     frame_hash,
@@ -22,9 +23,11 @@ def main(config, run_dir):
     task = read_task(config)
     plan = read_plan(task["judge_config"])
     selected = [
-        scenes(plan, group[0])
+        scenes(plan, seed)
         for group in (plan["training_seeds"], plan["development_seeds"])
+        for seed in group
     ]
+    selected.extend(scenes(plan, seed) for seed in plan["evaluation_seeds"])
     games = run_dir / "private" / "games"
     materialize(games, [scene for seed_group in selected for scene in seed_group])
     summary = {case: [] for case in plan["cases"]}
@@ -65,11 +68,13 @@ def main(config, run_dir):
         ) as ledger:
             for group in selected:
                 frames = {}
+                first_traces = {}
                 for scene in group:
                     outputs, first = http_trace(url, scene)
                     _, second = http_trace(url, scene)
                     compare_repeated_traces(first, second)
                     frames[scene.variant] = outputs
+                    first_traces[scene.variant] = first
                     for i, trace in enumerate((first, second), 1):
                         ledger.write(
                             json.dumps(
@@ -100,6 +105,7 @@ def main(config, run_dir):
                     hand_checks({scene.variant: scene for scene in group}, frames)
                     == hand[str(group[0].seed)]
                 )
+                boundary_trace_checks(first_traces)
     write_json(run_dir / "grade" / "fixture_summary.json", summary)
     for case, results in summary.items():
         assert results and all(x["http_commands"] >= 4 for x in results)
