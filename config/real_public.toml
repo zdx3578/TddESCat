@@ -1,0 +1,40 @@
+schema_version = 1
+run_name = "phase1-public"
+run_root = "../runs"
+
+[environment]
+base_url = "https://three.arcprize.org"
+credentials_file = "secrets.local.toml"
+competition_mode = false
+game_selection = "public_list"
+connect_timeout_seconds = 10
+request_timeout_seconds = 60
+
+[learning]
+engine = "../target/release/tddesc-stitch"
+language = "typed-op-children-db-v1"
+seed = 1729
+batch_confirmed_events = 16
+max_programs = 256
+max_ast_nodes = 96
+max_input_slots = 12
+max_learning_seconds = 60
+max_new_definitions = 8
+
+[search]
+context_radii = [1, 2, 4]
+allow_full_frame_context = true
+history_lengths = [0, 1, 2, 4, 8]
+max_guard_atoms = 4
+max_parameter_term_nodes = 7
+max_guard_candidates = 4096
+max_match_witnesses = 10000
+
+[execution]
+max_public_commands = 256
+one_inflight_per_guid = true
+post_retry = false
+redirect = false
+memory_enforcement = "cgroup_v2"
+solver_memory_bytes = 4294967296
+learning_memory_bytes = 2147483648

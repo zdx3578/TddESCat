@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.tddescat.org/v1/coverage.schema.json",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+    },
+    "interpretation_version": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+    },
+    "obligations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "obligation_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+          },
+          "action_domain": {
+            "type": "array",
+            "items": {
+              "$ref": "common.schema.json#/$defs/action"
+            }
+          },
+          "role_refs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "condition_class": {
+            "type": "string",
+            "minLength": 1
+          },
+          "effect_query": {
+            "type": "string",
+            "minLength": 1
+          },
+          "alternatives": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "status": {
+            "enum": [
+              "untried",
+              "observed_support",
+              "observed_conflict",
+              "unidentifiable",
+              "unreachable_under_current_model",
+              "incomplete"
+            ]
+          },
+          "attempt_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "confirmed_events": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+            },
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "obligation_id",
+          "action_domain",
+          "role_refs",
+          "condition_class",
+          "effect_query",
+          "alternatives",
+          "status",
+          "attempt_count",
+          "confirmed_events"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "version",
+    "interpretation_version",
+    "obligations"
+  ],
+  "additionalProperties": false
+}

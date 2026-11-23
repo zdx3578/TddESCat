@@ -29,5 +29,6 @@ rustc-ice-*.txt
 /config/*.local.toml
 __pycache__/
 .pytest_cache/
+*.egg-info/
 .DS_Store
 /_vendor/

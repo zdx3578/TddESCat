@@ -1,0 +1,6 @@
+schema_version = 1
+kind = "protocol"
+output_name = "protocol"
+timeout_seconds = 360
+agent_config = "../bench_agent.toml"
+environment_config = "../bench_server.toml"

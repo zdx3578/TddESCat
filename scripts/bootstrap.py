@@ -86,7 +86,6 @@ def main() -> None:
             "--python",
             python_version,
             "--locked",
-            "--no-install-project",
         ],
         cwd=ROOT,
         env=uv_env,
@@ -99,6 +98,7 @@ def main() -> None:
         check=True,
     )
     subprocess.run([python, "tests/python/dependency_smoke.py"], cwd=ROOT, check=True)
+    subprocess.run([python, "-m", "tddesc_tools.contracts"], cwd=ROOT, check=True)
 
     runtime = ROOT / "config" / "runtime.local.toml"
     depot = ROOT / ".runtime" / "julia-depot"

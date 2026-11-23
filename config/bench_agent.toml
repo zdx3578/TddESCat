@@ -1,0 +1,17 @@
+schema_version = 1
+run_name = "capture"
+run_root = "../runs"
+
+[environment]
+base_url = "http://127.0.0.1:43191"
+competition_mode = false
+game_selection = "public_list"
+connect_timeout_seconds = 2.0
+request_timeout_seconds = 5.0
+
+[execution]
+max_public_commands = 2
+one_inflight_per_guid = true
+post_retry = false
+redirect = false
+memory_enforcement = "cooperative"

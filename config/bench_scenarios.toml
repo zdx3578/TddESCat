@@ -1,0 +1,7 @@
+schema_version = 1
+generator_version = 1
+logical_size = [24, 20]
+training_seeds = [0, 1, 2, 3]
+development_seeds = [100, 101]
+evaluation_seeds = [1000, 1001, 1002, 1003]
+cases = ["M01", "M02", "M13"]

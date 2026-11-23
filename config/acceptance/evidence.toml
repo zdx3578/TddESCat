@@ -1,0 +1,7 @@
+schema_version = 1
+kind = "evidence"
+output_name = "evidence"
+timeout_seconds = 360
+agent_config = "../bench_agent.toml"
+environment_config = "../bench_server.toml"
+judge_config = "../bench_scenarios.toml"
