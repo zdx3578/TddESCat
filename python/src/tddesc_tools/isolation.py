@@ -38,7 +38,7 @@ def private_network(command, writable):
     return [*prefix, "--", *command]
 
 
-def sandbox(command, *, read=(), write=(), variables=None):
+def sandbox(command, *, read=(), write=(), variables=None, offline=False):
     prefix = [
         bubblewrap(),
         "--die-with-parent",
@@ -56,6 +56,8 @@ def sandbox(command, *, read=(), write=(), variables=None):
         "/usr",
         "/usr",
     ]
+    if offline:
+        prefix += ["--unshare-net"]
     for path in map(Path, ("/bin", "/sbin", "/lib", "/lib64", "/etc/ld.so.cache")):
         if path.is_symlink():
             prefix += ["--symlink", os.readlink(path), str(path)]
