@@ -17,7 +17,7 @@ from .contracts import Contracts
 
 KIND_IDS = {
     "protocol": tuple(f"P{i:02}" for i in range(1, 9)),
-    "fixture": ("M01", "M02", "M05", "M13"),
+    "fixture": ("M01", "M02", "M04", "M05", "M06", "M08", "M13"),
     "evidence": ("capture_replay",),
     "motion": ("conditional_motion",),
 }

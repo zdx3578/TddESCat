@@ -1,15 +1,36 @@
 """Finite reference transitions and public-frame oracle independent of ARCEngine."""
 
 from collections import deque
+from dataclasses import replace
 
-from .scenario import Scene, State
+from .scenario import Command, Scene, State
 
 
-def transition(scene: Scene, state: State, action: int) -> State:
+def transition(scene: Scene, state: State, action: Command) -> State:
     if action == 0:
         return scene.start_state
     if action == 5 and scene.switch:
-        return State(state.positions, not state.switch_on)
+        return replace(state, switch_on=not state.switch_on)
+    if action == 5 and scene.resource:
+        return replace(state, resource=max(state.resource - 1, 0))
+    if (
+        isinstance(action, tuple)
+        and action[0] == 6
+        and scene.selection_color is not None
+    ):
+        _, sx, sy = action
+        left, top, width, height, zoom, px, py = screen_geometry(scene)
+        if not (px <= sx < px + width * zoom and py <= sy < py + height * zoom):
+            return state
+        target = (left + (sx - px) // zoom, top + (sy - py) // zoom)
+        candidates = [
+            index
+            for index, (shape, (x, y)) in enumerate(
+                zip(scene.bodies, state.positions, strict=True)
+            )
+            if any((x + u, y + v) == target for u, v, _ in shape)
+        ]
+        return replace(state, selected=candidates[0]) if len(candidates) == 1 else state
     positions = state.positions
     mapping = [(dx, dy) for number, dx, dy in scene.moves if number == action]
     if len(mapping) != 1:
@@ -17,19 +38,24 @@ def transition(scene: Scene, state: State, action: int) -> State:
     if not positions:
         return state
     if scene.path_policy == "swap":
-        return State(positions[::-1], state.switch_on)
+        return replace(state, positions=positions[::-1])
 
     left, top, right, bottom = scene.active
     floor = {(x, y) for y in range(top, bottom) for x in range(left, right)}
     floor.difference_update(scene.blocked, scene.holes)
     if scene.switch and state.switch_on is False:
         floor.difference_update(scene.switch.gate_cells)
-    for i in range(1, len(positions)):
-        for x, y, _ in scene.bodies[i]:
-            floor.discard((positions[i][0] + x, positions[i][1] + y))
+    footprints = [
+        {(x + u, y + v) for u, v, _ in shape}
+        for shape, (x, y) in zip(scene.bodies, positions, strict=True)
+    ]
+    moving = state.selected
+    occupied = set().union(
+        *(cells for i, cells in enumerate(footprints) if i != moving)
+    )
 
     delta_x, delta_y = mapping[0]
-    anchor_x, anchor_y = positions[0]
+    anchor_x, anchor_y = positions[moving]
     end = (anchor_x + delta_x, anchor_y + delta_y)
     path = [end]
     if scene.path_policy == "swept":
@@ -41,10 +67,39 @@ def transition(scene: Scene, state: State, action: int) -> State:
         elif delta_y:
             sign = 1 if delta_y > 0 else -1
             path = [(anchor_x, y) for y in range(anchor_y + sign, end[1] + sign, sign)]
-    allowed = all(
-        (x + u, y + v) in floor for x, y in path for u, v, _ in scene.bodies[0]
+    for x, y in path[:-1]:
+        if any(
+            (x + u, y + v) not in floor - occupied for u, v, _ in scene.bodies[moving]
+        ):
+            return state
+    destination = {(u + delta_x, v + delta_y) for u, v in footprints[moving]}
+    if not destination <= floor:
+        return state
+    use_resource = scene.resource is not None and not (
+        destination.intersection(scene.resource.gate_cells) <= footprints[moving]
     )
-    return State((end, *positions[1:]), state.switch_on) if allowed else state
+    if use_resource and state.resource < 1:
+        return state
+    next_pos = list(positions)
+    blockers = [
+        index
+        for index, cells in enumerate(footprints)
+        if index != moving and cells & destination
+    ]
+    if blockers:
+        if len(blockers) > 1 or not scene.pushable:
+            return state
+        index = blockers[0]
+        shifted = {(x + delta_x, y + delta_y) for x, y in footprints[index]}
+        free = floor - (occupied - footprints[index]) - destination
+        if not shifted <= free:
+            return state
+        x, y = positions[index]
+        next_pos[index] = (x + delta_x, y + delta_y)
+    next_pos[moving] = end
+    return replace(
+        state, positions=tuple(next_pos), resource=state.resource - int(use_resource)
+    )
 
 
 def logical_colors(scene, state):
@@ -55,6 +110,16 @@ def logical_colors(scene, state):
         for x in range(left, left + 2):
             for y in range(top, top + 2):
                 colors[x, y] = color
+    if scene.resource:
+        x, y = scene.resource.panel
+        colors.update(
+            {(x + 2 * i, y): scene.resource.color for i in range(state.resource)}
+        )
+    if scene.selection_color is not None:
+        x, y = state.positions[state.selected]
+        rectangle = {(u, v) for u in range(x - 1, x + 3) for v in range(y - 1, y + 3)}
+        inside = {(x, y), (x + 1, y), (x, y + 1), (x + 1, y + 1)}
+        colors.update(dict.fromkeys(rectangle - inside, scene.selection_color))
     for (x, y), body in zip(state.positions, scene.bodies, strict=True):
         colors.update({(x + u, y + v): color for u, v, color in body})
     return colors
@@ -93,11 +158,26 @@ def reachable(scene):
     while frontier:
         state = frontier.popleft()
         yield state
-        for action in scene.actions:
+        for action in concrete_actions(scene, state):
             candidate = transition(scene, state, action)
             if candidate not in seen:
                 seen.add(candidate)
                 frontier.append(candidate)
+
+
+def concrete_actions(scene, state):
+    actions = [action for action in scene.actions if action != 6]
+    if scene.selection_color is None:
+        return actions
+    left, top, _, _, zoom, px, py = screen_geometry(scene)
+    points = {(0, 0), (32, 32)}
+    for x, y in state.positions:
+        sx, sy = px + (x - left) * zoom, py + (y - top) * zoom
+        points.update(((sx, sy), (sx - 1, sy), (sx + zoom, sy + zoom)))
+    return [
+        *actions,
+        *((6, x, y) for x, y in sorted(points) if 0 <= x < 64 and 0 <= y < 64),
+    ]
 
 
 def components(points, eight=False):

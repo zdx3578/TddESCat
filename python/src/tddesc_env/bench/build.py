@@ -8,9 +8,9 @@ from dataclasses import asdict, replace
 from hashlib import sha256
 from pathlib import Path
 
-from .scenario import Scene, Switch
+from .scenario import Resource, Scene, Switch
 
-CASES = ("M01", "M02", "M05", "M13")
+CASES = ("M01", "M02", "M04", "M05", "M06", "M08", "M13")
 DIRECTIONS = ((1, 1, 0), (2, -1, 0), (3, 0, -1), (4, 0, 1))
 
 
@@ -231,6 +231,90 @@ def scenes(plan, seed):
                 prefix=prefix,
                 static=(*wall_shape, (16, 2, noise)),
                 viewport=(0, 4, width, 12) if crop else (0, 0, width, height),
+            )
+        )
+    push_start = ((3 + shift, 6), (5 + shift, 6))
+    obstacle = ((0, 0, wall), (0, 1, wall))
+    behind = (6 + shift, 7)
+    for variant, pushable, blocked in (
+        ("push-open", True, False),
+        ("push-blocked", True, True),
+        ("push-immovable", False, False),
+    ):
+        parts.append(
+            item(
+                "M04",
+                variant,
+                bodies=(square, obstacle),
+                start=push_start,
+                pushable=pushable,
+                moves=((1, 1, 0), (2, -1, 0)),
+                active=(2, 6, 12, 8),
+                blocked=(behind,) if blocked else (),
+                static=((*behind, detail),) if blocked else (),
+            )
+        )
+    for variant, amount, is_hidden, prefix in (
+        ("resource-one", 1, False, (1, 1)),
+        ("resource-zero", 0, False, (1,)),
+        ("resource-two", 2, False, (1,)),
+        ("resource-no-movement", 1, False, (5, 1)),
+        ("resource-hidden", 1, True, (1,)),
+    ):
+        parts.append(
+            item(
+                "M06",
+                variant,
+                **common,
+                static=divider,
+                prefix=prefix,
+                resource=Resource((18, 1), panel.gate_cells, detail, amount),
+                viewport=(0, 4, width, 12) if is_hidden else (0, 0, width, height),
+            )
+        )
+
+    for variant, camera, difference, selection in (
+        ("click-interior", (0, 0, width, height), "inside", 0),
+        ("click-edge-outside", (0, 0, width, height), "edge", 0),
+        ("click-letterbox", (0, 0, width, height), "blank", 0),
+        ("click-panel", (0, 0, width, height), "panel", 0),
+        ("click-between", (0, 0, width, height), "between", 0),
+        ("click-viewport21", (1, 1, 21, 17), "inside", 0),
+        ("click-overlap-a", (0, 0, width, height), "overlap", 0),
+        ("click-overlap-b", (0, 0, width, height), "overlap", 1),
+    ):
+        a, b = (5 + shift, 6), (11 + shift, 6)
+        left, top, cols, rows = camera
+        scale = 64 // max(cols, rows)
+
+        def screen(point):
+            x, y = point
+            return (
+                (64 - cols * scale) // 2 + (x - left) * scale,
+                (64 - rows * scale) // 2 + (y - top) * scale,
+            )
+
+        points = {
+            "inside": screen(b),
+            "edge": (screen(b)[0] - 1, screen(b)[1]),
+            "blank": (0, 0),
+            "panel": screen((17, 2)),
+            "between": screen((8 + shift, 6)),
+            "overlap": screen(a),
+        }
+        parts.append(
+            item(
+                "M08",
+                variant,
+                viewport=camera,
+                active=(3, 6, 16, 8),
+                start=(a, a if difference == "overlap" else b),
+                bodies=(square, square),
+                selection_color=detail,
+                initial_selection=selection,
+                static=((17, 2, wall),),
+                moves=((1, 1, 0), (2, -1, 0)),
+                prefix=((6, *points[difference]), 1),
             )
         )
     return parts

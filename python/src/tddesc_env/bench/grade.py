@@ -17,15 +17,27 @@ def frame_hash(frame):
 
 def engine_transition(scene, state, action):
     switch = replace(scene.switch, initial=state.switch_on) if scene.switch else None
-    game = ShapeGame(replace(scene, start=state.positions, switch=switch))
+    resource = (
+        replace(scene.resource, initial=state.resource) if scene.resource else None
+    )
+    game = ShapeGame(
+        replace(
+            scene,
+            start=state.positions,
+            switch=switch,
+            resource=resource,
+            initial_selection=state.selected,
+        )
+    )
     game.perform_action(ActionInput(id=GameAction.RESET), raw=True)
     if action == 0:
         value = game.perform_action(ActionInput(id=GameAction.RESET), raw=True)
     else:
+        number, coords = concrete_request(action)
         value = game.perform_action(
-            ActionInput(id=GameAction.from_id(action)), raw=True
+            ActionInput(id=GameAction.from_id(number), data=coords), raw=True
         )
-    return State(tuple(game.positions), game.switch_on), [
+    return State(tuple(game.positions), game.switch_on, game.resource, game.selected), [
         frame.tolist() for frame in value.frame
     ]
 
@@ -34,7 +46,7 @@ def finite_engine_check(scene):
     states, edges = 0, 0
     for state in reference.reachable(scene):
         states += 1
-        for action in scene.actions:
+        for action in reference.concrete_actions(scene, state):
             outcome = reference.transition(scene, state, action)
             actual, frames = engine_transition(scene, state, action)
             if outcome != actual or frames != [reference.render(scene, outcome)]:
@@ -49,6 +61,13 @@ def logical_sample(scene, frame, x, y):
     left, top, width, height, scale, x0, y0 = reference.screen_geometry(scene)
     assert left <= x < left + width and top <= y < top + height
     return frame[y0 + (y - top) * scale][x0 + (x - left) * scale]
+
+
+def concrete_request(action):
+    if isinstance(action, tuple):
+        number, x, y = action
+        return number, {"x": x, "y": y}
+    return action, {}
 
 
 def hand_checks(by_variant, public_frames=None):
@@ -186,6 +205,80 @@ def hand_checks(by_variant, public_frames=None):
     assert at("panel-unrelated", 0) != at("panel-open", 0)
     assert at("panel-unrelated", 0) != at("panel-unrelated", 1)
     assert at("panel-position-heldout", 0) != at("panel-position-heldout", 1)
+
+    push = by_variant["push-open"]
+    actor, obstacle = push.start
+    pushed = reference.transition(push, push.start_state, 1)
+    assert pushed.positions == (
+        (actor[0] + 1, actor[1]),
+        (obstacle[0] + 1, obstacle[1]),
+    )
+    assert at("push-open", 0) == at("push-immovable", 0)
+    assert (
+        logical_sample(push, at("push-open", 1), obstacle[0] + 1, obstacle[1])
+        == push.bodies[1][0][2]
+    )
+    assert (
+        logical_sample(push, at("push-open", 1), obstacle[0], obstacle[1])
+        == push.bodies[0][0][2]
+    )
+    for name in ("push-blocked", "push-immovable"):
+        assert at(name, 0) == at(name, 1)
+
+    resource = by_variant["resource-one"]
+    x, y = resource.resource.panel
+    assert (
+        logical_sample(resource, at("resource-one", 0), x, y) == resource.resource.color
+    )
+    assert logical_sample(resource, at("resource-one", 1), x, y) == resource.background
+    assert at("resource-zero", 0) == at("resource-zero", 1)
+    assert (
+        logical_sample(resource, at("resource-two", 1), x, y) == resource.resource.color
+    )
+    assert (
+        logical_sample(resource, at("resource-two", 1), x + 2, y) == resource.background
+    )
+    before = at("resource-no-movement", 0)
+    after = at("resource-no-movement", 1)
+    assert before != after and after == at("resource-zero", 0) == at(
+        "resource-no-movement", 2
+    )
+    entered = reference.transition(resource, resource.start_state, 1)
+    assert entered.resource == 0 and entered.positions != resource.start
+    assert reference.transition(resource, entered, 1).resource == 0
+
+    clicks = []
+    for name in (
+        "click-interior",
+        "click-edge-outside",
+        "click-letterbox",
+        "click-panel",
+        "click-between",
+        "click-viewport21",
+        "click-overlap-a",
+        "click-overlap-b",
+    ):
+        scene = by_variant[name]
+        action = scene.prefix[0]
+        before, selected, moved = (at(name, i) for i in range(3))
+        succeeds = name in ("click-interior", "click-viewport21")
+        obscured = name.startswith("click-overlap-")
+        assert (before != selected) == succeeds
+        if obscured:
+            assert before == moved
+        else:
+            role = 1 if succeeds else 0
+            x0, y0 = scene.start[role]
+            assert logical_sample(scene, moved, x0 + 2, y0) == scene.bodies[role][0][2]
+        clicks.append(
+            {
+                "variant": name,
+                "coordinate": list(action[1:]),
+                "selected_changed": succeeds,
+            }
+        )
+    assert at("click-overlap-a", 0) == at("click-overlap-b", 0)
+
     return {
         "M01": move_groups,
         "M02": {
@@ -199,6 +292,16 @@ def hand_checks(by_variant, public_frames=None):
             "toggle_after_block": [1, 5, 1],
             "cropped_before_equal": True,
         },
+        "M04": {
+            "joint": pushed.positions,
+            "blocked_space": [obstacle[0] + 1, obstacle[1] + 1],
+        },
+        "M06": {
+            "forward_charge": [1, 0],
+            "empty_charge": [0, 0],
+            "without_movement": [1, 0],
+        },
+        "M08": clicks,
         "M13": {
             "full_components": [sorted(s) for s in full],
             "crop_origin": [0, 7],
@@ -233,13 +336,14 @@ def http_trace(url, scene):
         card = call("/api/scorecard/open", {})["card_id"]
         guid = None
         for action in (0, *scene.prefix):
-            body = {"game_id": scene.public_id}
+            number, coordinates = concrete_request(action)
+            body = {"game_id": scene.public_id, **coordinates}
             if guid is None:
                 body["card_id"] = card
             else:
                 body["guid"] = guid
             response = call(
-                "/api/cmd/" + ("RESET" if action == 0 else f"ACTION{action}"), body
+                "/api/cmd/" + ("RESET" if number == 0 else f"ACTION{number}"), body
             )
             expected_state = reference.transition(scene, state, action)
             expected_frame = reference.render(scene, expected_state)
@@ -250,7 +354,13 @@ def http_trace(url, scene):
             assert response["state"] == "NOT_FINISHED"
             assert response["levels_completed"] == 0 and response["win_levels"] == 1
             assert response["available_actions"] == list(scene.actions)
-            assert response["action_input"]["id"] == action
+            assert response["action_input"]["id"] == number
+            if number == 6:
+                echo = response["action_input"]["data"]
+                assert all(
+                    type(echo[key]) is int and echo[key] == value
+                    for key, value in coordinates.items()
+                )
             assert response["frame"] == [expected_frame], (
                 scene.case,
                 scene.variant,

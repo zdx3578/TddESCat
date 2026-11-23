@@ -1,4 +1,4 @@
-"""Validate the M01/M02/M13 fixture slice against actual official HTTP traffic."""
+"""Validate finite movement fixtures against actual official HTTP traffic."""
 
 import json
 import sys

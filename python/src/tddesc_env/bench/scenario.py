@@ -6,12 +6,15 @@ from pathlib import Path
 
 Point = tuple[int, int]
 Cell = tuple[int, int, int]
+Command = int | tuple[int, int, int]
 
 
 @dataclass(frozen=True)
 class State:
     positions: tuple[Point, ...]
     switch_on: bool = False
+    resource: int = 0
+    selected: int = 0
 
 
 @dataclass(frozen=True)
@@ -21,6 +24,14 @@ class Switch:
     on_color: int
     off_color: int
     initial: bool
+
+
+@dataclass(frozen=True)
+class Resource:
+    panel: Point
+    gate_cells: tuple[Point, ...]
+    color: int
+    initial: int
 
 
 @dataclass(frozen=True)
@@ -41,30 +52,46 @@ class Scene:
     start: tuple[Point, ...]
     moves: tuple[tuple[int, int, int], ...]
     path_policy: str
-    prefix: tuple[int, ...]
+    prefix: tuple[Command, ...]
     switch: Switch | None = None
+    pushable: bool = False
+    resource: Resource | None = None
+    selection_color: int | None = None
+    initial_selection: int = 0
 
     @property
     def start_state(self):
-        return State(self.start, self.switch.initial if self.switch else False)
+        return State(
+            self.start,
+            self.switch.initial if self.switch else False,
+            self.resource.initial if self.resource else 0,
+            self.initial_selection,
+        )
 
     @property
     def actions(self):
-        return tuple(entry[0] for entry in self.moves) + ((5,) if self.switch else ())
+        extra = ((5,) if self.switch or self.resource else ()) + (
+            (6,) if self.selection_color is not None else ()
+        )
+        return tuple(entry[0] for entry in self.moves) + extra
 
     @classmethod
     def load(cls, path: Path):
         data = json.loads(path.read_bytes())
-        for name in ("logical_size", "viewport", "active", "prefix"):
+        for name in ("logical_size", "viewport", "active"):
             data[name] = tuple(data[name])
+        data["prefix"] = tuple(
+            tuple(cmd) if isinstance(cmd, list) else cmd for cmd in data["prefix"]
+        )
         for name in ("static", "blocked", "holes", "start", "moves"):
             data[name] = tuple(tuple(item) for item in data[name])
         data["bodies"] = tuple(
             tuple(tuple(cell) for cell in cells) for cells in data["bodies"]
         )
-        if data.get("switch") is not None:
-            spec = data["switch"]
-            spec["panel"] = tuple(spec["panel"])
-            spec["gate_cells"] = tuple(tuple(cell) for cell in spec["gate_cells"])
-            data["switch"] = Switch(**spec)
+        for name, cls_part in (("switch", Switch), ("resource", Resource)):
+            if data.get(name) is not None:
+                spec = data[name]
+                spec["panel"] = tuple(spec["panel"])
+                spec["gate_cells"] = tuple(tuple(cell) for cell in spec["gate_cells"])
+                data[name] = cls_part(**spec)
         return cls(**data)
