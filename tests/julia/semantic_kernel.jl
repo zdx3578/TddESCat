@@ -78,7 +78,9 @@ end
 
 if !isempty(ARGS)
     @testset "Grounding from official local HTTP evidence" begin
-        events = with_run(recover_run, ARGS[1])
+        public_dir = ARGS[1]
+        isdir(joinpath(public_dir, "events")) || throw(ArgumentError("Expected the public evidence directory"))
+        events = with_run(recover_run, public_dir)
         result = ground_event(events[1], events[2])
         @test length(result.changed) == 16
         candidate = only(c for c in result.candidates if length(c.before) == 24 && c.delta == (2, 0))
