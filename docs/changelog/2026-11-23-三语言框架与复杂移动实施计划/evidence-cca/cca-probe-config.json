@@ -1,0 +1,7 @@
+{
+  "source_dir": "sources/cgnav",
+  "dependency_dir": "dependencies",
+  "output_file": "cca-probe-results.json",
+  "source_commit": "816e514d24467cfd2ec29494c44a901d885d8f75",
+  "source_sha256": "173ca7c76c7d98e35f36d8657c679d5cb43e024cfefe6e85f5a19f6ed1eedddf"
+}

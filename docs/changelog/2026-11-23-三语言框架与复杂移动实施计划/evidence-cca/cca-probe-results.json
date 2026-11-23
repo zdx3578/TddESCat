@@ -1,0 +1,46 @@
+{
+  "scope": "Unmodified author source; tiny finite semantic audit, not benchmark or full proof.",
+  "source_commit": "816e514d24467cfd2ec29494c44a901d885d8f75",
+  "source_sha256": "173ca7c76c7d98e35f36d8657c679d5cb43e024cfefe6e85f5a19f6ed1eedddf",
+  "python": "3.12.14",
+  "pygraphviz": "2.0.4",
+  "official_example": {
+    "case": "official_family_relations",
+    "expected_concept_count": 9,
+    "observed_concept_count": 9,
+    "passes_count_check": true,
+    "seconds": 6.614210486000047
+  },
+  "semantic_cases": [
+    {
+      "case": "unary_positive",
+      "finite_semantics_expected": true,
+      "cgnav_observed": true,
+      "agrees": true
+    },
+    {
+      "case": "unary_negative",
+      "finite_semantics_expected": false,
+      "cgnav_observed": false,
+      "agrees": true
+    },
+    {
+      "case": "disconnected_second_constraint",
+      "finite_semantics_expected": false,
+      "cgnav_observed": true,
+      "agrees": false
+    },
+    {
+      "case": "two_public_roles_same_target",
+      "finite_semantics_expected": false,
+      "cgnav_observed": true,
+      "agrees": false
+    },
+    {
+      "case": "different_binary_predicate",
+      "finite_semantics_expected": false,
+      "cgnav_observed": true,
+      "agrees": false
+    }
+  ]
+}

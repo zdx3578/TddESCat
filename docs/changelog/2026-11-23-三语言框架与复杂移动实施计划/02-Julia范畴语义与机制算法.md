@@ -69,7 +69,7 @@ Julia 层直接采用 AlgebraicJulia 的 Catlab、ACSets、GATlab。需要确定
 
 阻断标准：解析失败、版本偏离、直接 API 缺失、类型化范畴选择错误、自然性方块错却通过、部分匹配被报完整、矩形关系方向错、DPO 粘合检查缺失，均阻断依赖验收。不能通过切换自写通用数学库或关闭检查来放行。需定位到具体包／API、修正调用或选择一个经重新核查的固定版本，然后重做受影响预检。
 
-AlgebraicRewriting 0.5.0 release 明确移除了 incremental hom search；Catlab 0.17 的迁移说明明确 HomomorphismQuery 尚未重新实现。首版使用已核查的 BacktrackingSearch，不写“库已提供增量 matcher”。项目的增量来自自己的来源、依赖和失效索引。[S6,S7]
+AlgebraicRewriting 0.5.0 release 明确移除了 incremental hom search。[S7] Catlab 0.17 的迁移说明仍称 HomomorphismQuery 尚未重新实现，但本轮读取固定 0.17.6 源码发现 `src/wiring_diagrams/Algebras.jl` 已实现 `homomorphism_query`、`homomorphisms(::HomomorphismQuery)` 和 `query`，相应测试也存在。原先据迁移说明作出的“功能不存在”判断更正。首版仍沿本规格使用 BacktrackingSearch；查询路径支持的参数、集合去重及运行结果另行核验，不能仅凭存在同名方法替换调用。本轮没有 Julia 运行环境，未实跑这些方法。项目的增量仍来自自己的来源、依赖和失效索引，不写“库已提供增量 matcher”。详见 [20 文档第 6 节](20-论文代码核验与关系定义集成潜力.md)。[S6]
 
 ## 3. 上游 API 到项目函数的逐项映射
 
