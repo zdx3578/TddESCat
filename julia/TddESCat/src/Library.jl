@@ -75,6 +75,115 @@ function publish_library(base::LibrarySnapshot, result, manifest, signature;
         end
         names[candidate["temporary_name"]] = id
     end
-    version = "library-" * content_hash(JSON.json([entry["stable_id"] for entry in entries]))
+    version = length(entries) == length(base.entries) ? base.version :
+        "library-" * content_hash(JSON.json([entry["stable_id"] for entry in entries]))
     return (snapshot=LibrarySnapshot(version, entries), names)
+end
+
+function rename_proof(proof, names)
+    function rename_step(step)
+        name = get(names, step["rule_id"][5:end], step["rule_id"][5:end])
+        return merge(step, Dict(
+            "rule_id"=>"def." * name,
+            "substitution"=>[merge(arg, Dict("term"=>rename_wire(arg["term"], names)))
+                for arg in step["substitution"]]))
+    end
+    return merge(proof, Dict(
+        "left_term"=>rename_wire(proof["left_term"], names),
+        "right_term"=>rename_wire(proof["right_term"], names),
+        "steps"=>rename_step.(proof["steps"])))
+end
+
+function publication_from(base, checkpoint, result; current_version, current_evidence)
+    accepted = publish_library(base, result, checkpoint.manifest, checkpoint.signature;
+        current_version, current_evidence)
+    names = accepted.names
+    registry, definitions = registry_from(checkpoint.signature, base.entries)
+    for candidate in result["definitions"]
+        check_register!(registry, definitions, candidate["temporary_name"], candidate)
+    end
+    programs = [wire_text(rename_wire(decode_program(program, registry), names))
+        for program in result["rewritten_programs"]]
+    calls = [merge(entry, Dict(
+        "definition_ref"=>get(names, entry["definition_ref"], entry["definition_ref"]),
+        "argument_terms"=>[rename_wire(arg, names) for arg in entry["argument_terms"]]))
+        for entry in result["calls"]]
+    # The baseline comes from the e-graph extractor. The descriptor identifies
+    # it separately from the costs recomputed by the Julia consumer.
+    cost = Dict(k=>v for (k,v) in result["cost"] if k != "post_rewrite_baseline")
+    cost["engine_reported_post_rewrite_baseline"] = result["cost"]["post_rewrite_baseline"]
+    return Dict(
+        "schema_version"=>1, "input_sha256"=>checkpoint.input_sha, "round_index"=>result["round_index"],
+        "library_version"=>accepted.snapshot.version, "base_version"=>base.version,
+        "evidence_snapshot_id"=>current_evidence, "signature"=>checkpoint.signature,
+        "slot_context"=>checkpoint.manifest["slot_context"], "library"=>accepted.snapshot.entries,
+        "initial_library_count"=>length(base.entries), "new_definition_ids"=>sort!(unique!(collect(values(names)))),
+        "source_programs"=>checkpoint.text, "origins"=>checkpoint.origins,
+        "rewritten_programs"=>programs, "calls"=>calls, "proofs"=>[rename_proof(proof, names) for proof in result["proofs"]],
+        "cost"=>cost)
+end
+
+function read_published_stitch(directory; publication=nothing)
+    if isnothing(publication)
+        pointer = joinpath(directory, "current.json")
+        isfile(pointer) || return nothing
+        publication = read_json(pointer)["publication"]
+    end
+    occursin(r"^[a-f0-9]{64}\z", publication) || error("Invalid publication identity")
+    path = joinpath(directory, publication * ".json")
+    bytes = read(path)
+    content_hash(bytes) == publication || error("Published artifact digest mismatch")
+    bundle = JSON.parse(String(bytes))
+    verify_published_stitch(bundle)
+    return (; publication, bundle, snapshot=LibrarySnapshot(bundle["library_version"],
+        collect(Dict{String,Any}, bundle["library"])))
+end
+
+function verify_published_stitch(bundle)
+    bundle["schema_version"] == 1 || error("Unknown publication schema")
+    slots = String[slot["sort"] for slot in bundle["slot_context"]]
+    signature, entries, texts = bundle["signature"], bundle["library"], bundle["source_programs"]
+    older = bundle["initial_library_count"]
+    strict_integer(older) && 0 <= older <= length(entries) || error("Invalid frozen library boundary")
+    old_registry, _ = registry_from(signature, entries[1:older])
+    for text in texts
+        wire_sort(decode_program(text, old_registry), old_registry; slots)
+    end
+    (; original, rewritten) = check_stitch_semantics(bundle, signature, entries, texts, bundle["origins"], slots)
+    input_cost = 1 + sum(wire_cost, original; init=0)
+    corpus_cost = 1 + sum(wire_cost, rewritten; init=0)
+    old_cost = sum(entry -> wire_cost(entry["definition"]["body"]), entries[1:older]; init=0)
+    new_cost = sum(entry -> wire_cost(entry["definition"]["body"]), entries[older+1:end]; init=0)
+    final_cost = corpus_cost + old_cost + new_cost
+    for (key, value) in (
+        ("pre_rewrite_input", input_cost), ("output_programs", corpus_cost),
+        ("initial_library", old_cost), ("new_definitions", new_cost), ("final_total", final_cost),
+        ("ratio_numerator", input_cost + old_cost), ("ratio_denominator", final_cost),
+    )
+        decimal_cost(bundle["cost"][key]) == value || error("Published cost mismatch at " * key)
+    end
+    decimal_cost(bundle["cost"]["engine_reported_post_rewrite_baseline"])
+    return bundle
+end
+
+function publish_stitch!(directory, checkpoint; current_evidence)
+    return with_run(directory) do store
+        current = read_published_stitch(store.public_dir)
+        base = isnothing(current) ? LibrarySnapshot() : current.snapshot
+        isempty(checkpoint.verified) && error("No verified round to publish")
+        base.entries == checkpoint.entries || error("Frozen library content differs from the current version")
+        result = last(checkpoint.verified)
+        bundle = publication_from(base, checkpoint, result; current_version=base.version, current_evidence)
+        verify_published_stitch(bundle)
+        bytes = JSON.json(bundle)
+        digest = content_hash(bytes)
+        path = store_path(store, digest * ".json")
+        if isfile(path)
+            read(path, String) == bytes || error("Publication ID collision")
+        else
+            atomic_write(path, bytes)
+        end
+        atomic_json(store_path(store, "current.json"), Dict("publication"=>digest))
+        return digest
+    end
 end

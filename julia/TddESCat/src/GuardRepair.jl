@@ -6,16 +6,23 @@ struct ComponentColor <: MotionPredicate
     pigment::UInt8
 end
 
-struct ClearDestination <: MotionPredicate end
+struct DestinationColor <: MotionPredicate
+    pigment::UInt8
+end
 
 struct RecentAction <: MotionPredicate
     id::Int
 end
 
+struct HistorySuffix <: MotionPredicate
+    actions::Vector{Int}
+end
+
 predicate_record(p::ComponentColor) = Dict("kind"=>"component_color", "position"=>p.at,
     "offsets"=>p.offsets, "color"=>Int(p.pigment))
-predicate_record(::ClearDestination) = Dict("kind"=>"complete_destination_clear")
+predicate_record(p::DestinationColor) = Dict("kind"=>"destination_entry_color", "color"=>Int(p.pigment))
 predicate_record(p::RecentAction) = Dict("kind"=>"previous_public_action", "id"=>p.id)
+predicate_record(p::HistorySuffix) = Dict("kind"=>"public_action_suffix", "actions"=>p.actions)
 predicate_key(p) = JSON.json(predicate_record(p))
 
 position_offsets(shape) = [(x, y) for (x, y, _) in shape_template(shape)]
@@ -29,22 +36,21 @@ function evaluate_predicate(p::ComponentColor, frame, binding, delta, history)
     return frame[y + 1, x + 1] == p.pigment ? proven : disproven
 end
 
-function evaluate_predicate(::ClearDestination, frame, binding, delta, history)
-    parts = color_components(frame)
-    size_order = sort(parts.groups; by=length, rev=true)
-    isempty(size_order) && return unknown_truth
-    background = first(size_order)
-    length(background) * 4 > length(frame) || return unknown_truth
-    left, top = anchor(background)
-    right = maximum(first, background)
-    bottom = maximum(cell -> cell[2], background)
-    background_color = first(background)[3]
+function destination_entry(frame, binding, delta)
+    isnothing(binding) && return nothing
     dx, dy = delta
     support = Set((x, y) for (x, y, _) in binding.support)
     target = Set((x + dx, y + dy) for (x, y) in support)
-    all(point -> left <= point[1] <= right && top <= point[2] <= bottom, target) || return unknown_truth
-    return all(point -> frame[point[2] + 1, point[1] + 1] == background_color,
-        setdiff(target, support)) ? proven : disproven
+    all(point -> checkbounds(Bool, frame, point[2] + 1, point[1] + 1), target) || return nothing
+    entering = setdiff(target, support)
+    isempty(entering) && return nothing
+    return Set(frame[y + 1, x + 1] for (x, y) in entering)
+end
+
+function evaluate_predicate(p::DestinationColor, frame, binding, delta, history)
+    colors = destination_entry(frame, binding, delta)
+    isnothing(colors) && return unknown_truth
+    return colors == Set([p.pigment]) ? proven : disproven
 end
 
 function evaluate_predicate(p::RecentAction, frame, binding, delta, history)
@@ -52,7 +58,23 @@ function evaluate_predicate(p::RecentAction, frame, binding, delta, history)
     return last(history) == p.id ? proven : disproven
 end
 
-function predicate_pool(samples; max_atoms=192)
+function evaluate_predicate(p::HistorySuffix, frame, binding, delta, history)
+    n = length(p.actions)
+    length(history) >= n || return unknown_truth
+    return history[end - n + 1:end] == p.actions ? proven : disproven
+end
+
+function in_context(shape, binding, radius)
+    isnothing(binding) && return false
+    x0, y0 = binding.anchor
+    xmax = maximum(first, binding.support)
+    ymax = maximum(cell -> cell[2], binding.support)
+    return all(cell -> x0 - radius <= cell[1] <= xmax + radius &&
+        y0 - radius <= cell[2] <= ymax + radius, shape)
+end
+
+function predicate_pool(samples, template, delta; max_atoms=192, context_radii=(1, 2, 4),
+                        allow_full_frame=true, history_lengths=(1,))
     predicates = Dict{String,MotionPredicate}()
     function add!(predicate)
         key = predicate_key(predicate)
@@ -61,14 +83,22 @@ function predicate_pool(samples; max_atoms=192)
         predicates[key] = predicate
         return true
     end
-    add!(ClearDestination())
     for sample in samples
-        if !isempty(sample.previous_actions)
-            add!(RecentAction(last(sample.previous_actions))) ||
+        bound = bind_motion(sample.before, template)
+        colors = destination_entry(sample.before, bound, delta)
+        if !isnothing(colors) && length(colors) == 1
+            add!(DestinationColor(only(colors))) ||
+                return (pool=collect(values(predicates)), complete=false)
+        end
+        for n in history_lengths
+            0 < n <= length(sample.previous_actions) || continue
+            suffix = sample.previous_actions[end - n + 1:end]
+            add!(n == 1 ? RecentAction(only(suffix)) : HistorySuffix(suffix)) ||
                 return (pool=collect(values(predicates)), complete=false)
         end
         for shape in color_components(sample.before).groups
             1 <= length(shape) <= 96 || continue
+            allow_full_frame || any(r -> in_context(shape, bound, r), context_radii) || continue
             add!(ComponentColor(anchor(shape), position_offsets(shape), first(shape)[3])) ||
                 return (pool=collect(values(predicates)), complete=false)
         end
@@ -151,7 +181,9 @@ struct MotionClaim
     unknown_events::Vector{String}
 end
 
-function fit_motion_claim(definition, action, template, parameter, samples; max_guard_atoms=2, max_guard_work=4096)
+function fit_motion_claim(definition, action, template, parameter, samples; max_guard_atoms=2,
+                          max_guard_work=4096, context_radii=(1, 2, 4), allow_full_frame=true,
+                          history_lengths=(1,))
     rows = [sample for sample in samples if sample.action == action]
     ids = [row.event_id for row in rows]
     allunique(ids) || error("An intervention cannot be counted twice")
@@ -163,7 +195,8 @@ function fit_motion_claim(definition, action, template, parameter, samples; max_
     if isempty(B)
         guard = GuardSearch(MotionPredicate[], ids[S], String[], String[], true, !isempty(S), 1)
     else
-        generated = predicate_pool(rows)
+        generated = predicate_pool(rows, template, parameter.value;
+            max_atoms=max_guard_work, context_radii, allow_full_frame, history_lengths)
         bound = [bind_motion(row.before, template) for row in rows]
         evaluate = (p, i) -> evaluate_predicate(p, rows[i].before, bound[i], parameter.value, rows[i].previous_actions)
         result = search_guards(ids, S, B, generated.pool, evaluate; max_atoms=max_guard_atoms, max_work=max_guard_work)
@@ -171,7 +204,7 @@ function fit_motion_claim(definition, action, template, parameter, samples; max_
             generated.complete && result.complete, result.feasible, result.visited)
     end
     material = [definition, action, template, parameter.value, parameter.syntax,
-        parameter.reads, ids, predicate_record.(guard.atoms), guard.feasible]
+        parameter.reads, predicate_record.(guard.atoms), guard.feasible, guard.complete]
     version = "mechanism-" * content_hash(JSON.json(material))
     return MotionClaim(version, definition, action, template, parameter, guard, ids[S], ids[B], ids[U])
 end

@@ -194,3 +194,70 @@ function replay_proof(proof, input, output, library, registry, slots)
     term == output || error("Proof did not reach its claimed output")
     return term
 end
+
+site_contains(site, path) = length(site) <= length(path) && path[1:length(site)] == site
+
+function expand_sites!(positions, step, library; spread, max_positions)
+    site = Tuple(step["site_path"])
+    name = step["rule_id"][5:end]
+    original = Dict(path => labels for (path, labels) in positions if site_contains(site, path))
+    root_labels = get(original, site, Set{Tuple}())
+    for path in keys(original)
+        delete!(positions, path)
+    end
+    function add_labels(path, labels)
+        isempty(labels) && return
+        union!(get!(Set{Tuple}, positions, path), labels)
+        length(positions) <= max_positions || error("Source reconstruction exceeded the position budget")
+    end
+    walk_wire(library[name]["body"]) do node, relative
+        destination = (site..., relative...)
+        if node["kind"] == "Param"
+            argument = (site..., node["index"])
+            for (path, labels) in original
+                site_contains(argument, path) || continue
+                add_labels((destination..., path[length(argument)+1:end]...), labels)
+            end
+        end
+        (spread || isempty(relative)) && add_labels(destination, root_labels)
+    end
+end
+
+function initial_sites(term, library; all_nodes)
+    positions = Dict{Tuple,Set{Tuple}}()
+    walk_wire(term) do node, path
+        if all_nodes || (node["kind"] == "Call" && haskey(library, node["operator"]))
+            site = Tuple(path)
+            positions[site] = Set{Tuple}([site])
+        end
+    end
+    return positions
+end
+
+function replay_call_sources(proof, input, output, library, registry, slots; max_positions=131_072)
+    replay_proof(proof, input, output, library, registry, slots)
+    left = initial_sites(input, library; all_nodes=true)
+    right = initial_sites(output, library; all_nodes=false)
+    steps = proof["steps"]
+    middle = findfirst(step -> step["direction"] == "reverse", steps)
+    middle = isnothing(middle) ? length(steps) + 1 : middle
+    all(step -> step["direction"] == "reverse", @view steps[middle:end]) ||
+        error("Definition proof does not have a shared expansion")
+    for step in @view steps[1:middle-1]
+        expand_sites!(left, step, library; spread=true, max_positions)
+    end
+    for i in length(steps):-1:middle
+        expand_sites!(right, steps[i], library; spread=false, max_positions)
+    end
+    sources = Dict{Tuple,Set{Tuple}}()
+    for (path, labels) in left
+        for n in 0:length(path)
+            calls = get(right, path[1:n], nothing)
+            isnothing(calls) && continue
+            for call in calls
+                union!(get!(Set{Tuple}, sources, call), labels)
+            end
+        end
+    end
+    return sources
+end

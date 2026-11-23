@@ -9,17 +9,33 @@ end
 mutable struct MotionController
     claim::MotionClaim
     samples::Vector{MotionExample}
+    seen_events::Set{String}
     cache::Dict{Tuple{String,String,Int,Tuple},MotionJudgment}
+    guard_limits::NamedTuple
 end
 
-MotionController(claim, samples) = MotionController(claim, collect(MotionExample, samples), Dict())
+function MotionController(claim, samples; guard_limits=(;))
+    saved = collect(MotionExample, samples)
+    seen = Set(row.event_id for row in saved)
+    length(saved) == length(seen) || error("Duplicate training intervention")
+    return MotionController(claim, saved, seen, Dict(), guard_limits)
+end
+
+struct FrozenMotionPolicy
+    claim::MotionClaim
+end
+
+freeze_motion(controller::MotionController) = FrozenMotionPolicy(deepcopy(controller.claim))
 
 truth_wire(t) = t == unknown_truth ? "unknown" : t == proven
 
 function judge_motion(claim, action, frame, event_id, history)
     reads = [event_id, claim.version, claim.definition]
-    if action != claim.action || !claim.guard.feasible
+    if action != claim.action
         return MotionJudgment(unknown_truth, nothing, nothing, reads, "uncovered_action")
+    end
+    if !claim.guard.feasible
+        return MotionJudgment(unknown_truth, nothing, nothing, reads, "unresolved_condition")
     end
     bound = bind_motion(frame, claim.template)
     isnothing(bound) && return MotionJudgment(unknown_truth, nothing, nothing, reads, "ambiguous_or_missing_support")
@@ -28,6 +44,9 @@ function judge_motion(claim, action, frame, event_id, history)
     return MotionJudgment(predicate, nothing, bound, reads,
         predicate == disproven ? "condition_false" : "condition_evidence_unavailable")
 end
+
+cached_judgment(policy::FrozenMotionPolicy, action, frame, event_id, history) =
+    judge_motion(policy.claim, action, frame, event_id, history)
 
 function cached_judgment(controller, action, frame, event_id, history)
     key = (controller.claim.version, event_id, action, Tuple(history))
@@ -47,24 +66,49 @@ function invalidate_motion!(controller, previous)
     return sort!(unique(invalidated))
 end
 
-function observed_check(controller, action, judgment, previous, after, history)
-    sample = motion_example(previous, after; history)
-    if isnothing(judgment.expected)
-        action == controller.claim.action && push!(controller.samples, sample)
-        return (status="unknown", actual=nothing, revision=nothing)
+function measure_motion(claim, sample)
+    sample.action == claim.action || return nothing
+    binding = bind_motion(sample.before, claim.template)
+    return isnothing(binding) ? nothing : effect_delta(sample.after, binding, claim.template)
+end
+
+function response_verdict(judgment, actual)
+    if isnothing(judgment.expected) || isnothing(actual)
+        return "unknown"
     end
-    actual = effect_delta(sample.after, judgment.bound, controller.claim.template)
-    isnothing(actual) && return (status="unknown", actual=nothing, revision=nothing)
+    return actual == judgment.expected ? "supported" : "refuted"
+end
+
+function assess_motion!(controller::MotionController, sample::MotionExample, judgment)
+    sample.event_id in controller.seen_events && error("Feedback already processed")
+    push!(controller.seen_events, sample.event_id)
     push!(controller.samples, sample)
-    actual == judgment.expected && return (status="supported", actual=actual, revision=nothing)
     old = controller.claim
-    current = fit_motion_claim(old.definition, action, old.template, old.parameter, controller.samples)
-    invalidated = invalidate_motion!(controller, old.version)
+    actual = measure_motion(old, sample)
+    verdict = response_verdict(judgment, actual)
+    sample.action == old.action || return (status=verdict, actual=actual, revision=nothing)
+    # Feedback can constrain a hypothesis even when the old version abstained.
+    current = fit_motion_claim(old.definition, old.action, old.template,
+        old.parameter, controller.samples; controller.guard_limits...)
     controller.claim = current
-    revision = Dict("kind"=>"effect_counterexample", "event_ref"=>sample.event_id, "withdrawn"=>old.version,
+    current.version == old.version && return (status=verdict, actual=actual, revision=nothing)
+    invalidated = invalidate_motion!(controller, old.version)
+    kind, status = if !old.guard.feasible && current.guard.feasible
+        "condition_recovered", "recovered"
+    elseif verdict == "refuted"
+        "effect_counterexample", "revised"
+    else
+        "new_public_evidence", "refined"
+    end
+    revision = Dict("kind"=>kind, "event_ref"=>sample.event_id, "withdrawn"=>old.version,
         "replacement"=>current.version, "invalidated"=>invalidated, "definition_ref"=>current.definition,
         "outstanding"=>claim_record(current)["outstanding"])
-    return (status="revised", actual=actual, revision=revision)
+    return (; status, actual, revision)
+end
+
+function assess_motion!(policy::FrozenMotionPolicy, sample::MotionExample, judgment)
+    actual = measure_motion(policy.claim, sample)
+    return (status=response_verdict(judgment, actual), actual=actual, revision=nothing)
 end
 
 function factor_query(rows, abstraction, query)

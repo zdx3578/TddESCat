@@ -18,7 +18,7 @@ constant(index) = "c" * lpad(index, 2, '0')
 signature = Dict(
     "schema_version" => 1, "signature_id" => "two-batches", "sorts" => [Dict("id" => "Atom"), Dict("id" => "Other")],
     "operators" => [
-        symbol("f", ["Atom", "Atom"]); symbol("g", ["Atom"]);
+        symbol("f", ["Atom", "Atom"]); symbol("g", ["Atom"]); symbol("wrap", ["Atom"]);
         [symbol(constant(i), String[]) for i in 0:63];
         symbol("extra", ["Other"], "Other"); symbol("other", String[], "Other")
     ],
@@ -94,6 +94,36 @@ end
     @test length(old["calls"]) == 16 && all(call["definition_ref"] == lib for call in old["calls"])
     @test all(occursin(lib, line) for line in old["rewritten_programs"])
     @test length(unique(call["source_occurrences"][1] for call in old["calls"])) == 16
+    wrapped = [batch(0)[1:15]; "(wrap " * last(batch(0)) * ")"]
+    nested = execute("nested-origin", wrapped, empty)
+    @test nested.code == 0
+    nested_rounds = read_stitch_rounds(nested.job, nested.output)
+    nested_result = first(nested_rounds.verified)
+    call_index = findfirst(c -> c["program_index"] == 15 && c["call_path"] == [0], nested_result["calls"])
+    @test !isnothing(call_index)
+    for corruption in ("wrong-site", "missing", "duplicate")
+        invalid_origin = deepcopy(nested_result)
+        sites = invalid_origin["calls"][call_index]["source_occurrences"]
+        if corruption == "wrong-site"
+            sites[1] = "occ-15"
+        elseif corruption == "missing"
+            pop!(sites)
+        else
+            push!(sites, first(sites))
+        end
+        @test_throws ErrorException TC.check_stitch_result(invalid_origin, nested_rounds.manifest,
+            signature, [], wrapped, nested_rounds.origins)
+    end
+    directory = joinpath(RUN, "publication")
+    @test_throws ErrorException TC.publish_stitch!(directory, result; current_evidence="unrelated")
+    @test !isfile(joinpath(directory, "current.json"))
+    digest = TC.publish_stitch!(directory, result; current_evidence="snapshot-positive")
+    restored = TC.read_published_stitch(directory)
+    @test restored.publication == digest
+    @test all(c["definition_ref"] == lib for c in restored.bundle["calls"])
+    @test all(occursin(lib, line) for line in restored.bundle["rewritten_programs"])
+    @test_throws ErrorException TC.publish_stitch!(directory, result; current_evidence="snapshot-positive")
+    @test TC.read_published_stitch(directory).publication == digest
     missing = execute("missing", ["($lib c32 c33)"], empty; source_origins=[])
     @test missing.code == 20 && isempty(readdir(missing.output))
     invalid = execute("wrong-sort", ["(f (g other) c03)"], empty)

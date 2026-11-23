@@ -9,12 +9,47 @@ mutable struct Recorder
     before_ref::Union{Nothing,String}
     frozen::Bool
     mutex::ReentrantLock
+    sequence_by_event::Dict{String,Int}
 end
 
 function Recorder(store::RunStore, config::RunConfig)
     isempty(records(store, "commands")) || throw(ArgumentError("Existing run requires offline recovery"))
     return Recorder(store, open_client(config), 1, 0, config.execution["max_public_commands"],
-        nothing, nothing, nothing, false, ReentrantLock())
+        nothing, nothing, nothing, false, ReentrantLock(), Dict{String,Int}())
+end
+
+function before_session!(rec, confirmed)
+    rec.next_sequence == 1 && isempty(rec.sequence_by_event) || error("Earlier evidence must precede this session")
+    isempty(confirmed) && return
+    refs = Dict{String,Any}[]
+    for event in confirmed
+        event["completion"] == "confirmed" || error("Earlier evidence must be confirmed")
+        push!(refs, Dict("event_id"=>event["event_id"], "response_blob"=>event["response_blob"],
+            "request_sha256"=>event["request_sha256"]))
+    end
+    sort!(refs; by=entry->entry["event_id"])
+    rec.sequence_by_event = prior_sequence_index(refs)
+    atomic_json(store_path(rec.store, "prior-events.json"), refs)
+end
+
+function prior_sequence_index(entries)
+    result = Dict{String,Int}()
+    for entry in entries
+        reference = entry["event_id"]
+        valid_id(reference) && !haskey(result, reference) || error("Invalid earlier event identity")
+        all(key -> occursin(r"^[a-f0-9]{64}\z", entry[key]), ("response_blob", "request_sha256")) ||
+            error("Invalid earlier event digest")
+        result[reference] = 0
+    end
+    return result
+end
+
+function available_prediction_reads(reads, before_ref, sequence_by_event, cutoff)
+    reads isa AbstractVector && all(valid_id, reads) && allunique(reads) &&
+        !isnothing(before_ref) && before_ref in reads ||
+        throw(ArgumentError("Learned prediction lacks a valid action-before read set"))
+    check_available(reads, sequence_by_event, cutoff).available ||
+        throw(ArgumentError("Prediction reads unavailable or future evidence"))
 end
 
 command_id(seq) = "c" * lpad(seq, 9, '0')
@@ -59,6 +94,8 @@ function prepare_command(rec, kind, path, body; game_id=nothing, guid=nothing, a
         else
             prediction.before_ref == rec.before_ref && prediction.payload["action"] == action ||
                 throw(ArgumentError("Prediction is stale or belongs to a different action"))
+            available_prediction_reads(get(prediction.payload, "event_reads", nothing),
+                rec.before_ref, rec.sequence_by_event, seq)
             record = merge(prediction.payload,
                 Dict("schema_version"=>1, "created_before_command"=>Dict("command_id"=>id, "sequence"=>seq)))
             atomic_json(store_path(rec.store, "predictions", id * ".json"), record)
@@ -123,16 +160,16 @@ function transact!(rec::Recorder, command; rejection=nothing, hook=(_...) -> not
     try
         response = public_request(rec.client, "POST", command["path"], command["request_body"])
         command["http_status"] = Int(response.status)
-        expect(200 <= response.status < 300, "http_status")
         command["response_blob"] = write_blob(store, response.body)
         save_command(store, command)
         hook(:receipt, command)
-        value = decode_receipt(command, response.body)
+        value = checked_receipt(store, command)
         event = finalize_receipt(store, command, value)
         hook(:confirmed, command)
         if value isa PublicObservation
             rec.observation = value
             rec.before_ref = event["event_id"]
+            rec.sequence_by_event[rec.before_ref] = event["sequence"]
         elseif command["kind"] == "open_scorecard"
             rec.card_id = value
         elseif command["kind"] == "close_scorecard"
@@ -232,21 +269,28 @@ function close_scorecard!(rec::Recorder)
     end
 end
 
-function check_frozen_prediction(store, command, action)
+function check_frozen_prediction(store, command, action, sequence_by_event)
     id = command["command_id"]
     command["prediction_ref"] == id || error("Missing frozen prediction")
     prediction = read_json(store_path(store, "predictions", id * ".json"))
     prediction["action"] == action && prediction["created_before_command"] ==
         Dict("command_id" => id, "sequence" => command["sequence"]) ||
         error("Frozen prediction does not match command")
+    if haskey(prediction, "event_reads")
+        available_prediction_reads(prediction["event_reads"], command["before_ref"],
+            sequence_by_event, command["sequence"])
+    end
 end
 
 function checked_receipt(store, command)
+    bytes = read_blob(store, command["response_blob"])
     200 <= get(command, "http_status", 0) < 300 || throw(ProtocolError("http_status"))
-    return decode_receipt(command, read_blob(store, command["response_blob"]))
+    return decode_receipt(command, bytes)
 end
 
 function recover_run(store)
+    earlier = store_path(store, "prior-events.json")
+    sequence_by_event = isfile(earlier) ? prior_sequence_index(read_json(earlier)) : Dict{String,Int}()
     existing = records(store, "events")
     by_command = Dict(event["command_ref"] => event for event in existing)
     length(by_command) == length(existing) || error("Duplicate event for a command")
@@ -265,7 +309,7 @@ function recover_run(store)
             result in ("sent", "confirmed") || error("Event links to unsuccessful command")
             value = checked_receipt(store, command)
             if value isa PublicObservation
-                check_frozen_prediction(store, command, value.action)
+                check_frozen_prediction(store, command, value.action, sequence_by_event)
                 expected = event_record(command, value)
                 event == expected || error("Stored event does not match its request and response")
                 event["before_ref"] == previous || error("Event chain mismatch")
@@ -276,6 +320,7 @@ function recover_run(store)
                 end
                 push!(replayable, (event=event, observation=value))
                 previous = event["event_id"]
+                sequence_by_event[previous] = event["sequence"]
             else
                 isnothing(event) || error("Scorecard request has an event")
                 result == "sent" && finalize_receipt(store, command, value)
@@ -294,20 +339,25 @@ function recover_run(store)
                 save_command(store, command)
             else
                 if value isa PublicObservation
-                    check_frozen_prediction(store, command, value.action)
+                    check_frozen_prediction(store, command, value.action, sequence_by_event)
                     command["before_ref"] == previous || error("Recovered event chain mismatch")
                 end
                 event = finalize_receipt(store, command, value)
                 if !isnothing(event)
                     push!(replayable, (event=event, observation=value))
                     previous = event["event_id"]
+                    sequence_by_event[previous] = event["sequence"]
                 end
             end
         elseif result == "prepared"
             command["completion"] = "explicit_rejection"
             command["reason"] = "prepared_before_restart"
             save_command(store, command)
-        elseif !(result in ("outcome_unknown", "explicit_rejection"))
+        elseif result == "outcome_unknown"
+            # Unknown outcomes with a receipt remain auditable without interpreting
+            # an error body as a confirmed game transition.
+            haskey(command, "response_blob") && read_blob(store, command["response_blob"])
+        elseif result != "explicit_rejection"
             error("Invalid command completion")
         end
     end

@@ -68,9 +68,15 @@ def verify(root, public, routed, by_variant):
         discovery["cost"]["pre_rewrite_input"]
     )
     assert discovery["definitions"] and len(discovery["calls"]) == len(event_ids)
-    library = json.loads((public / "published-library.json").read_bytes())
+    pointer = json.loads((public / "publication/current.json").read_bytes())[
+        "publication"
+    ]
+    published = json.loads((public / "publication" / (pointer + ".json")).read_bytes())
+    library = published["library"]
     assert len(library) == 1
     identity = library[0]["stable_id"]
+    assert all(item["definition_ref"] == identity for item in published["calls"])
+    assert all("fn_" not in program for program in published["rewritten_programs"])
 
     episode = public / "control"
     events = records(episode / "events")
@@ -101,6 +107,8 @@ def verify(root, public, routed, by_variant):
     assert verified["status"] == "supported" and verified["actual"] == [2, 0]
     assert predictions[-1]["guard_truth"] is True
     final = json.loads((public / "motion-summary.json").read_bytes())
+    assert final["publication"] == pointer
+    assert final["evaluation_model_before"] == final["evaluation_model_after"]
     mechanism = final["final_claim"]
     assert mechanism["query_scope"] == ["bound_support_displacement"]
     assert (
@@ -199,6 +207,7 @@ def main(task_path, run):
         )
         if code != 0:
             raise RuntimeError(f"Actual E-Stitch stopped with status {code}")
+        run_julia(root, runtime, public, "--publish", config, request)
         run_julia(root, runtime, public, "--control", config, request)
     result = verify(root, public, routed, by_variant)
     write_json(public / "verified-motion.json", result)

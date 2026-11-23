@@ -43,7 +43,7 @@ function stitch_input(job_dir, manifest, field)
     return JSON.parse(String(data))
 end
 
-function verify_stitch_calls(result, outputs, origins, proof_for, definitions)
+function verify_stitch_calls(result, outputs, input_sites, proof_for, sources, definitions)
     positions = Dict{Tuple{Int,Tuple},Any}()
     for (index, program) in enumerate(outputs)
         walk_wire(program) do term, path
@@ -52,7 +52,6 @@ function verify_stitch_calls(result, outputs, origins, proof_for, definitions)
             end
         end
     end
-    origin_index = Dict(o["occurrence_id"] => o for o in origins)
     used = Set{String}()
     for call in result["calls"]
         index, path = call["program_index"], Tuple(call["call_path"])
@@ -61,32 +60,57 @@ function verify_stitch_calls(result, outputs, origins, proof_for, definitions)
         call["definition_ref"] == name && call["argument_terms"] == expected["args"] ||
             error("Call witness differs from its output site")
         call["proof_ref"] == proof_for[index + 1] || error("Call witness has a different proof")
+        expected_sites = get(sources[index + 1], path, Set{Tuple}())
         ids = call["source_occurrences"]
-        !isempty(ids) && all(id -> origin_index[id]["program_index"] == index, ids) ||
-            error("Call witness has a different source program")
+        allunique(ids) && !isempty(expected_sites) &&
+            Set(ids) == Set(input_sites[index + 1][position] for position in expected_sites) ||
+            error("Call witness differs from the proof-derived occurrences")
         push!(used, name)
     end
     isempty(positions) || error("A selected call has no source witness")
     return used
 end
 
-function check_stitch_result(result, manifest, signature, entries, text, origins)
+function input_occurrences(original, origins)
+    ids = [entry["occurrence_id"] for entry in origins]
+    allunique(ids) && all(valid_id, ids) || error("Duplicate or invalid input occurrence")
+    sites = [Dict{Tuple,String}() for _ in original]
+    for entry in origins
+        index = entry["program_index"]
+        strict_integer(index) && 0 <= index < length(sites) || error("Invalid origin program index")
+        path = Tuple(entry["expression_path"])
+        wire_at(original[index + 1], path)
+        haskey(sites[index + 1], path) && error("Duplicate source position")
+        sites[index + 1][path] = entry["occurrence_id"]
+    end
+    all(((term, entries),) -> length(entries) == wire_cost(term), zip(original, sites)) ||
+        error("Origins do not cover the input syntax")
+    return sites
+end
+
+function check_stitch_semantics(result, signature, entries, text, origins, slots; temporary=[])
     registry, definitions = registry_from(signature, entries)
-    slots = String[slot["sort"] for slot in manifest["slot_context"]]
     original = [decode_program(item, registry) for item in text]
     input_sorts = [wire_sort(term, registry; slots) for term in original]
-    for candidate in result["definitions"]
+    for candidate in temporary
         check_register!(registry, definitions, candidate["temporary_name"], candidate)
     end
     rewritten = [decode_program(item, registry) for item in result["rewritten_programs"]]
     [wire_sort(term, registry; slots) for term in rewritten] == input_sorts || error("Rewritten program sorts differ")
     length(result["proofs"]) == length(original) || error("Proof coverage differs")
-    for (proof, before, after) in zip(result["proofs"], original, rewritten)
-        replay_proof(proof, before, after, definitions, registry, slots)
-    end
+    sources = [replay_call_sources(proof, before, after, definitions, registry, slots)
+        for (proof, before, after) in zip(result["proofs"], original, rewritten)]
     proof_ids = [proof["proof_id"] for proof in result["proofs"]]
     allunique(proof_ids) || error("Duplicate proof ID")
-    used = verify_stitch_calls(result, rewritten, origins, proof_ids, definitions)
+    used = verify_stitch_calls(result, rewritten, input_occurrences(original, origins),
+        proof_ids, sources, definitions)
+    return (; original, rewritten, used, registry, definitions)
+end
+
+function check_stitch_result(result, manifest, signature, entries, text, origins)
+    slots = String[slot["sort"] for slot in manifest["slot_context"]]
+    (; original, rewritten, used) = check_stitch_semantics(result, signature, entries, text, origins, slots;
+        temporary=result["definitions"])
     if !isempty(result["definitions"])
         last(result["definitions"])["temporary_name"] in used || error("New definition has no selected call")
     end
@@ -141,5 +165,5 @@ function read_stitch_rounds(job_dir, output_dir)
         push!(verified, result)
         parent = content_hash(checkpoint_bytes)
     end
-    return (; manifest, signature, verified)
+    return (; manifest, signature, verified, input_sha, entries, text, origins)
 end

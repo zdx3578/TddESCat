@@ -1,5 +1,6 @@
 """Check P01–P08 against the production Julia client and transaction store."""
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -59,6 +60,7 @@ PROTOCOL_PLANS = (
     ("P05-guid", "wrong_guid", [*STANDARD, action(1)]),
     ("P05-action", "wrong_action", [*STANDARD, action(1)]),
     ("P05-coordinates", "wrong_coordinates", [*STANDARD, action(6, x=17, y=29)]),
+    ("P05-future", "normal", [*STANDARD, action(1, future_read=True), action(1)]),
     ("P06-card", "drop_open", [OPEN, OPEN, RESET, action(1)]),
     ("P06-reset", "drop_reset", [*STANDARD, RESET, action(1)]),
     ("P08-domain", "domain", [*STANDARD, action(1), action(1), action(2)]),
@@ -149,10 +151,11 @@ def checks(results):
     assert trace[0]["response_sha256"] == trace[1]["response_sha256"]
     for case in (before, after):
         verify_unknown(case, "http_status")
-        assert (
-            case.actions[0]["http_status"] == 400
-            and "response_blob" not in case.actions[0]
-        )
+        command = case.actions[0]
+        assert command["http_status"] == 400
+        assert command["response_blob"] == trace[0]["response_sha256"]
+        body = (case.public / "blobs" / command["response_blob"]).read_bytes()
+        assert hashlib.sha256(body).hexdigest() == command["response_blob"]
     yield "P03", ["P03-local", "P03-before", "P03-after"]
 
     frames = results["P04-frames"]
@@ -168,7 +171,10 @@ def checks(results):
         keys, ["guid_mismatch", "action_mismatch", "coordinates_mismatch"], strict=True
     ):
         verify_unknown(results[key], reason)
-    yield "P05", keys
+    future = results["P05-future"]
+    assert len(future.actions) == len(future.sent("/api/cmd/ACTION1")) == 1
+    assert future.actions[0]["completion"] == "confirmed"
+    yield "P05", [*keys, "P05-future"]
 
     for name, lost in (
         ("P06-card", "/api/scorecard/open"),
@@ -182,7 +188,7 @@ def checks(results):
         assert not case.events and not case.sent("/api/cmd/ACTION1")
     yield "P06", ["P06-card", "P06-reset"]
 
-    yield "P07", ["P07-confirmed", "P07-receipt", "P07-sent"]
+    yield "P07", ["P07-confirmed", "P07-receipt", "P07-sent", "P07-error-receipt"]
 
     domain = results["P08-domain"]
     assert [x["completion"] for x in domain.actions] == [
@@ -223,9 +229,14 @@ def run_julia(root, runtime, *args):
 
 
 def crash_checks(root, runtime, run_dir, contracts, template):
-    for stage in ("confirmed", "receipt", "sent"):
-        key = f"P07-{stage}"
-        with FaultStub(run_dir / "private" / key, "normal") as stub:
+    for label, stage, mode in (
+        ("confirmed", "confirmed", "normal"),
+        ("receipt", "receipt", "normal"),
+        ("sent", "sent", "normal"),
+        ("error-receipt", "receipt", "after_400"),
+    ):
+        key = f"P07-{label}"
+        with FaultStub(run_dir / "private" / key, mode) as stub:
             sent_ops = [*STANDARD, action(1, crash_at=stage)]
             plan = configure_plan(run_dir, key, stub.url, sent_ops, template)
             public = Path(plan["public"])
@@ -237,7 +248,7 @@ def crash_checks(root, runtime, run_dir, contracts, template):
             assert len(case.sent("/api/cmd/ACTION1")) == int(stage != "sent"), (
                 case.trace
             )
-            expected = 1 if stage == "sent" else 2
+            expected = 1 if stage == "sent" or mode == "after_400" else 2
             recoveries = []
             for count in (expected, 0):
                 replayed = run_julia(root, runtime, "--replay", public)
@@ -249,8 +260,14 @@ def crash_checks(root, runtime, run_dir, contracts, template):
             assert after.trace == case.trace and len(after.events) == expected
             assert len({event["event_id"] for event in after.events}) == expected
             assert after.actions[0]["completion"] == (
-                "outcome_unknown" if stage == "sent" else "confirmed"
+                "outcome_unknown" if expected == 1 else "confirmed"
             )
+            if mode == "after_400":
+                assert (
+                    after.actions[0]["response_blob"]
+                    == case.trace[-1]["response_sha256"]
+                )
+                assert after.actions[0]["reason"] == "http_status"
             assert recoveries[0]["through_event"] == recoveries[1]["through_event"]
             write_json(run_dir / "private" / key / "trace.json", after.trace)
             write_json(public / "recovery.json", recoveries)

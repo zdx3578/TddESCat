@@ -111,3 +111,11 @@ function read_api_key(env)
         throw(ArgumentError("Invalid API key"))
     return secret
 end
+
+function motion_guard_limits(config::RunConfig)
+    search = config.search
+    isnothing(search) && return (;)
+    return (; max_guard_atoms=search["max_guard_atoms"], max_guard_work=search["max_guard_candidates"],
+        context_radii=Tuple(search["context_radii"]), history_lengths=Tuple(search["history_lengths"]),
+        allow_full_frame=search["allow_full_frame_context"])
+end

@@ -27,7 +27,20 @@ else
                     if haskey(op, "origin_x")
                         x, y = screen_click(x, y; origin_x=op["origin_x"], origin_y=op["origin_y"])
                     end
-                    submit_action!(rec, op["id"]; x, y, hook)
+                    if get(op, "future_read", false)
+                        prediction = (before_ref=rec.before_ref, payload=Dict(
+                            "action"=>Dict("id"=>op["id"]), "event_reads"=>[rec.before_ref, "future-event"]))
+                        rejected = try
+                            submit_action!(rec, op["id"]; x, y, hook, prediction)
+                            false
+                        catch error
+                            error isa ArgumentError && occursin("future evidence", error.msg) || rethrow()
+                            true
+                        end
+                        rejected || error("A future read reached the network")
+                    else
+                        submit_action!(rec, op["id"]; x, y, hook)
+                    end
                 elseif name == "close"
                     close_scorecard!(rec)
                 else
