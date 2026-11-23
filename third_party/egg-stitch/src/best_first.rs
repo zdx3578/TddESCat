@@ -145,11 +145,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     } else {
         args.priority
     };
-    let initial_state = SearchState::new(&shared, args.freeze_rule.resolve(true));
     let mut scratch = CostScratch::new(&shared.egraph);
-    let initial_cost = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &initial_state, shared.check_slow).cost;
-    // No parent, so no lower bound: scan fully.
-    let (initial_prio, initial_forced) = priority(strategy, initial_cost, 0, &initial_state, &shared, i64::MIN);
 
     let mut nodes: Vec<Node<F, O>> = Vec::new();
     // Heap key: `(priority, insertion-order)`. `priority` is itself a tuple so
@@ -159,20 +155,23 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let mut seen: Option<SeenTracker<F, O>> = args.opt_seen.then(SeenTracker::new);
     let mut footprints: Option<FootprintTracker> = args.opt_dedup_by_match.then(FootprintTracker::new);
 
-    nodes.push(Node {
-        state: initial_state.clone(),
-        depth: 0,
-        lower_bound: None,
-        forced: initial_forced,
-    });
-    heap.push(Reverse((initial_prio, 0)));
-    if let Some(s) = seen.as_mut() {
-        s.check_and_insert(initial_state.pattern.clone(), initial_state.pattern.frozen_mask());
-    }
-    if let Some(fp) = footprints.as_mut() {
-        // The initial state is node 0; a deferred representative re-reads its
-        // match set by index from the (append-only) node array.
-        fp.check_state(&initial_state, &shared, 0, &|i| &nodes[i].state.matches[..]);
+    for initial_state in SearchState::seeds(&shared, args.freeze_rule.resolve(true)) {
+        let initial_cost = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &initial_state, shared.check_slow).cost;
+        let (initial_prio, initial_forced) = priority(strategy, initial_cost, 0, &initial_state, &shared, i64::MIN);
+        let id = nodes.len();
+        heap.push(Reverse((initial_prio, id)));
+        if let Some(s) = seen.as_mut() {
+            s.check_typed(initial_state.pattern.clone(), initial_state.pattern.frozen_mask(), initial_state.sorts(&shared.egraph));
+        }
+        if let Some(fp) = footprints.as_mut() {
+            fp.check_state(&initial_state, &shared, id, &|i| &nodes[i].state.matches[..]);
+        }
+        nodes.push(Node {
+            state: initial_state,
+            depth: 0,
+            lower_bound: None,
+            forced: initial_forced,
+        });
     }
 
     let mut best: Option<(usize, usize, CostSelection)> = None; // (cost, node_id, selection)
@@ -191,6 +190,12 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     let search_start = Instant::now();
 
     'search: loop {
+        if let Some(typed) = &shared.egraph.analysis.typed {
+            typed.check();
+            if nodes.len() >= typed.max_live_states && !heap.is_empty() {
+                std::panic::panic_any(crate::lang::SearchBudgetStop("managed_bytes"));
+            }
+        }
         // Check cutoffs before popping so a node isn't discarded from the frontier.
         if let Some(b) = budget
             && num_expansions >= b
@@ -240,7 +245,14 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         let parent_forced = nodes[node_id].forced;
         let mut successors: Vec<SearchState<F, O>> = match nodes[node_id].state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, max_arity, &mut dominance_hits, &mut useless_inline_hits) {
             SuccessorEnum::Dominant { child, .. } => vec![child],
-            SuccessorEnum::All { actions, rank } => actions.into_iter().map(|(a, _)| nodes[node_id].state.apply_action(&a, &shared, true, Some(&rank))).collect(),
+            SuccessorEnum::All { actions, rank } => {
+                if let Some(typed) = &shared.egraph.analysis.typed
+                    && nodes.len().saturating_add(actions.len()) > typed.max_live_states
+                {
+                    std::panic::panic_any(crate::lang::SearchBudgetStop("managed_bytes"));
+                }
+                actions.into_iter().map(|(a, _)| nodes[node_id].state.apply_action(&a, &shared, true, Some(&rank))).collect()
+            }
         };
 
         if let Some(k) = args.max_forced_expansion.0 {
@@ -264,7 +276,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
                 continue;
             }
             if let Some(s) = seen.as_mut()
-                && s.check_and_insert(child_state.pattern.clone(), child_state.pattern.frozen_mask())
+                && s.check_typed(child_state.pattern.clone(), child_state.pattern.frozen_mask(), child_state.sorts(&shared.egraph))
             {
                 continue;
             }

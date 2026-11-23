@@ -1,6 +1,7 @@
 use egg::{Analysis, ENodeOrVar, FromOp, Id, Language, RecExpr};
 use rustc_hash::FxHashSet;
 use std::fmt::{Debug, Display};
+use std::{collections::BTreeMap, sync::Arc, time::Instant};
 
 mod family;
 mod lambda_calc;
@@ -92,6 +93,48 @@ pub struct StitchData {
     pub size: u32,
     /// Free-variable set (intersection of members' free-var sets).
     pub fv: FxHashSet<i32>,
+    /// Result sort in the optional monomorphic search profile.
+    pub sort: Option<u32>,
+}
+
+#[derive(Clone, Debug)]
+pub struct PortTypes {
+    pub inputs: Vec<u32>,
+    pub output: u32,
+}
+
+#[derive(Clone, Debug)]
+pub struct TypedSearch {
+    pub ports: BTreeMap<String, PortTypes>,
+    pub deadline: Instant,
+    pub max_egraph_nodes: usize,
+    pub max_live_states: usize,
+    pub max_relation_nodes: usize,
+}
+
+#[derive(Clone, Debug)]
+pub struct SearchBudgetStop(pub &'static str);
+
+impl TypedSearch {
+    pub fn check(&self) {
+        if Instant::now() >= self.deadline {
+            std::panic::panic_any(SearchBudgetStop("deadline"));
+        }
+    }
+
+    pub fn check_rows(&self, nodes: usize) {
+        self.check();
+        if nodes > self.max_relation_nodes {
+            std::panic::panic_any(SearchBudgetStop("managed_bytes"));
+        }
+    }
+
+    pub fn check_graph(&self, nodes: usize) {
+        self.check();
+        if nodes > self.max_egraph_nodes {
+            std::panic::panic_any(SearchBudgetStop("managed_bytes"));
+        }
+    }
 }
 
 /// Egg analysis that tracks size and free-variable set of each e-class,
@@ -99,11 +142,12 @@ pub struct StitchData {
 #[derive(Clone, Debug, Default)]
 pub struct StitchAnalysis {
     pub weights: Weights,
+    pub typed: Option<Arc<TypedSearch>>,
 }
 
 impl StitchAnalysis {
     pub fn new(weights: Weights) -> Self {
-        Self { weights }
+        Self { weights, typed: None }
     }
 }
 
@@ -119,9 +163,20 @@ impl<L: StitchLanguage> Analysis<L> for StitchAnalysis {
     fn make(egraph: &mut egg::EGraph<L, Self>, enode: &L, _id: Id) -> Self::Data {
         let weights = egraph.analysis.weights;
         let disc = enode.discriminant();
-        let size = disc.intrinsic_size(&weights) + enode.children().iter().map(|&c| egraph[c].data.size).sum::<u32>();
+        let size = enode.children().iter().fold(disc.intrinsic_size(&weights), |cost, &c| {
+            cost.checked_add(egraph[c].data.size).expect("AST cost overflow")
+        });
+        let sort = egraph.analysis.typed.as_ref().and_then(|typed| {
+            typed.check_graph(egraph.total_size().saturating_add(1));
+            if enode.is_programs_node() {
+                return None;
+            }
+            let ports = &typed.ports[&disc.to_string()];
+            assert!(enode.children().iter().map(|&c| egraph[c].data.sort).eq(ports.inputs.iter().copied().map(Some)), "typed enode input mismatch");
+            Some(ports.output)
+        });
         let fv = enode_fv(enode, |c| &egraph[c].data.fv);
-        StitchData { size, fv }
+        StitchData { size, fv, sort }
     }
 
     /// On merge: keep the minimum size, take the intersection of the two fv
@@ -129,6 +184,10 @@ impl<L: StitchLanguage> Analysis<L> for StitchAnalysis {
     /// classes unify, an index that wasn't free in one of them is no longer
     /// guaranteed to be free in the merged class.
     fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> egg::DidMerge {
+        assert_eq!(to.sort, from.sort, "cannot merge different sorts");
+        if self.typed.is_some() {
+            assert_eq!(to.fv, from.fv, "typed equality cannot change free slots");
+        }
         let size_to_changed = from.size < to.size;
         let size_from_changed = from.size > to.size;
         if size_to_changed {

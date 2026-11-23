@@ -693,19 +693,26 @@ pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(mut egraph: Stitch
     // read that stale fv and trip the intersection-fv assertion.
     let mut pending: Vec<(Id, Id)> = Vec::new();
     for m in &search_state.matches {
-        // Restrict to the candidate-compatible substs (per-factor filter), then
-        // materialise that filtered product — the rewrite genuinely needs each
-        // joint assignment. This is the slow/validation + apply path, not hot.
+        // Apply the candidate-compatible substitutions without keeping the
+        // cartesian product in memory.
         let Some(kept) = filter_factors_by_candidate(&egraph, m, variable_indices, var_depth) else {
             continue;
         };
-        for vars in crate::factor::factors_product(&kept) {
-            let wrapped = wrap_subst_args::<F, O>(&mut egraph, &vars, variable_indices, var_depth);
+        crate::factor::visit_factor_product(&kept, |vars| {
+            if let Some(typed) = &egraph.analysis.typed {
+                typed.check_rows(pending.len().saturating_add(1));
+            }
+            let wrapped = wrap_subst_args::<F, O>(&mut egraph, vars, variable_indices, var_depth);
             let x = F::add_stub_application::<O>(fn_name, wrapped, &mut egraph);
             pending.push((x, m.root_eclass));
-        }
+        });
     }
     for (x, root_eclass) in pending {
+        if let Some(typed) = &egraph.analysis.typed {
+            typed.check();
+            assert_eq!(egraph[x].data.sort, egraph[root_eclass].data.sort);
+            assert_eq!(egraph[x].data.fv, egraph[root_eclass].data.fv);
+        }
         egraph.union(x, root_eclass);
     }
     egraph.rebuild();

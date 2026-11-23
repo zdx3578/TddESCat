@@ -171,6 +171,25 @@ pub fn factors_product(factors: &[Factor]) -> Vec<Vec<Id>> {
     acc
 }
 
+/// Visits exact assignments without materialising the cartesian product.
+pub(crate) fn visit_factor_product(factors: &[Factor], mut visit: impl FnMut(&[Id])) {
+    fn visit_layer(factors: &[Factor], assignment: &mut [Id], visit: &mut impl FnMut(&[Id])) {
+        if let Some((factor, rest)) = factors.split_first() {
+            for row in &factor.rows {
+                for (&slot, &id) in factor.slots.iter().zip(row) {
+                    assignment[slot] = id;
+                }
+                visit_layer(rest, assignment, visit);
+            }
+        } else {
+            visit(assignment);
+        }
+    }
+
+    let arity = factors.iter().map(|factor| factor.slots.len()).sum();
+    visit_layer(factors, &mut vec![Id::from(0); arity], &mut visit);
+}
+
 /// Rebuilds a factor's row set with `build` mapping each input row to zero or
 /// more output rows, then runs decomposition so any independence the
 /// transformation exposed is captured. Returns the resulting (possibly split)

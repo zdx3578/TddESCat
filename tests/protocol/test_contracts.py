@@ -69,7 +69,7 @@ class SchemaContracts(unittest.TestCase):
             "pattern_text": "(copy ?#0)",
             "closed_lambda_text": "(lam (copy $0))",
             "dependencies": [],
-            "body_cost": 2,
+            "body_cost": "2",
         }
         self.contracts.validate("definition", definition)
         definition["body"]["args"][0]["kind"] = "Slot"

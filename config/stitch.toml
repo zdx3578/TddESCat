@@ -4,6 +4,8 @@ search = "best-first"
 seed = 1729
 rounds = 2
 max_steps = 20000
+max_arity = 2
+sym_var_cost = 1
 
 [budget]
 wall_ms = 60000

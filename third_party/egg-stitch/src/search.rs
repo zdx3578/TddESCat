@@ -62,7 +62,7 @@ type VarShapes<F, O> = Vec<VarShape<F, O>>;
 /// dominated overwrites and passes through, because it unlocks expand actions
 /// the prior one had forbidden.
 pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
-    map: FxHashMap<Pattern<F, O>, Vec<bool>>,
+    map: FxHashMap<(Pattern<F, O>, Vec<u32>), Vec<bool>>,
     pub hits: usize,
     pub time: Duration,
 }
@@ -100,11 +100,16 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
     /// so all of this visit's reachable successors are already reachable from
     /// it.
     pub fn check_and_insert(&mut self, pattern: Pattern<F, O>, frozen: Vec<bool>) -> bool {
+        self.check_typed(pattern, frozen, Vec::new())
+    }
+
+    pub fn check_typed(&mut self, pattern: Pattern<F, O>, frozen: Vec<bool>, sorts: Vec<u32>) -> bool {
         let t = Instant::now();
-        let skip = match self.map.get(&pattern) {
+        let key = (pattern, sorts);
+        let skip = match self.map.get(&key) {
             Some(existing) if frozen_subset(existing, &frozen) => true,
             _ => {
-                self.map.insert(pattern, frozen);
+                self.map.insert(key, frozen);
                 false
             }
         };
@@ -332,6 +337,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                     for node in &shared.egraph[row[pos]].nodes {
                         if !node.matches(target) {
                             continue;
+                        }
+                        if let Some(typed) = &shared.egraph.analysis.typed {
+                            typed.check_rows(rows.len().saturating_add(1));
                         }
                         let mut nr = row.to_vec();
                         nr.remove(pos);
@@ -574,6 +582,37 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
     }
 
+    pub fn seeds(shared: &SharedSearchData<F, O>, freeze_rule: bool) -> Vec<Self> {
+        if shared.egraph.analysis.typed.is_none() {
+            return vec![Self::new(shared, freeze_rule)];
+        }
+        let mut groups = std::collections::BTreeMap::<u32, Vec<MatchAtEClass>>::new();
+        for m in identity_matches(&shared.egraph, shared.root) {
+            let sort = shared.egraph[m.root_eclass].data.sort.expect("typed seed");
+            groups.entry(sort).or_default().push(m);
+        }
+        groups.into_values().map(|matches| Self {
+            pattern: Pattern::single_var(),
+            num_substs: total_substs(&matches),
+            matches,
+            freeze_rule,
+        }).collect()
+    }
+
+    pub fn sorts(&self, egraph: &StitchEgraph<F::Apply<O>>) -> Vec<u32> {
+        if egraph.analysis.typed.is_none() {
+            return Vec::new();
+        }
+        let m = &self.matches[0];
+        let mut sorts = vec![egraph[m.root_eclass].data.sort.expect("typed result")];
+        for slot in 0..self.pattern.vars.len() {
+            let (factor, position) = m.locate_slot(slot);
+            let id = m.factors[factor].rows[0][position];
+            sorts.push(egraph[id].data.sort.expect("typed parameter"));
+        }
+        sorts
+    }
+
     /// Applies an action to `self` and returns the resulting child without
     /// cloning the parent's matches (only the surviving transformed factor
     /// rows get allocated in the child — the parent's `Vec<Factor>` data is
@@ -589,6 +628,11 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let mut new_pattern = self.pattern.clone();
         let (new_matches, new_num_substs) = match action {
             Action::Expand { var_idx, op, arity } => {
+                if let Some(typed) = &shared.egraph.analysis.typed {
+                    let ports = &typed.ports[&op.to_string()];
+                    assert_eq!(ports.output, self.sorts(&shared.egraph)[1 + var_idx]);
+                    assert_eq!(ports.inputs.len(), *arity);
+                }
                 let target = F::make(op.clone(), vec![Id::from(0); *arity]);
                 // Commit to freezing every var of *lower rank*: expanding the
                 // var at rank `r` forbids ever expanding a lower-rank var. Set
@@ -608,6 +652,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 Self::build_subset_matches(&self.matches, *var_idx, &target, shared)
             }
             Action::Reuse { keep, drop } => {
+                if shared.egraph.analysis.typed.is_some() {
+                    let sorts = self.sorts(&shared.egraph);
+                    assert_eq!(sorts[1 + keep], sorts[1 + drop]);
+                }
                 let var_idx = *keep;
                 let second_var_idx = *drop;
                 // Snapshot pre-merge depths: `build_subset_matches_reuse`
@@ -741,6 +789,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let usage = |root: Id| shared.usage_counts.get(&root).copied().unwrap_or(1);
         let mut shape_idx: FxHashMap<Shape<F, O>, usize> = FxHashMap::default();
         let mut shapes: VarShapes<F, O> = Vec::new();
+        let sorts = self.sorts(&shared.egraph);
         for m in &self.matches {
             let (fi, pos) = m.locate_slot(var_idx);
             let f = &m.factors[fi];
@@ -754,6 +803,12 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 for (disc, arity, count) in &shared.eclass_shapes[usize::from(row[pos])] {
                     if invalid_literal_expansion(disc, d_k) {
                         continue;
+                    }
+                    if let Some(typed) = &shared.egraph.analysis.typed {
+                        typed.check();
+                        if typed.ports[&disc.to_string()].output != sorts[1 + var_idx] {
+                            continue;
+                        }
                     }
                     let key = (disc.clone(), *arity);
                     match shape_idx.get(&key) {
@@ -892,8 +947,12 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // first) and keeps only pairs that involve a new child. Together these
         // make every reachable pattern reachable exactly once.
         let enforce_reusable = self.freeze_rule;
+        let sorts = self.sorts(&shared.egraph);
         for i in 0..n {
             for j in (i + 1)..n {
+                if !sorts.is_empty() && sorts[1 + i] != sorts[1 + j] {
+                    continue;
+                }
                 let di = self.pattern.var_depth[i];
                 let dj = self.pattern.var_depth[j];
                 // Skip unless this pair is still allowed by the canonical
@@ -917,6 +976,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                         hits * (total / f.rows.len())
                     } else {
                         let (fa, fb) = (&m.factors[fi], &m.factors[fj]);
+                        if let Some(typed) = &shared.egraph.analysis.typed {
+                            typed.check_rows(fa.rows.len().saturating_mul(fb.rows.len()));
+                        }
                         let mut pairs = 0usize;
                         for ra in &fa.rows {
                             for rb in &fb.rows {

@@ -5,5 +5,7 @@ original_lock_sha256 = "3164ac41fe9f2a45fc5fa48a23de16ead4f5371097430fed2226f050
 license_path = "LICENSE"
 local_changes = [
     "Move the local egg path patch and release profile to the root workspace Cargo.toml.",
-    "Move the upstream lock to the workspace root and replace only the egg source with the local path.",
+    "Use the workspace lock with a local egg path and add the bridge as a workspace member.",
+    "Check monomorphic types on e-classes, search seeds, expansions, reuse, and definition application.",
+    "Bound the typed frontier and stream exact factor assignments during final application.",
 ]

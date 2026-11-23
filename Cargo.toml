@@ -1,5 +1,5 @@
 [workspace]
-members = ["third_party/egg-stitch"]
+members = ["rust/bridge", "third_party/egg-stitch"]
 exclude = ["third_party/egg"]
 resolver = "3"
 

@@ -210,36 +210,36 @@
       "type": "object",
       "properties": {
         "pre_rewrite_input": {
-          "type": "integer",
-          "minimum": 0
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
         },
         "post_rewrite_baseline": {
-          "type": "integer",
-          "minimum": 0
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
         },
         "output_programs": {
-          "type": "integer",
-          "minimum": 0
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
         },
         "initial_library": {
-          "type": "integer",
-          "minimum": 0
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
         },
         "new_definitions": {
-          "type": "integer",
-          "minimum": 0
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
         },
         "final_total": {
-          "type": "integer",
-          "minimum": 0
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
         },
         "ratio_numerator": {
-          "type": "integer",
-          "minimum": 0
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
         },
         "ratio_denominator": {
-          "type": "integer",
-          "minimum": 1
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
         }
       },
       "required": [
