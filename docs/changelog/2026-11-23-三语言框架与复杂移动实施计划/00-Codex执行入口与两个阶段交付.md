@@ -45,7 +45,7 @@ E-Stitch 的职责是从有类型表达语料发现可复用定义。它不会�
 | S1.03，依赖 S1.01—02 | PublicAPI.jl、Evidence.jl、RunStore.jl；完成 RESET、ACTION1—7、ACTION6 坐标、完整多帧、在途状态持久化、证据恢复；编写 run.jl 的只采集模式 | 公共接口合同用例全过；崩溃恢复不重复执行动作；每个 confirmed 事件可独立回放；未确认事件不能生成训练样本 |
 | S1.04，依赖 S1.03 | 按 02 建 Schemas、Contexts、Grounding、ConceptTerms、PhaseCheck、CategoryBackend；实现有限颜色关系、4/8 连通、角色候选、窗口限制、结构匹配、推出与 Hom 连接一致性 | 颜色置换、坐标转置、桥接裁剪、多像素重叠、同色多对象等固定反例通过；候选生成没有 player/wall/key 等内置机制 |
 | S1.05，依赖 S1.04；Rust 可与 S1.03 并行 | 按 03 修改实际上游，完成无内部 binder 的 typed op-children-db、冻结旧库、全局定义 ID、来源见证、完整轮次提交和预算；Julia StitchCodec、StitchBridge、Library 接通 | 受控语料至少一个非预置、正净收益定义由真实搜索发现；类型/展开/参数/来源独立检查；第二批实际调用并重新展开第一批定义；不要求发现某个人工指定名字 |
-| S1.06，依赖 S1.04—05 | 按 02 实现 Mechanisms、GuardRepair、Coverage；枚举有限动作前参数与条件，保留支持、反例、未知和解释分支；实现主动区分的单步候选评分 | 同画面异历史冲突不会被抹平；unknown 不会排除反例；条件变窄后原覆盖义务仍在；未试动作有台账 |
+| S1.06，依赖 S1.04—05 | 按 02 实现 Mechanisms、GuardRepair、Coverage、ExperimentDesign 的单步子集；枚举有限动作前参数与条件，保留支持、反例、未知和解释分支；实现主动区分的单步候选评分 | 同画面异历史冲突不会被抹平；unknown 不会排除反例；条件变窄后原覆盖义务仍在；未试动作有台账 |
 | S1.07，依赖 S1.06 | Controller、Revision、CacheIndex、QueryAbstraction 的单步子集；发布前补核新证据；选一个动作，冻结预测，执行，核对并影响下一消费者 | 固定公共证据夹具演示支持→反例→撤回→修订→下一消费者改用新版本；无消费者只改状态字段视为失败 |
 | S1.08，依赖 S1.02—07 | 运行 04 的复杂场景训练与留出验证，先固定种子定位算法，再用保留种子检查关系迁移；对每个场景报告准确预测、正确未知、错误自信三类 | 必测场景无错误自信或信息泄漏；核心可辨识场景真实学得并消费定义。预算不足导致 unknown 要单独记录，不能用“都 unknown”通过核心场景 |
 | S1.09，依赖 S1.08 | 用真实 ARC-AGI-3 公共环境运行受控探索和后续消费；冻结发现批次，返回定义，继续新事件执行；整理验收证据链 | 至少一条真实事件→真实 E-Stitch 新定义→后续消费→公开动作→响应核对的完整链。真实环境尚无反例时，修订证明可来自固定公共夹具并明确标注 |
@@ -104,6 +104,55 @@ julia --project=julia/TddESCat scripts/run.jl --config config/real_public.toml
 
 实现 scripts/acceptance.py 作为统一验证入口也允许，但只能作为上述 runner 的薄封装，不能存在两套验收语义。01/04/05 的子命令是同一 runner 调用的任务，不重复实现计分逻辑。
 
+### 6.1 总套件与子任务必须唯一映射
+
+所有验收配置放 config/acceptance/。phase1.toml 是总套件，不再创建另一份 protocol_gate 或 movement_single_step_gate；子配置的唯一名称如下。
+
+| 子配置 | 入口职责 | 依赖 |
+| --- | --- | --- |
+| protocol.toml | 01/04 的公共协议及事务测试 | 依赖预检 |
+| fixtures.toml | 独立 reference 与官方 HTTP 环境自测 | protocol |
+| semantic_kernel.toml | 02 的类型、范畴、连通/裁剪、三值和有限关系测试 | 依赖预检 |
+| stitch_bridge.toml | 03 的正收益发现、类型拒绝、旧库、来源、完整轮次、预算 | semantic_kernel |
+| learn_smoke.toml | M01 两批实际学习到后续消费 | fixtures、stitch_bridge |
+| movement_single.toml | 六个核心与全部必需边界/管道检查 | learn_smoke |
+| revision.toml | 固定公共夹具反例、并发发布和下一消费者 | movement_single |
+| arc_public_stage1.toml | 真实公共事件→发现→消费→动作→响应链 | revision |
+| movement_composition.toml | C01—C03、AND–OR 策略、资源/历史组合 | 阶段一通过 |
+| relation_equivalence.toml | 同有限域集合/成本/来源/抽样合同 | stitch_bridge |
+| relation_stress.toml | 冻结压力输入的全过程预算与消费者 | relation_equivalence |
+| arc_public_stage2.toml | 真实公共多步、重验、修订和再选择 | movement_composition |
+
+phase1.toml 的必需任务是前八项；phase2.toml 的必需任务是后四项及其前置阶段通过证明。没有真实凭证时最后公共任务状态是 BLOCKED，不能把 required 改 false 来得到整体 PASS。
+
+run.py 的总套件解析格式先固定为以下最小版本，完整 phase1 依上述表填写全部项：
+
+~~~toml
+schema_version = 1
+suite_id = "phase1"
+artifact_root = "../../runs"
+
+[[tasks]]
+id = "protocol"
+config = "protocol.toml"
+required = true
+depends_on = []
+
+[[tasks]]
+id = "fixtures"
+config = "fixtures.toml"
+required = true
+depends_on = ["protocol"]
+~~~
+
+schema_version 是内部配置版本；suite_id 是报告身份；artifact_root 相对此套件文件；tasks 中 id 唯一、config 指同目录任务配置、required 决定是否纳入阶段门、depends_on 指已完成且通过的任务。拒绝未知依赖、重复 ID 和依赖环。不同配置引用链的相对路径各自相对其定义文件，不把合并后的全部字符串改用主配置目录解析。
+
+子任务配置包含 kind、agent_config、environment_config、judge_config、timeout_seconds、output_name。kind 从 protocol、fixture、semantic、learning、closed_loop、real_public、relation 七种受支持任务中选择；各配置路径按本文件规则解析。environment_config/judge_config 只给编排与相应隔离单元，agent 单元只收到 agent_config 中许可的投影，不能把总套件配置一起挂载给 solver。纯 semantic/learning 任务没有环境字段时必须明确任务类型，不能静默跳过环境步骤。
+
+运行器流程是：校验配置→核查依赖证明与源码锁→启动隔离服务→从 runner 侧确认服务就绪→启动 Julia/学习任务→等待或明确中止→关闭所有任务进程→在冻结后评分→写 acceptance。SIGTERM 先给应用提交完整事务的机会，最终强制终止只保留先前完整产物；不要求被杀进程自行报告成功。
+
+实现阶段不能省略真实日志而只创建 PASS 文件；acceptance 每条通过项必须引用存在且哈希正确的输入、输出、断言和所用提交。脚本退出 0 只说明运行器正常结束，阶段是否通过由 required 任务全部 PASS 决定。
+
 ## 7. 交付报告必须回答什么
 
 每次验收保存 runs/<run_id>/public/acceptance.json 与同目录 report.md。报告至少逐项回答：
@@ -124,3 +173,11 @@ julia --project=julia/TddESCat scripts/run.jl --config config/real_public.toml
 GitHub 读写使用 connector，不用 SSH。外部源码通过获准的连接器取固定提交；不把旧私有日志搬进新公开仓库。构建产物、凭证、私有 oracle、_vendor/、*.pyc、.pytest_cache/、.DS_Store 不提交。正式导入的第三方源码放 third_party/，保留许可证与来源锁，不等于无关构建缓存。
 
 最终交付以已推送提交为准；能推送时不额外给代码压缩包。未完成要求逐项写明，不能用“总体完成”覆盖缺项。
+
+## 9. 本次文档交付记录
+
+本轮实际完成：核对指定的既有两阶段裁决与开源审核；检查新仓库基线；再次读取所用 Julia、E-Stitch、patched egg、官方环境/API 和 HTTP 客户端固定源码；把实施细节写成六份相互引用的规格；交叉审查并统一目录、协议、任务入口和验收口径。
+
+审查修正包括：根 Rust workspace 与本地 egg path patch；范畴库真实 API/版本边界；类型/自由槽/旧库重建与精确成本；默认 2×2 主体扫过反例改为有效的三格位移；空 belief 禁止空真成功；同一模型条件分支与竞争模型分开；隐藏后继不能获得公开观察分支；服务错误不读取私有执行阶段；前缀只经 Julia 唯一执行器；宏消费不以解析失败或改变等价语义来伪证。
+
+已执行的是文档本身的路径、代码围栏、空白和明确有限数学样例检查。未执行：三语言依赖联合解析、运行代码实现、合成环境运行、真实 ARC 交互、性能或 TDD 对照。因此本次验收状态是“详细实施规格已交付”，不是阶段一或阶段二已经通过。后续 Codex 从 S1.01 开始，按本文件依赖和各子文档算法实现。

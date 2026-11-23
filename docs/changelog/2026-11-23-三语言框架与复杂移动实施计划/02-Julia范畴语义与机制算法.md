@@ -42,7 +42,7 @@ Julia 层直接采用 AlgebraicJulia 的 Catlab、ACSets、GATlab。需要确定
 
 - julia/TddESCat/Project.toml：包 UUID、精确候选 compat、项目自身版本。
 - julia/TddESCat/Manifest.toml：由目标 Julia 实际解析生成，禁止手写。
-- config/dependencies.toml：记录工具链、候选 tag/commit、固定源码预期、预检状态。
+- config/toolchains.toml 与 config/sources.lock.toml：按 01 唯一记录工具链及候选 tag/commit/源码预期；预检状态写运行产物，不再建重复 dependencies.toml。
 - scripts/preflight_julia.jl：安装后的 API 与行为检查。
 - tests/julia/dependency_contracts.jl：精确正反例，避免“using 成功即通过”。
 - docs/changelog/当日目录/：实际解析报告、差异和未通过项。
@@ -78,8 +78,8 @@ AlgebraicRewriting 0.5.0 release 明确移除了 incremental hom search；Catlab
 | 固定类型 schema | Catlab 的 @present、FreeSchema；ACSets 的 @acset_type、add_parts!、set_subpart!、subpart、incident | 类型标签、端口顺序、来源和时序含义；schema 固定，宏定义作为数据增长 |
 | 有限实例匹配 | homomorphisms(P,M; cat=C, alg=BacktrackingSearch(), initial=…, predicates=…, monic=…, take=…) | 作用域、角色互异、负条件、三值关系、预算及完整性；不同解释分支不能混合 |
 | 求一个存在见证 | homomorphism(P,M; cat=C, any=true) 或 is_homomorphic | 见证来源；false 需要完整完成；超时不能当不存在 |
-| 推出和拉回 | pushout[C](f,g)、pullback[C](f,g)、ob、coproj1/2、proj1/2 | 共享接口的语义、类型属性冲突、跨侧互异角色、来源和资源 |
-| 等化子与余等化子 | equalizer[C](f,g)、coequalizer[C](f,g)、incl、proj | 比较的是身份还是属性；连通商不是因果对象身份证明 |
+| 推出和拉回 | `pushout[C](f,g)`、`pullback[C](f,g)`、ob、coproj1/2、proj1/2 | 共享接口的语义、类型属性冲突、跨侧互异角色、来源和资源 |
+| 等化子与余等化子 | `equalizer[C](f,g)`、`coequalizer[C](f,g)`、incl、proj | 比较的是身份还是属性；连通商不是因果对象身份证明 |
 | 模式/schema 变换 | ACSetTransformation；is_natural(…;cat=C) | 部件索引合法、属性保持、精确 schema 和版本 |
 | 一般有限生成域自然性 | Transformation、naturality_failures(η;check_equations=true)、is_natural | F/G 同源同靶、函子验证、模型作用域闭合、查询范围；不能把该检查报成未知世界因果定理 |
 | 有类型顺序程序 | Catlab.Theories.FreeCategory 的 Hom、id、compose | 动作顺序、纯 AST 不发动作、具体参数与资源、实际逐步响应 |
@@ -273,17 +273,17 @@ RelationSemantics.jl 拟提供：
 
 逻辑定义仍是：
 
-\[
+$$
 \operatorname{Post}_R(P)=\{y\mid\exists x\in P:\;xRy\},
 \qquad
 \operatorname{wlp}_R(Q)=\{x\mid\forall y:\;xRy\Rightarrow y\in Q\}.
-\]
+$$
 
-\[
+$$
 \operatorname{Post}_R(P)\subseteq Q
 \Longleftrightarrow
 P\subseteq\operatorname{wlp}_R(Q).
-\]
+$$
 
 项目写读取这些有限关系的谓词查询包装，不重建通用范畴库。原始网格不展开成“全部可能画面”的完整状态集；关系只覆盖当前具体问题的有限候选域。输出本身很大时明确成本与 incomplete。
 
@@ -323,6 +323,7 @@ Mechanisms.jl 的 propose_mechanisms(definitions, snapshot, cursor, budget) 只�
 输入是学出的关系定义 R、公开动作、解释分支、已确认事件、冻结库。参数项仅来自有来源的常数、动作前输入及已允许原语/旧宏的有限组合。按类型和编码成本枚举，保留未搜索前沿。语义等价只按合法定义性规则去重；样本同值只作可恢复候选分组。
 
 对参数候选 θ：
+
 - S 是在冻结解释下支持关系的事件；
 - B 是确实违反它的事件；
 - U 是无法判定的事件；
@@ -344,6 +345,68 @@ GuardRepair.jl 的 repair_guard(hypothesis, S, B, U, predicate_pool, budget)：
 ~~~
 
 允许作用域拆分；不允许删除“被新 guard 排除”的历史，使总规律表面变得完美。每个被排除事件进入另一分支的待解释义务。原机制没有未处理范围内反例可暂定使用；这不是全域因果证明。
+
+### 8.1 参数枚举：实现有限文法，不留“自动找到参数”的空白
+
+在 ConceptTerms.jl 建立唯一的 typed grammar registry：每个产生式给出算子名、有序输入类型、输出类型、单位编码成本、读取规则与解释函数。枚举器只读这个注册表；不允许按 game_id 选择文法。
+
+首版参数叶项是：当前绑定的动作前角色/位置/完整支持、实际动作编号及坐标、截止点前的历史摘要、冻结模型中由历史证据提出的有类型常量。整数/位移常量来自已确认历史或明确有限域；没有证据的效果参数不允许由目标赋值。颜色常量与坐标整数有不同类型，即使都编码为数字 1 也不能合并。
+
+先支持这些通用产生式：Pos、Support、ColorAt、DiffCoord、AddCoord、NegDelta、TranslateSupport、Cardinality、HistoryRead，以及已发布、通过 PhaseCheck 的宏调用。TranslateSupport 只计算集合的几何平移，不宣称该动作真的移动此集合。资源计数首先是可观察图形/查询的候选 Cardinality，不内置“钥匙”字段。
+
+~~~text
+enumerate_parameters(Γ, registry, allowed_history, max_nodes, budget):
+    按类型建立 by_size[type][size] 的候选桶
+    将合法叶项放入对应桶；保留来源、phase、完整性
+    for size = 2 .. max_nodes:
+        for 每个输出类型需要的注册算子 op:
+            枚举各孩子大小分拆，和为 size - cost(op)
+            从对应输入类型桶流式取组合，不先构造全笛卡尔积
+            构造前检查预算；推类型并检查真实来源的 cutoff
+            按已审查的定义等式规范化，保存第一项及同义来源
+            记录项在训练快照上求值的三值向量
+    返回候选及下一未枚举位置；达到预算返回 incomplete
+~~~
+
+样本求值向量相同只能建立可撤销索引，不能合并成定义性等价。枚举游标记录 size、operator、大小分拆和孩子组合位置；快照/签名变化后重建，不跨版本继续旧游标。
+
+对学得关系 R 的每个参数，按类型尝试三种模式：由动作前项计算、由冻结历史模型常量提供、仍待求的未来变量。前两者才可用于控制参数；第三种只在后继关系内求解。保留所有与证据相容的有限候选，不为提高预测命中只选择结果后看起来正确的一个。
+
+### 8.2 条件池与有界合取搜索
+
+谓词池由上述动作前项产生：Eq、LessEqual、Member、Subset、Empty(Intersection)、共享角色的 Equal/Distinct，以及动作前可求值的已学宏。Not 采用三值逻辑，Not(unknown)=unknown。缺失对象匹配和没搜索完都不能当 Empty=true。
+
+例如 Empty(Intersection(TranslateSupport(S,δ),U)) 是“两个可观察支持不相交”的通用条件候选；δ 必须来自动作前可用参数，U 是有来源的候选支持。它是否是某动作通行的原因由公共干预验证，不在原语解释中把 U 命名为墙或不可达区。Subset(...,ObservedFrameDomain) 仅保证可见性，不保证可通行。
+
+对固定参数候选 θ，先求全部当前适用事件的 S/B/U。再直接枚举至多 max_guard_atoms 个谓词的合取，不把“选一个支持簇”交给人工判断：
+
+~~~text
+search_guards(S, B, U, pool, cap, budget):
+    对每个谓词p缓存TrueMask(p)、FalseMask(p)、UnknownMask(p)
+    候选G为空合取；SupportMask=S；ExcludedMask=空
+    用优先队列按新增编码成本和规范序扩展，谓词按序只加一次
+    加入p后：
+        SupportMask &= TrueMask(p)
+        ExcludedMask |= FalseMask(p) ∩ B
+        若SupportMask为空，丢弃该分支
+        若剩余预算/原子数不能覆盖尚未排除B，剪枝并说明依据
+        若ExcludedMask覆盖B，保存可行G和来源
+    搜索完整时按（支持数降序，合取成本升序，规范序）选择
+    若未搜完，只称当前最佳可行解；无可行解且未搜完返回incomplete
+    返回未覆盖的支持/未知、已排除反例、剩余前沿
+~~~
+
+同一事件的多个窗口不能让 SupportMask 增加多票；互相冲突的解释分支分别计量。允许选取支持子集，但未覆盖支持和已排除反例都保留为待解释作用域，不删除。
+
+明确例子：支持 s1、s2 上 p=q=true；反例 b1 上 p=false、q=unknown；反例 b2 上 p=unknown、q=false。G=p∧q 可覆盖两个支持并明确排除两个反例。若 b2 的 q 也为 unknown，就没有排除 b2 的依据，不能把该 G 标为反例已解决。
+
+### 8.3 新条件怎样进入下一次实际消费
+
+make_claim 保存 R 的定义版本、参数映射 θ、G、输出查询 Ω、解释分支、支持/反例/未知、检查域和搜索完成性。其状态是当前证据下的暂定声明。两个互相不兼容的候选可以并存为竞争模型，不靠任意哈希顺序挑一个当真。
+
+同一模型的分支语义必须显式声明：首版采用允许后继的并集；若该模型声明确定性且同一输入激活的分支给出相斥完整后继，则产生 model_conflict。存储顺序不得使后一条规则覆盖前一条。guard=false 是分支不适用；guard=unknown 或覆盖不全会留下 unknown_successor，不等于静止。
+
+Controller 请求一次动作时，调用 recognizer 绑定当前角色，再求 θ 和 G；PhaseCheck 通过后，先固定 query_scope，再求 successors。核对结果按各竞争解释分别支持或反驳。新条件只修订经验声明；结构宏定义如果仍可合法展开，就继续保留。下一次动作必须重新读取声明版本与覆盖义务。
 
 ## 9. QueryAbstraction.jl、CacheIndex.jl 与 Revision.jl
 
