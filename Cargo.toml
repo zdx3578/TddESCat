@@ -1,0 +1,10 @@
+[workspace]
+members = ["third_party/egg-stitch"]
+exclude = ["third_party/egg"]
+resolver = "3"
+
+[patch.crates-io]
+egg = { path = "third_party/egg" }
+
+[profile.release]
+debug = true

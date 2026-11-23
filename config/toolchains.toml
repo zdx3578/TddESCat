@@ -1,0 +1,8 @@
+[python]
+version = "3.12.9"
+
+[julia]
+version = "1.12.6"
+
+[rust]
+version = "1.90.0"

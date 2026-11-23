@@ -1,0 +1,20 @@
+name = "TddESCat"
+uuid = "a2579a8f-6581-4de1-88f1-71cacdeaf14e"
+version = "0.1.0"
+
+[deps]
+ACSets = "227ef7b5-1206-438b-ac65-934d6da304b8"
+AlgebraicRewriting = "725a01d3-f174-5bbd-84e1-b9417bad95d9"
+Catlab = "134e5e36-593f-5add-ad60-77f754baafbe"
+GATlab = "f0ffcf3b-d13a-433e-917c-cc44ccf5ead2"
+HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
+JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+
+[compat]
+ACSets = "=0.2.29"
+AlgebraicRewriting = "=0.5.0"
+Catlab = "=0.17.6"
+GATlab = "=0.2.4"
+HTTP = "=2.13.2"
+JSON = "0.21"
+julia = "=1.12.6"

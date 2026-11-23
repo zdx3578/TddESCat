@@ -1,0 +1,42 @@
+[package]
+name = "egg-stitch"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "egg-stitch"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.100"
+clap = { version = "4.6.0", features = ["derive"] }
+colored = "3.1.1"
+egg = "0.10.0"
+priority-queue = "2.7.0"
+rand = "0.9.2"
+rustc-hash = "2.1.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+symbolic_expressions = "5.0"
+wasm-bindgen = { version = "0.2", optional = true }
+serde-wasm-bindgen = { version = "0.6", optional = true }
+getrandom = { version = "0.3", features = ["wasm_js"], optional = true }
+
+[dev-dependencies]
+libtest-mimic = "0.8"
+toml = "0.8"
+
+# The snapshot (bless/check) suite is data-driven: `tests/snapshots.toml` lists
+# every case and `tests/snapshots.rs` emits one libtest-mimic trial per case, so
+# it needs a custom (non-libtest) harness.
+[[test]]
+name = "snapshots"
+harness = false
+
+[features]
+default = []
+wasm = ["wasm-bindgen", "serde-wasm-bindgen", "getrandom"]

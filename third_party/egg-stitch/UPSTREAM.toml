@@ -1,0 +1,9 @@
+repository = "https://github.com/mlb2251/egg-stitch"
+revision = "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92"
+tree_sha1 = "8fbb34ecb3d53975795381cb250101c722249214"
+original_lock_sha256 = "3164ac41fe9f2a45fc5fa48a23de16ead4f5371097430fed2226f050a5d5d302"
+license_path = "LICENSE"
+local_changes = [
+    "Move the local egg path patch and release profile to the root workspace Cargo.toml.",
+    "Move the upstream lock to the workspace root and replace only the egg source with the local path.",
+]

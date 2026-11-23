@@ -1,0 +1,11 @@
+[
+  "(lam (map (lam (eq? $0 (+ 1 (+ 1 1)))) $0))",
+  "(lam (fold (cdr $0) 0 (lam (lam (+ $0 (if (eq? $1 (car $2)) 1 0))))))",
+  "(lam (car (cdr (cdr (cdr (cdr $0))))))",
+  "(lam (is-prime (fold $0 (+ 1 1) (lam (lam (- $0 (mod $1 $0)))))))",
+  "(lam (fold $0 (is-square 0) (lam (lam (if $0 (is-prime $1) $0)))))",
+  "(lam (fold $0 0 (lam (lam (if (gt? $0 $1) $0 $1)))))",
+  "(lam (map (lam (mod $0 (+ 1 (+ 1 (+ 1 (+ 1 1)))))) $0))",
+  "(lam (map (lam (index $0 $1)) (range (length (cdr $0)))))",
+  "(lam (map (lam (car $1)) $0))"
+]
