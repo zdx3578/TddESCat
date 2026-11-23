@@ -42,7 +42,11 @@ end
 function evidence_signature()
     return Dict(
         "vec" => primitive(("Integer", "Integer"), "Delta"),
+        "coord" => primitive(("Integer", "Integer"), "Coord"),
         "link" => primitive(("RoleBefore", "RoleAfter", "Delta"), "Relation"),
+        "pigment" => primitive(("RoleBefore", "RoleAfter", "Color", "Color"), "Relation"),
+        "count_shift" => primitive(("RoleBefore", "RoleAfter", "Integer"), "Relation"),
+        "selection" => primitive(("RoleBefore", "RoleAfter", "Coord"), "Relation"),
         "marked" => primitive(("Relation",), "Relation"),
         "pair" => primitive(("Relation", "Relation"), "Relation"),
     )

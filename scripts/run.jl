@@ -1,11 +1,29 @@
 using TddESCat
 import JSON
+import TOML
 
-function capture(config, public_dir)
-    config.execution["memory_enforcement"] == "cooperative" ||
-        throw(ArgumentError("Capture requires delegated cgroup_v2 or an explicit cooperative config"))
+const ROOT = normpath(joinpath(@__DIR__, ".."))
+
+function capture(config, public_dir; supervised=false, collect_only=false)
+    enforce = config.execution["memory_enforcement"]
+    (enforce == "cgroup_v2") == supervised || error("Solver launch does not match memory enforcement")
+    if supervised
+        launch = TddESCat.read_json(joinpath(public_dir, "supervision.json"))
+        occursin("/" * launch["scope"], read("/proc/self/cgroup", String)) ||
+            error("Solver is outside the configured cgroup")
+    end
     return with_run(public_dir) do store
         rec = Recorder(store, config)
+        prior = TddESCat.prior_trials(config)
+        TddESCat.before_session!(rec,prior.events)
+        knowledge = TddESCat.OnlineKnowledge()
+        prepared = nothing
+        frozen = collect_only || get(config.execution,"frozen_evaluation",false)
+        if !isempty(prior.trials)
+            append!(knowledge.trials,prior.trials)
+            prepared = TddESCat.online_learn!(knowledge,config,store,prior.pairs,ROOT)
+            frozen && isnothing(prepared) && error("Frozen evaluation has no proved publication")
+        end
         games = list_games(rec.client)
         requested = get(config.environment, "game_id", nothing)
         game_id = if isnothing(requested)
@@ -15,14 +33,24 @@ function capture(config, public_dir)
             requested in games || error("Configured game is absent from the public list")
             requested
         end
+        learned = nothing
         if open_scorecard!(rec)["completion"] == "confirmed"
             if reset!(rec, game_id)["completion"] == "confirmed"
-                explore!(rec)
+                if isnothing(config.learning)
+                    explore!(rec)
+                else
+                    event = TddESCat.read_json(TddESCat.store_path(store, "events", rec.before_ref * ".json"))
+                    learned = TddESCat.run_online!(rec, (event=event, observation=rec.observation), config, ROOT;
+                        knowledge,frozen)
+                end
             end
             rec.frozen || close_scorecard!(rec)
         end
         events = recover_run(store)
-        return (recorded=length(events), requested_game_id=game_id, quarantined=rec.frozen)
+        output = (recorded=length(events), requested_game_id=game_id, quarantined=rec.frozen, learned,
+            prior_publication=prepared)
+        TddESCat.atomic_json(TddESCat.store_path(store, "public-run.json"), output)
+        return output
     end
 end
 
@@ -55,20 +83,32 @@ function main(args)
         println(JSON.json(with_run(replay_run!, last(args))))
         return 0
     end
+    supervised = !isempty(args) && first(args) == "--supervised"
+    supervised && (args = args[2:end])
     if !(length(args) in (2, 4) && first(args) == "--config" &&
             (length(args) == 2 || args[3] == "--public-dir"))
         throw(ArgumentError("usage: run.jl --config <file> [--public-dir <dir>] | --replay <dir>"))
     end
     cfg = load_run_config(args[2])
+    if cfg.execution["memory_enforcement"] == "cgroup_v2" && !supervised
+        runtime = TOML.parsefile(joinpath(ROOT, "config", "runtime.local.toml"))
+        python = runtime["python"]["executable"]
+        arguments = ["--config", cfg.path]
+        length(args) == 4 && append!(arguments, ["--public-dir", abspath(last(args))])
+        return run(ignorestatus(Cmd([python, "-m", "tddesc_tools.public_run", arguments...]))).exitcode
+    end
+    !isnothing(cfg.learning) && !supervised && error("Learning requires supervised launch")
     public_dir = if length(args) == 4
         abspath(last(args))
     else
         mkpath(cfg.run_root)
         joinpath(mktempdir(cfg.run_root; prefix=cfg.run_name * "-", cleanup=false), "public")
     end
-    result = capture(cfg, public_dir)
+    result = capture(cfg, public_dir; supervised)
     println(JSON.json(result))
     return result.quarantined || result.recorded == 0 ? 1 : 0
 end
 
-exit(main(ARGS))
+if abspath(PROGRAM_FILE) == (@__FILE__)
+    exit(main(ARGS))
+end

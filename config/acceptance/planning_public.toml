@@ -1,0 +1,6 @@
+schema_version = 1
+kind = "planning_public"
+output_name = "planning-public"
+timeout_seconds = 240
+environment_config = "../bench_server.toml"
+judge_config = "../bench_scenarios.toml"

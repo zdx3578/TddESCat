@@ -1,0 +1,7 @@
+schema_version = 1
+kind = "motion"
+output_name = "conditional-motion"
+timeout_seconds = 420
+agent_config = "../bench_agent.toml"
+environment_config = "../bench_server.toml"
+judge_config = "../bench_scenarios.toml"

@@ -73,8 +73,13 @@ function typed_motion_signature(deltas)
              "purity"=>"pure", "read_rule"=>Int[], "binder_children"=>Int[])
         for value in values
     ])
+    append!(operators, [
+        Dict("symbol"=>"color" * string(value), "inputs"=>String[], "output"=>"Color",
+             "purity"=>"pure", "read_rule"=>Int[], "binder_children"=>Int[])
+        for value in 0:15
+    ])
     return Dict("schema_version"=>1, "signature_id"=>"frame-motion-v1",
-        "sorts"=>[Dict("id"=>name) for name in ("Integer", "Delta", "RoleBefore", "RoleAfter", "Relation")],
+        "sorts"=>[Dict("id"=>name) for name in ("Integer", "Color", "Coord", "Delta", "RoleBefore", "RoleAfter", "Relation")],
         "operators"=>operators)
 end
 

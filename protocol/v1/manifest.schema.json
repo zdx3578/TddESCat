@@ -53,6 +53,8 @@
       "enum": [
         "protocol_stub",
         "synthetic_official_http",
+        "official_offline_http",
+        "offline",
         "real_public"
       ]
     },

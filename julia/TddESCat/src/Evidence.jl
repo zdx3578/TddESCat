@@ -160,7 +160,12 @@ function transact!(rec::Recorder, command; rejection=nothing, hook=(_...) -> not
     try
         response = public_request(rec.client, "POST", command["path"], command["request_body"])
         command["http_status"] = Int(response.status)
-        command["response_blob"] = write_blob(store, response.body)
+        key = rec.client.api_key
+        if !isnothing(key) && !isnothing(findfirst(codeunits(key), response.body))
+            command["withheld_response_sha256"] = content_hash(response.body)
+        else
+            command["response_blob"] = write_blob(store, response.body)
+        end
         save_command(store, command)
         hook(:receipt, command)
         value = checked_receipt(store, command)
@@ -283,12 +288,14 @@ function check_frozen_prediction(store, command, action, sequence_by_event)
 end
 
 function checked_receipt(store, command)
+    haskey(command, "withheld_response_sha256") && throw(ProtocolError("credential_in_response"))
+    haskey(command, "response_blob") || throw(ProtocolError("no_durable_receipt"))
     bytes = read_blob(store, command["response_blob"])
     200 <= get(command, "http_status", 0) < 300 || throw(ProtocolError("http_status"))
     return decode_receipt(command, bytes)
 end
 
-function recover_run(store)
+function recover_run(store; read_only=false)
     earlier = store_path(store, "prior-events.json")
     sequence_by_event = isfile(earlier) ? prior_sequence_index(read_json(earlier)) : Dict{String,Int}()
     existing = records(store, "events")
@@ -305,6 +312,7 @@ function recover_run(store)
         id = command["command_id"]
         event = pop!(by_command, id, nothing)
         result = command["completion"]
+        read_only && result in ("sent","prepared") && error("Prior evidence must be recovered before use")
         if !isnothing(event) || result == "confirmed"
             result in ("sent", "confirmed") || error("Event links to unsuccessful command")
             value = checked_receipt(store, command)
@@ -327,7 +335,6 @@ function recover_run(store)
             end
         elseif result == "sent"
             value, failure = try
-                haskey(command, "response_blob") || throw(ProtocolError("no_durable_receipt"))
                 checked_receipt(store, command), nothing
             catch error
                 error isa InterruptException && rethrow()
@@ -364,7 +371,7 @@ function recover_run(store)
     isempty(by_command) || error("Event references missing command")
     index = join((JSON.json(Dict("event_id" => e.event["event_id"],
         "event_file" => "events/" * e.event["event_id"] * ".json")) * "\n" for e in replayable))
-    atomic_write(store_path(store, "events.jsonl"), index)
+    read_only || atomic_write(store_path(store, "events.jsonl"), index)
     return replayable
 end
 

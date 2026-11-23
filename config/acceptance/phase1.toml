@@ -1,0 +1,63 @@
+schema_version = 1
+suite_id = "phase1"
+artifact_root = "../../runs"
+
+[[tasks]]
+id = "protocol"
+config = "protocol.toml"
+required = true
+depends_on = []
+
+[[tasks]]
+id = "fixtures"
+config = "fixtures.toml"
+required = true
+depends_on = ["protocol"]
+
+[[tasks]]
+id = "semantic_kernel"
+config = "semantic_kernel.toml"
+required = true
+depends_on = []
+
+[[tasks]]
+id = "stitch_bridge"
+config = "stitch_bridge.toml"
+required = true
+depends_on = ["semantic_kernel"]
+
+[[tasks]]
+id = "evidence"
+config = "evidence.toml"
+required = true
+depends_on = ["fixtures"]
+
+[[tasks]]
+id = "learn_smoke"
+config = "learn_smoke.toml"
+required = true
+depends_on = ["evidence", "stitch_bridge"]
+
+[[tasks]]
+id = "movement_single"
+config = "movement_single.toml"
+required = true
+depends_on = ["learn_smoke"]
+
+[[tasks]]
+id = "movement_boundaries"
+config = "movement_boundaries.toml"
+required = true
+depends_on = ["learn_smoke"]
+
+[[tasks]]
+id = "revision"
+config = "revision.toml"
+required = true
+depends_on = ["movement_single", "movement_boundaries"]
+
+[[tasks]]
+id = "arc_public_stage1"
+config = "arc_public_stage1.toml"
+required = true
+depends_on = ["revision"]

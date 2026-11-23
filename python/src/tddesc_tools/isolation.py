@@ -72,6 +72,29 @@ def sandbox(command, *, read=(), write=(), variables=None, offline=False):
     return [*prefix, "--chdir", "/tmp", "--", *command]
 
 
+def solver_sandbox(
+    root, runtime, command, public, *, script, extra_read=(), offline=False
+):
+    julia = Path(runtime["julia"]["executable"]).resolve().parents[1]
+    cache = Path(runtime["julia_cache"]["depot"])
+    global_depot = Path.home() / ".julia"
+    installed = tuple(
+        path
+        for name in ("packages", "artifacts", "compiled")
+        if (path := global_depot / name).is_dir()
+    )
+    return sandbox(
+        command,
+        read=(julia, root / "julia/TddESCat", script, cache, *installed, *extra_read),
+        write=(public,),
+        variables={
+            "JULIA_LOAD_PATH": "@:@stdlib",
+            "JULIA_DEPOT_PATH": f"/tmp/julia:{cache}:{global_depot}:",
+        },
+        offline=offline,
+    )
+
+
 @contextmanager
 def environment_server(root, runtime, server_config, games, work, log):
     python = Path(runtime["python"]["executable"])
@@ -120,7 +143,7 @@ def environment_server(root, runtime, server_config, games, work, log):
                 server.wait()
 
 
-def isolation_probe(root, url, game_data, private_path, server_pid):
+def isolation_probe(root, url, game_data, private_path, server_pid, *, launch=sandbox):
     script = r"""
 import importlib.util, json, os, socket, sys, urllib.error, urllib.request
 url, game_data, private_path, server_pid, repo = sys.argv[1:]
@@ -161,7 +184,7 @@ print(json.dumps(checks))
 sys.exit(not all(checks.values()))
 """
     result = subprocess.run(
-        sandbox(
+        launch(
             [
                 "/usr/bin/python3",
                 "-I",

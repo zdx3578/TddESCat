@@ -6,6 +6,7 @@ struct RunConfig
     execution::Dict{String,Any}
     learning::Union{Nothing,Dict{String,Any}}
     search::Union{Nothing,Dict{String,Any}}
+    planning::Union{Nothing,Dict{String,Any}}
 end
 
 strict_integer(value) = value isa Integer && !(value isa Bool)
@@ -39,7 +40,7 @@ end
 function load_run_config(path::AbstractString)
     path = abspath(path)
     data = require_keys(TOML.parsefile(path), ("schema_version", "run_name", "run_root",
-        "environment", "execution"); optional=("learning", "search"))
+        "environment", "execution"); optional=("learning", "search", "planning"))
     strict_integer(data["schema_version"]) && data["schema_version"] == 1 ||
         throw(ArgumentError("Unsupported run config version"))
     valid_id(data["run_name"]) || throw(ArgumentError("Invalid run_name"))
@@ -63,11 +64,12 @@ function load_run_config(path::AbstractString)
 
     exec = require_keys(data["execution"], ("max_public_commands", "one_inflight_per_guid",
         "post_retry", "redirect", "memory_enforcement");
-        optional=("solver_memory_bytes", "learning_memory_bytes"), at="execution")
+        optional=("solver_memory_bytes", "learning_memory_bytes", "frozen_evaluation"), at="execution")
     check_values(exec, ("max_public_commands",), positive_integer, "execution")
     exec["one_inflight_per_guid"] === true && exec["post_retry"] === false &&
         exec["redirect"] === false || throw(ArgumentError("Invalid retry or inflight policy"))
     isolation = exec["memory_enforcement"]
+    get(exec, "frozen_evaluation", false) isa Bool || throw(ArgumentError("Invalid execution.frozen_evaluation"))
     isolation in ("cooperative", "cgroup_v2") || throw(ArgumentError("Invalid memory_enforcement"))
     for field in ("solver_memory_bytes", "learning_memory_bytes")
         if isolation == "cgroup_v2" || haskey(exec, field)
@@ -79,11 +81,15 @@ function load_run_config(path::AbstractString)
     if !isnothing(learning)
         limits = ("batch_confirmed_events", "max_programs", "max_ast_nodes",
             "max_input_slots", "max_learning_seconds", "max_new_definitions")
-        require_keys(learning, ("engine", "language", "seed", limits...); at="learning")
+        require_keys(learning, ("engine", "language", "seed", limits...); optional=("prior_evidence",), at="learning")
         learning["language"] == "typed-op-children-db-v1" || throw(ArgumentError("Unsupported language"))
-        strict_integer(learning["seed"]) && learning["seed"] >= 0 || throw(ArgumentError("Invalid seed"))
+        strict_integer(learning["seed"]) && learning["seed"] == 1729 || throw(ArgumentError("Unsupported best-first seed"))
         check_values(learning, limits, positive_integer, "learning")
         learning["engine"] = config_path(dir, learning["engine"])
+        haskey(learning,"prior_evidence") && (learning["prior_evidence"] = config_path(dir, learning["prior_evidence"]))
+    end
+    if get(exec,"frozen_evaluation",false)
+        !isnothing(learning) && haskey(learning,"prior_evidence") || throw(ArgumentError("Frozen evaluation needs prior evidence"))
     end
 
     search = get(data, "search", nothing)
@@ -98,7 +104,14 @@ function load_run_config(path::AbstractString)
                 sort(unique(values)) == values || throw(ArgumentError("Invalid search.$key"))
         end
     end
-    return RunConfig(path, data["run_name"], config_path(dir, data["run_root"]), env, exec, learning, search)
+    planning = get(data,"planning",nothing)
+    if !isnothing(planning)
+        isnothing(learning) && throw(ArgumentError("Planning requires learned mechanisms"))
+        require_keys(planning,("depth","max_work");at="planning")
+        check_values(planning,("depth","max_work"),positive_integer,"planning")
+        planning["depth"] <= 16 || throw(ArgumentError("Planning depth exceeds the finite profile"))
+    end
+    return RunConfig(path, data["run_name"], config_path(dir, data["run_root"]), env, exec, learning, search, planning)
 end
 
 function read_api_key(env)

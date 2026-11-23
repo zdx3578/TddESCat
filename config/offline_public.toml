@@ -1,0 +1,40 @@
+schema_version = 1
+run_name = "phase1-official-offline"
+run_root = "../runs"
+
+[environment]
+base_url = "http://127.0.0.1:0"
+competition_mode = false
+game_selection = "explicit"
+game_id = "ls20-9607627b"
+connect_timeout_seconds = 2
+request_timeout_seconds = 10
+
+[learning]
+engine = "../target/release/tddesc-stitch"
+language = "typed-op-children-db-v1"
+seed = 1729
+batch_confirmed_events = 8
+max_programs = 128
+max_ast_nodes = 96
+max_input_slots = 12
+max_learning_seconds = 30
+max_new_definitions = 8
+
+[search]
+context_radii = [1, 2, 4]
+allow_full_frame_context = true
+history_lengths = [0, 1, 2, 4]
+max_guard_atoms = 3
+max_parameter_term_nodes = 7
+max_guard_candidates = 2048
+max_match_witnesses = 512
+
+[execution]
+max_public_commands = 36
+one_inflight_per_guid = true
+post_retry = false
+redirect = false
+memory_enforcement = "cgroup_v2"
+solver_memory_bytes = 2147483648
+learning_memory_bytes = 536870912

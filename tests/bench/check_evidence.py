@@ -9,7 +9,7 @@ from pathlib import Path
 from tddesc_env.bench import reference
 from tddesc_env.bench.build import materialize, read_plan, scenes
 from tddesc_tools.contracts import Contracts
-from tddesc_tools.isolation import environment_server, isolation_probe, sandbox
+from tddesc_tools.isolation import environment_server, isolation_probe, solver_sandbox
 from tddesc_tools.run import (
     append_assertion,
     julia_command,
@@ -23,28 +23,14 @@ def solver_process(
     root, runtime, public, *args, offline=False, script=None, extra_read=()
 ):
     script = script or root / "scripts/run.jl"
-    julia = Path(runtime["julia"]["executable"]).resolve().parents[1]
-    project = root / "julia/TddESCat"
-    cache = Path(runtime["julia_cache"]["depot"])
-    global_depot = Path.home() / ".julia"
-    installed = tuple(
-        path
-        for path in (
-            global_depot / "packages",
-            global_depot / "artifacts",
-            global_depot / "compiled",
-        )
-        if path.is_dir()
-    )
     command = julia_command(root, runtime, script, *args)
-    command = sandbox(
+    command = solver_sandbox(
+        root,
+        runtime,
         command,
-        read=(julia, project, script, cache, *installed, *extra_read),
-        write=(public,),
-        variables={
-            "JULIA_LOAD_PATH": "@:@stdlib",
-            "JULIA_DEPOT_PATH": f"/tmp/julia:{cache}:{global_depot}:",
-        },
+        public,
+        script=script,
+        extra_read=extra_read,
         offline=offline,
     )
     return subprocess.run(command, capture_output=True, text=True, timeout=155)
@@ -115,7 +101,14 @@ def main(config, run_dir):
         log,
     ) as (url, pid):
         checks = isolation_probe(
-            root, url, games / scene.public_id / "scene.json", run_dir / "private", pid
+            root,
+            url,
+            games / scene.public_id / "scene.json",
+            run_dir / "private",
+            pid,
+            launch=lambda command: solver_sandbox(
+                root, runtime, command, public, script=root / "scripts/run.jl"
+            ),
         )
         write_json(run_dir / "grade/isolation.json", checks)
         local_config.write_text(

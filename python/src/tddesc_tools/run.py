@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tomllib
 from datetime import datetime, timezone
-from hashlib import sha256
+from hashlib import file_digest, sha256
 from pathlib import Path
 from uuid import uuid4
 
@@ -17,15 +17,35 @@ from .contracts import Contracts
 
 KIND_IDS = {
     "protocol": tuple(f"P{i:02}" for i in range(1, 9)),
-    "fixture": ("M01", "M02", "M04", "M05", "M06", "M08", "M13"),
+    "fixture": tuple(f"M{i:02}" for i in range(1, 15)),
     "evidence": ("capture_replay",),
     "motion": ("conditional_motion",),
+    "online": ("M01", "M04"),
+    "movement": ("M01", "M02", "M04", "M05", "M06", "M08"),
+    "movement_boundaries": ("M03", "M07", "M09", "M10", "M11", "M12", "M13", "M14"),
+    "semantic": ("semantic_kernel",),
+    "stitch": ("stitch_bridge",),
+    "real_public": ("public_learning_loop",),
+    "arc_offline": ("public_learning_loop",),
+    "planning": ("finite_policy",),
+    "planning_public": ("public_revalidated_policy",),
+    "planning_composition": ("guard_then_joint_push", "plan_withdrawal"),
 }
 MODULES = {
     "protocol": "tests.protocol.test_faults",
     "fixture": "tests.bench.check_fixtures",
     "evidence": "tests.bench.check_evidence",
     "motion": "tests.bench.check_motion",
+    "online": "tests.bench.check_online",
+    "movement": "tests.bench.check_core_learning",
+    "movement_boundaries": "tests.bench.check_boundaries",
+    "semantic": "tests.bench.check_kernel",
+    "stitch": "tests.bench.check_kernel",
+    "real_public": "tests.bench.check_real_public",
+    "arc_offline": "tests.bench.check_real_public",
+    "planning": "tests.bench.check_kernel",
+    "planning_public": "tests.bench.check_core_learning",
+    "planning_composition": "tests.bench.check_core_learning",
 }
 
 
@@ -38,7 +58,12 @@ def read_task(path):
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     common = {"schema_version", "kind", "output_name", "timeout_seconds"}
     paths = {"agent_config", "environment_config", "judge_config"}
-    if not common <= data.keys() or data.keys() - common - paths:
+    optional = {"offline_bundle"} if data.get("kind") == "arc_offline" else set()
+    if (
+        not common <= data.keys()
+        or data.keys() - common - paths - optional
+        or optional - data.keys()
+    ):
         raise ValueError(f"Invalid acceptance configuration keys: {path}")
     if type(data["schema_version"]) is not int or data["schema_version"] != 1:
         raise ValueError("Unsupported acceptance configuration version")
@@ -55,6 +80,10 @@ def read_task(path):
         data[field] = (path.parent / value).resolve()
         if not data[field].is_file():
             raise ValueError(f"Missing {field}: {data[field]}")
+    if optional:
+        if not isinstance(data["offline_bundle"], str) or not data["offline_bundle"]:
+            raise ValueError("Invalid offline_bundle")
+        data["offline_bundle"] = (path.parent / data["offline_bundle"]).resolve()
     return data
 
 
@@ -118,7 +147,7 @@ def write_json(path, value):
 def append_assertion(run_dir, identifier, passed, evidence, reason=None):
     record = {
         "id": identifier,
-        "status": "PASS" if passed else "FAIL",
+        "status": "BLOCKED" if passed is None else "PASS" if passed else "FAIL",
         "evidence": evidence,
         "reason": reason,
     }
@@ -144,7 +173,29 @@ def run_task(root, config_path, task, run_dir, runtime):
     from .isolation import private_network
 
     expected = KIND_IDS[task["kind"]]
-    isolated = task["kind"] != "protocol"
+    kind = task["kind"]
+    official_local = kind in (
+        "fixture",
+        "evidence",
+        "motion",
+        "online",
+        "movement",
+        "movement_boundaries",
+        "planning_public",
+        "planning_composition",
+    )
+    isolated = official_local or kind == "arc_offline"
+    environment = (
+        "official_offline_http"
+        if kind == "arc_offline"
+        else "synthetic_official_http"
+        if official_local
+        else "protocol_stub"
+        if kind == "protocol"
+        else "real_public"
+        if kind == "real_public"
+        else "offline"
+    )
     contracts = Contracts(root / "protocol/v1")
     locks = {
         language: sha256((root / path).read_bytes()).hexdigest()
@@ -164,8 +215,10 @@ def run_task(root, config_path, task, run_dir, runtime):
         "worktree_sha256": worktree_digest(root),
         "config_sha256": sha256(config_path.read_bytes()).hexdigest(),
         "locks": locks,
-        "environment": "synthetic_official_http" if isolated else "protocol_stub",
-        "isolation": "linux_namespaces" if isolated else "local_development",
+        "environment": environment,
+        "isolation": "linux_namespaces"
+        if isolated or kind in ("stitch", "real_public")
+        else "local_development",
         "started_at": now(),
     }
     contracts.validate("manifest", manifest)
@@ -192,23 +245,56 @@ def run_task(root, config_path, task, run_dir, runtime):
             try:
                 exit_code = proc.wait(task["timeout_seconds"])
             except subprocess.TimeoutExpired:
-                os.killpg(proc.pid, signal.SIGKILL)
-                proc.wait()
+                os.killpg(proc.pid, signal.SIGTERM)
+                try:
+                    proc.wait(8)
+                except subprocess.TimeoutExpired:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                    proc.wait()
                 exit_code = 124
 
     assertions = run_dir / "grade/assertions.jsonl"
     measurements = {}
+    digests = {}
     if assertions.exists():
         for line in assertions.read_text(encoding="utf-8").splitlines():
             entry = json.loads(line)
             if entry["id"] in measurements:
                 raise ValueError(f"Duplicate assertion: {entry['id']}")
+            for evidence in entry["evidence"]:
+                resolved = (run_dir / evidence).resolve()
+                if not resolved.is_relative_to(run_dir):
+                    entry.update(
+                        status="FAIL",
+                        reason="assertion_evidence_missing_or_outside_run",
+                    )
+                    continue
+                files = (
+                    sorted(path for path in resolved.rglob("*") if path.is_file())
+                    if resolved.is_dir()
+                    else [resolved]
+                )
+                if not files or any(
+                    not path.is_file() or not path.resolve().is_relative_to(run_dir)
+                    for path in files
+                ):
+                    entry.update(
+                        status="FAIL",
+                        reason="assertion_evidence_missing_or_outside_run",
+                    )
+                    continue
+                for path in files:
+                    name = path.relative_to(run_dir).as_posix()
+                    if name not in digests:
+                        with path.open("rb") as stream:
+                            digests[name] = file_digest(stream, "sha256").hexdigest()
             measurements[entry["id"]] = entry
+        write_json(run_dir / "grade/evidence-index.json", digests)
     verdicts = [
         {
             "id": member,
             "status": measurements.get(member, {}).get("status", "NOT_RUN"),
-            "assertion_refs": ["grade/assertions.jsonl"]
+            "assertion_refs": ["grade/assertions.jsonl", "grade/evidence-index.json"]
             if member in measurements
             else [],
             "reason": measurements.get(member, {}).get(
@@ -222,13 +308,18 @@ def run_task(root, config_path, task, run_dir, runtime):
         and set(measurements) == set(expected)
         and all(v["status"] == "PASS" for v in verdicts)
     )
+    blocked = (
+        exit_code == 3
+        and set(measurements) == set(expected)
+        and any(member["status"] == "BLOCKED" for member in verdicts)
+    )
     acceptance = {
         "schema_version": 1,
         "run_id": run_dir.name,
         "suite_id": task["output_name"],
-        "status": "PASS" if passed else "FAIL",
-        "evidence_scope": {"fixture": "environment", "motion": "evidence"}.get(
-            task["kind"], task["kind"]
+        "status": "PASS" if passed else "BLOCKED" if blocked else "FAIL",
+        "evidence_scope": {"fixture": "environment", "protocol": "protocol"}.get(
+            kind, "evidence"
         ),
         "tasks": verdicts,
     }
@@ -245,7 +336,7 @@ def run_task(root, config_path, task, run_dir, runtime):
         "\n".join(report) + "\n", encoding="utf-8"
     )
     print(f"{acceptance['status']} {run_dir}", flush=True)
-    return 0 if passed else 1
+    return 0 if passed else 3 if blocked else 1
 
 
 def main():
@@ -253,18 +344,26 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--run-dir", type=Path)
+    parser.add_argument("--prerequisite", type=Path)
     args = parser.parse_args()
     config_path = args.config.resolve()
-    task = read_task(config_path)
-    if task["kind"] not in KIND_IDS:
+    header = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    suite = "tasks" in header
+    task = read_task(config_path) if not suite else None
+    if not suite and task["kind"] not in KIND_IDS:
         parser.error(f"Unsupported task kind: {task['kind']}")
     runtime = runtime_paths(root)
     name = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     run_dir = (
         args.run_dir
-        or root / "runs" / f"{name}-{task['output_name']}-{uuid4().hex[:8]}"
+        or (config_path.parent / header["artifact_root"] if suite else root / "runs")
+        / f"{name}-{header['suite_id'] if suite else task['output_name']}-{uuid4().hex[:8]}"
     ).resolve()
     run_dir.mkdir(parents=True)
+    if suite:
+        from .suite import run_suite
+
+        sys.exit(run_suite(root, config_path, run_dir, runtime, args.prerequisite))
     sys.exit(run_task(root, config_path, task, run_dir, runtime))
 
 
