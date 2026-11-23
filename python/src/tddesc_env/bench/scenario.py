@@ -6,7 +6,21 @@ from pathlib import Path
 
 Point = tuple[int, int]
 Cell = tuple[int, int, int]
-State = tuple[Point, ...]
+
+
+@dataclass(frozen=True)
+class State:
+    positions: tuple[Point, ...]
+    switch_on: bool = False
+
+
+@dataclass(frozen=True)
+class Switch:
+    panel: Point
+    gate_cells: tuple[Point, ...]
+    on_color: int
+    off_color: int
+    initial: bool
 
 
 @dataclass(frozen=True)
@@ -24,14 +38,19 @@ class Scene:
     blocked: tuple[Point, ...]
     holes: tuple[Point, ...]
     bodies: tuple[tuple[Cell, ...], ...]
-    start: State
+    start: tuple[Point, ...]
     moves: tuple[tuple[int, int, int], ...]
     path_policy: str
     prefix: tuple[int, ...]
+    switch: Switch | None = None
+
+    @property
+    def start_state(self):
+        return State(self.start, self.switch.initial if self.switch else False)
 
     @property
     def actions(self):
-        return tuple(entry[0] for entry in self.moves)
+        return tuple(entry[0] for entry in self.moves) + ((5,) if self.switch else ())
 
     @classmethod
     def load(cls, path: Path):
@@ -43,4 +62,9 @@ class Scene:
         data["bodies"] = tuple(
             tuple(tuple(cell) for cell in cells) for cells in data["bodies"]
         )
+        if data.get("switch") is not None:
+            spec = data["switch"]
+            spec["panel"] = tuple(spec["panel"])
+            spec["gate_cells"] = tuple(tuple(cell) for cell in spec["gate_cells"])
+            data["switch"] = Switch(**spec)
         return cls(**data)

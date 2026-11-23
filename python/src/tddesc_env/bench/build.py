@@ -8,9 +8,9 @@ from dataclasses import asdict, replace
 from hashlib import sha256
 from pathlib import Path
 
-from .scenario import Scene
+from .scenario import Scene, Switch
 
-CASES = ("M01", "M02", "M13")
+CASES = ("M01", "M02", "M05", "M13")
 DIRECTIONS = ((1, 1, 0), (2, -1, 0), (3, 0, -1), (4, 0, 1))
 
 
@@ -192,6 +192,47 @@ def scenes(plan, seed):
             prefix=(1, 2),
         ),
     ]
+    gate_x, gate_y = 9 + shift, 6
+    panel = Switch(
+        (18, 1), ((gate_x, gate_y), (gate_x, gate_y + 1)), detail, wall, True
+    )
+    divider = tuple(
+        (gate_x, y, wall) for y in range(3, 13) if y not in (gate_y, gate_y + 1)
+    )
+    common = {
+        "start": ((gate_x - 2, gate_y),),
+        "moves": ((1, 1, 0),),
+        "blocked": tuple((x, y) for x, y, _ in divider),
+    }
+    for variant, initial, noise, crop, prefix, y in (
+        ("panel-open", True, box, False, (1,), gate_y),
+        ("panel-closed", False, box, False, (1,), gate_y),
+        ("panel-toggle", False, box, False, (1, 5, 1), gate_y),
+        ("panel-unrelated", True, wall, False, (1,), gate_y),
+        ("panel-cropped-open", True, box, True, (1,), gate_y),
+        ("panel-cropped-closed", False, box, True, (1,), gate_y),
+        ("panel-position-heldout", True, box, False, (1,), gate_y),
+    ):
+        updates = dict(common)
+        wall_shape = divider
+        switch = replace(panel, initial=initial)
+        if variant == "panel-position-heldout":
+            pixel = gate_x + 1
+            wall_shape = tuple((pixel, py, color) for _, py, color in divider)
+            switch = replace(switch, gate_cells=((pixel, y), (pixel, y + 1)))
+            updates["start"] = ((pixel - 2, y),)
+            updates["blocked"] = tuple((x, yy) for x, yy, _ in wall_shape)
+        parts.append(
+            item(
+                "M05",
+                variant,
+                **updates,
+                switch=switch,
+                prefix=prefix,
+                static=(*wall_shape, (16, 2, noise)),
+                viewport=(0, 4, width, 12) if crop else (0, 0, width, height),
+            )
+        )
     return parts
 
 

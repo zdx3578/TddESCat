@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import tomllib
@@ -65,6 +66,8 @@ def run_worker(root, job, output, binary):
         ),
     ]
     log = output.with_name(output.name + ".worker.log")
+    environment = os.environ.copy()
+    environment.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
     with log.open("xb") as stream:
         try:
             result = subprocess.run(
@@ -72,6 +75,7 @@ def run_worker(root, job, output, binary):
                 stdout=stream,
                 stderr=subprocess.STDOUT,
                 timeout=wall_ms / 1000 + 10,
+                env=environment,
             )
             exit_code = result.returncode
         except subprocess.TimeoutExpired:

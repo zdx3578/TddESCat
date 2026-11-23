@@ -8,6 +8,7 @@ from arcengine import ActionInput, GameAction
 
 from . import reference
 from .game import ShapeGame
+from .scenario import State
 
 
 def frame_hash(frame):
@@ -15,7 +16,8 @@ def frame_hash(frame):
 
 
 def engine_transition(scene, state, action):
-    game = ShapeGame(replace(scene, start=state))
+    switch = replace(scene.switch, initial=state.switch_on) if scene.switch else None
+    game = ShapeGame(replace(scene, start=state.positions, switch=switch))
     game.perform_action(ActionInput(id=GameAction.RESET), raw=True)
     if action == 0:
         value = game.perform_action(ActionInput(id=GameAction.RESET), raw=True)
@@ -23,7 +25,9 @@ def engine_transition(scene, state, action):
         value = game.perform_action(
             ActionInput(id=GameAction.from_id(action)), raw=True
         )
-    return tuple(game.positions), [frame.tolist() for frame in value.frame]
+    return State(tuple(game.positions), game.switch_on), [
+        frame.tolist() for frame in value.frame
+    ]
 
 
 def finite_engine_check(scene):
@@ -52,7 +56,7 @@ def hand_checks(by_variant, public_frames=None):
         if public_frames is not None:
             return public_frames[name][index]
         scene = by_variant[name]
-        state = scene.start
+        state = scene.start_state
         for action in scene.prefix[:index]:
             state = reference.transition(scene, state, action)
         return reference.render(scene, state)
@@ -84,7 +88,11 @@ def hand_checks(by_variant, public_frames=None):
         == at("equal-appearance-idle", 1)
     )
     swap = by_variant["equal-appearance-swap"]
-    assert reference.transition(swap, swap.start, 1) == swap.start[::-1] != swap.start
+    assert (
+        reference.transition(swap, swap.start_state, 1).positions
+        == swap.start[::-1]
+        != swap.start
+    )
     assert at("open-square", 0) != at("open-square", 1)
     distractor = by_variant["same-color-distractor"]
     assert all(
@@ -160,12 +168,36 @@ def hand_checks(by_variant, public_frames=None):
     assert counts == [2, 1, 2] and at("touch-and-separate", 0) == at(
         "touch-and-separate", 2
     )
+    panel_open = by_variant["panel-open"]
+    x, y = panel_open.start[0]
+    local = [(u, v) for v in range(y - 3, y + 4) for u in range(x - 3, x + 4)]
+    assert all(
+        logical_sample(panel_open, at("panel-open", 0), u, v)
+        == logical_sample(panel_open, at("panel-closed", 0), u, v)
+        for u, v in local
+    )
+    assert at("panel-open", 0) != at("panel-open", 1)
+    assert at("panel-closed", 0) == at("panel-closed", 1)
+    assert at("panel-toggle", 0) == at("panel-toggle", 1)
+    assert at("panel-toggle", 2) == at("panel-open", 0)
+    assert at("panel-toggle", 3) == at("panel-open", 1)
+    assert at("panel-cropped-open", 0) == at("panel-cropped-closed", 0)
+    assert at("panel-cropped-open", 1) != at("panel-cropped-closed", 1)
+    assert at("panel-unrelated", 0) != at("panel-open", 0)
+    assert at("panel-unrelated", 0) != at("panel-unrelated", 1)
+    assert at("panel-position-heldout", 0) != at("panel-position-heldout", 1)
     return {
         "M01": move_groups,
         "M02": {
             "first_new_free_cell": [anchor + 2, 6],
             "edge_conflict": [anchor + 2, 7],
             "long_sweep_conflict": list(by_variant["long-swept"].blocked[0]),
+        },
+        "M05": {
+            "local_equal_cells": len(local),
+            "panel": list(panel_open.switch.panel),
+            "toggle_after_block": [1, 5, 1],
+            "cropped_before_equal": True,
         },
         "M13": {
             "full_components": [sorted(s) for s in full],
@@ -178,7 +210,7 @@ def hand_checks(by_variant, public_frames=None):
 
 
 def http_trace(url, scene):
-    state = scene.start
+    state = scene.start_state
     frames = []
     trace = []
     with requests.Session() as http:

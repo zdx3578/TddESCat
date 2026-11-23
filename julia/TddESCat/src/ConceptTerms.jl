@@ -73,8 +73,7 @@ end
 
 function historical_program(correspondence::SupportCorrespondence)
     dx, dy = correspondence.delta
-    relation = Call("link", Slot(0), Slot(1), Call("vec", Literal("Integer", dx), Literal("Integer", dy)))
-    return Call("pair", Call("marked", relation), Call("marked", relation))
+    return Call("link", Slot(0), Slot(1), Call("vec", Literal("Integer", dx), Literal("Integer", dy)))
 end
 
 function render_term(term::ConceptTerm)

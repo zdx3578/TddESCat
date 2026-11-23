@@ -7,24 +7,29 @@ from .scenario import Scene, State
 
 def transition(scene: Scene, state: State, action: int) -> State:
     if action == 0:
-        return scene.start
+        return scene.start_state
+    if action == 5 and scene.switch:
+        return State(state.positions, not state.switch_on)
+    positions = state.positions
     mapping = [(dx, dy) for number, dx, dy in scene.moves if number == action]
     if len(mapping) != 1:
         raise ValueError("Action outside finite domain")
-    if not state:
+    if not positions:
         return state
     if scene.path_policy == "swap":
-        return state[::-1]
+        return State(positions[::-1], state.switch_on)
 
     left, top, right, bottom = scene.active
     floor = {(x, y) for y in range(top, bottom) for x in range(left, right)}
     floor.difference_update(scene.blocked, scene.holes)
-    for i in range(1, len(state)):
+    if scene.switch and state.switch_on is False:
+        floor.difference_update(scene.switch.gate_cells)
+    for i in range(1, len(positions)):
         for x, y, _ in scene.bodies[i]:
-            floor.discard((state[i][0] + x, state[i][1] + y))
+            floor.discard((positions[i][0] + x, positions[i][1] + y))
 
     delta_x, delta_y = mapping[0]
-    anchor_x, anchor_y = state[0]
+    anchor_x, anchor_y = positions[0]
     end = (anchor_x + delta_x, anchor_y + delta_y)
     path = [end]
     if scene.path_policy == "swept":
@@ -39,12 +44,18 @@ def transition(scene: Scene, state: State, action: int) -> State:
     allowed = all(
         (x + u, y + v) in floor for x, y in path for u, v, _ in scene.bodies[0]
     )
-    return (end, *state[1:]) if allowed else state
+    return State((end, *positions[1:]), state.switch_on) if allowed else state
 
 
 def logical_colors(scene, state):
     colors = {(x, y): color for x, y, color in scene.static}
-    for (x, y), body in zip(state, scene.bodies, strict=True):
+    if scene.switch:
+        left, top = scene.switch.panel
+        color = scene.switch.on_color if state.switch_on else scene.switch.off_color
+        for x in range(left, left + 2):
+            for y in range(top, top + 2):
+                colors[x, y] = color
+    for (x, y), body in zip(state.positions, scene.bodies, strict=True):
         colors.update({(x + u, y + v): color for u, v, color in body})
     return colors
 
@@ -77,8 +88,8 @@ def render(scene: Scene, state: State):
 
 
 def reachable(scene):
-    frontier = deque([scene.start])
-    seen = {scene.start}
+    frontier = deque([scene.start_state])
+    seen = {scene.start_state}
     while frontier:
         state = frontier.popleft()
         yield state

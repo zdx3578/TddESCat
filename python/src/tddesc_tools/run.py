@@ -17,13 +17,15 @@ from .contracts import Contracts
 
 KIND_IDS = {
     "protocol": tuple(f"P{i:02}" for i in range(1, 9)),
-    "fixture": ("M01", "M02", "M13"),
+    "fixture": ("M01", "M02", "M05", "M13"),
     "evidence": ("capture_replay",),
+    "motion": ("conditional_motion",),
 }
 MODULES = {
     "protocol": "tests.protocol.test_faults",
     "fixture": "tests.bench.check_fixtures",
     "evidence": "tests.bench.check_evidence",
+    "motion": "tests.bench.check_motion",
 }
 
 
@@ -225,7 +227,9 @@ def run_task(root, config_path, task, run_dir, runtime):
         "run_id": run_dir.name,
         "suite_id": task["output_name"],
         "status": "PASS" if passed else "FAIL",
-        "evidence_scope": "environment" if task["kind"] == "fixture" else task["kind"],
+        "evidence_scope": {"fixture": "environment", "motion": "evidence"}.get(
+            task["kind"], task["kind"]
+        ),
         "tasks": verdicts,
     }
     contracts.validate("acceptance", acceptance)

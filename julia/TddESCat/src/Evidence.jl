@@ -44,7 +44,7 @@ function exploration_prediction(store, id, seq, action)
     return id
 end
 
-function prepare_command(rec, kind, path, body; game_id=nothing, guid=nothing, action=nothing)
+function prepare_command(rec, kind, path, body; game_id=nothing, guid=nothing, action=nothing, prediction=nothing)
     seq = rec.next_sequence
     id = command_id(seq)
     raw = JSON.json(body)
@@ -54,7 +54,16 @@ function prepare_command(rec, kind, path, body; game_id=nothing, guid=nothing, a
         "expected_game_id" => game_id, "expected_guid" => guid, "before_ref" => rec.before_ref,
         "prediction_ref" => nothing, "completion" => "prepared")
     if !isnothing(action)
-        command["prediction_ref"] = exploration_prediction(rec.store, id, seq, action)
+        if isnothing(prediction)
+            command["prediction_ref"] = exploration_prediction(rec.store, id, seq, action)
+        else
+            prediction.before_ref == rec.before_ref && prediction.payload["action"] == action ||
+                throw(ArgumentError("Prediction is stale or belongs to a different action"))
+            record = merge(prediction.payload,
+                Dict("schema_version"=>1, "created_before_command"=>Dict("command_id"=>id, "sequence"=>seq)))
+            atomic_json(store_path(rec.store, "predictions", id * ".json"), record)
+            command["prediction_ref"] = id
+        end
     end
     save_command(rec.store, command)
     rec.next_sequence += 1
@@ -175,7 +184,7 @@ function reset!(rec::Recorder, game_id; hook=(_...) -> nothing)
     end
 end
 
-function submit_action!(rec::Recorder, id; x=nothing, y=nothing, hook=(_...) -> nothing)
+function submit_action!(rec::Recorder, id; x=nothing, y=nothing, prediction=nothing, hook=(_...) -> nothing)
     lock(rec.mutex) do
         obs = rec.observation
         known_id = strict_integer(id) && 1 <= id <= 7
@@ -209,7 +218,7 @@ function submit_action!(rec::Recorder, id; x=nothing, y=nothing, hook=(_...) -> 
         else
             Dict("id" => Int(id))
         end
-        cmd = prepare_command(rec, "action", path, body; game_id, guid, action)
+        cmd = prepare_command(rec, "action", path, body; game_id, guid, action, prediction)
         return transact!(rec, cmd; rejection=reason, hook)
     end
 end

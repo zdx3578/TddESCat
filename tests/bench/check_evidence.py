@@ -19,8 +19,10 @@ from tddesc_tools.run import (
 )
 
 
-def solver_process(root, runtime, public, *args, offline=False):
-    script = root / "scripts/run.jl"
+def solver_process(
+    root, runtime, public, *args, offline=False, script=None, extra_read=()
+):
+    script = script or root / "scripts/run.jl"
     julia = Path(runtime["julia"]["executable"]).resolve().parents[1]
     project = root / "julia/TddESCat"
     cache = Path(runtime["julia_cache"]["depot"])
@@ -37,7 +39,7 @@ def solver_process(root, runtime, public, *args, offline=False):
     command = julia_command(root, runtime, script, *args)
     command = sandbox(
         command,
-        read=(julia, project, script, cache, *installed),
+        read=(julia, project, script, cache, *installed, *extra_read),
         write=(public,),
         variables={
             "JULIA_LOAD_PATH": "@:@stdlib",
@@ -79,7 +81,7 @@ def assertions(public, scene, contracts):
         payload = (public / "blobs" / event["response_blob"]).read_bytes()
         body = json.loads(payload)
         assert hashlib.sha256(payload).hexdigest() == event["response_blob"]
-        state = scene.start if i == 0 else reference.transition(scene, scene.start, 1)
+        state = reference.transition(scene, scene.start_state, i)
         assert body["frame"] == [reference.render(scene, state)]
         assert event["frame_shapes"] == [[64, 64]]
         prediction_path = public / "predictions" / f"{event['prediction_ref']}.json"
