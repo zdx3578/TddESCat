@@ -23,8 +23,15 @@
       ]
     },
     "path": {
-      "type": "string",
-      "pattern": "^/api/(?:scorecard/(?:open|close)|cmd/(?:RESET|ACTION[1-7]))$"
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^/api/(?:scorecard/(?:open|close)|cmd/(?:RESET|ACTION[1-7]))$"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "request_body": {
       "type": "string"
@@ -118,5 +125,27 @@
     "prediction_ref",
     "completion"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "completion": {
+            "enum": [
+              "sent",
+              "confirmed",
+              "outcome_unknown"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ]
 }
