@@ -15,8 +15,14 @@ from uuid import uuid4
 
 from .contracts import Contracts
 
-KIND_IDS = {"protocol": tuple(f"P{i:02}" for i in range(1, 9))}
-MODULES = {"protocol": "tests.protocol.test_faults"}
+KIND_IDS = {
+    "protocol": tuple(f"P{i:02}" for i in range(1, 9)),
+    "fixture": ("M01", "M02", "M13"),
+}
+MODULES = {
+    "protocol": "tests.protocol.test_faults",
+    "fixture": "tests.bench.check_fixtures",
+}
 
 
 def now():
@@ -131,7 +137,10 @@ def worktree_digest(root):
 
 
 def run_task(root, config_path, task, run_dir, runtime):
+    from .isolation import private_network
+
     expected = KIND_IDS[task["kind"]]
+    fixture = task["kind"] == "fixture"
     contracts = Contracts(root / "protocol/v1")
     locks = {
         language: sha256((root / path).read_bytes()).hexdigest()
@@ -151,8 +160,8 @@ def run_task(root, config_path, task, run_dir, runtime):
         "worktree_sha256": worktree_digest(root),
         "config_sha256": sha256(config_path.read_bytes()).hexdigest(),
         "locks": locks,
-        "environment": "protocol_stub",
-        "isolation": "local_development",
+        "environment": "synthetic_official_http" if fixture else "protocol_stub",
+        "isolation": "linux_namespaces" if fixture else "local_development",
         "started_at": now(),
     }
     contracts.validate("manifest", manifest)
@@ -165,6 +174,8 @@ def run_task(root, config_path, task, run_dir, runtime):
         str(config_path),
         str(run_dir),
     ]
+    if fixture:
+        command = private_network(command, (run_dir,))
     with (run_dir / "grade/process.log").open("wb") as log:
         with subprocess.Popen(
             command,
@@ -212,7 +223,7 @@ def run_task(root, config_path, task, run_dir, runtime):
         "run_id": run_dir.name,
         "suite_id": task["output_name"],
         "status": "PASS" if passed else "FAIL",
-        "evidence_scope": task["kind"],
+        "evidence_scope": "environment" if fixture else "protocol",
         "tasks": verdicts,
     }
     contracts.validate("acceptance", acceptance)
