@@ -1,0 +1,32 @@
+# 待实施的测试档案。目标位置：config/experiments/estitch_open_v1.toml。
+# 以下尺寸定义有限测试数据，不是正式学习器的容量上限。
+schema_version = 1
+experiment_id = "estitch-open-v1"
+stitch_policy = "../stitch.toml"
+
+[wide_interfaces]
+codec_arities = [0, 1, 8, 9, 19, 64, 65, 1000]
+search_arities = [4, 6, 10, 12, 15, 19]
+instances_per_shape = 8
+
+[round_progress]
+independent_families = 24
+instances_per_family = 8
+
+[dependency]
+batches = 3
+instances_per_batch = 8
+
+[input_capacity]
+minimum_programs = 4537
+minimum_origins_bytes = 4194305
+
+[references]
+datasets = ["furniture", "wheels"]
+max_arity = 1000
+num_abstractions = 1
+
+[public_validation]
+core_cases = ["M01", "M02", "M04", "M05", "M06", "M08"]
+composition_cases = ["C01", "C02", "C03"]
+
