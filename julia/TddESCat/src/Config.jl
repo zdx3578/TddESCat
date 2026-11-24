@@ -54,7 +54,7 @@ function load_run_config(path::AbstractString)
     path = abspath(path)
     data = require_keys(TOML.parsefile(path), ("schema_version", "run_name", "run_root",
         "environment", "execution"); optional=("learning", "search", "planning"))
-    strict_integer(data["schema_version"]) && data["schema_version"] == 1 ||
+    strict_integer(data["schema_version"]) && data["schema_version"] == 2 ||
         throw(ArgumentError("Unsupported run config version"))
     valid_id(data["run_name"]) || throw(ArgumentError("Invalid run_name"))
     dir = dirname(path)
@@ -106,9 +106,9 @@ function load_run_config(path::AbstractString)
 
     search = get(data, "search", nothing)
     if !isnothing(search)
-        limits = ("max_guard_atoms", "max_parameter_term_nodes", "max_guard_candidates", "max_action_coordinates")
-        require_keys(search, ("context_radii", "allow_full_frame_context", "history_lengths", limits...); at="search")
-        check_values(search, limits, positive_integer, "search")
+        require_keys(search, ("context_radii", "allow_full_frame_context", "history_lengths",
+            "max_action_coordinates"); at="search")
+        check_values(search, ("max_action_coordinates",), positive_integer, "search")
         check_values(search, ("allow_full_frame_context",), x -> x isa Bool, "search")
         for (key, lower) in (("context_radii", 1), ("history_lengths", 0))
             values = search[key]
@@ -153,7 +153,6 @@ end
 function motion_guard_limits(config::RunConfig)
     search = config.search
     isnothing(search) && return (;)
-    return (; max_guard_atoms=search["max_guard_atoms"], max_guard_work=search["max_guard_candidates"],
-        context_radii=Tuple(search["context_radii"]), history_lengths=Tuple(search["history_lengths"]),
+    return (; context_radii=Tuple(search["context_radii"]), history_lengths=Tuple(search["history_lengths"]),
         allow_full_frame=search["allow_full_frame_context"])
 end

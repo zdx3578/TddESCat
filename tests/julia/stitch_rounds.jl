@@ -2,7 +2,7 @@ include("stitch_fixture.jl")
 
 constant(index) = "c" * lpad(index, 2, '0')
 signature = Dict(
-    "schema_version" => 1, "signature_id" => "two-batches", "sorts" => [Dict("id" => "Atom"), Dict("id" => "Other")],
+    "schema_version" => 3, "signature_id" => "two-batches", "sorts" => [Dict("id" => "Atom"), Dict("id" => "Other")],
     "operators" => [
         symbol("f", ["Atom", "Atom"]); symbol("g", ["Atom"]); symbol("wrap", ["Atom"]);
         [symbol(constant(i), String[]) for i in 0:63];
@@ -87,9 +87,10 @@ execute(name, texts, library; options...) = execute_stitch(signature, name, text
     @test all(occursin(lib, line) for line in restored.bundle["rewritten_programs"])
     @test_throws ErrorException TC.publish_stitch!(directory, result; current_evidence="snapshot-positive")
     @test TC.read_published_stitch(directory).publication == digest
-    missing = execute("missing", ["($lib c32 c33)"], empty; source_origins=[])
+    missing = execute("missing", ["(f c32 c33)"], empty; tamper=("origins",[]))
     @test missing.code == 20 && isempty(filter(n->startswith(n,"round-"),readdir(missing.output)))
-    invalid = execute("wrong-sort", ["(f (g other) c03)"], empty)
+    invalid = execute("wrong-sort", ["(f (g c02) c03)"], empty;
+        tamper=("programs",["(f (g other) c03)"]))
     @test invalid.code == 20 && isempty(filter(n->startswith(n,"round-"),readdir(invalid.output)))
     stopped = execute("before-commit", batch(0), empty; fault="before-first-commit")
     @test stopped.code == 22 && isempty(filter(n->startswith(n,"round-"),readdir(stopped.output)))

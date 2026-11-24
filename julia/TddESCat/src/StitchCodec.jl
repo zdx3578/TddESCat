@@ -1,4 +1,4 @@
-const LEARN_PROTOCOL = "tddescat.learn.v2"
+const LEARN_PROTOCOL = "tddescat.learn.v3"
 const STITCH_CODEC = "typed-free-slots.v1"
 
 wire_parameter(index) = Dict("kind" => "Param", "index" => index)

@@ -1,0 +1,357 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.tddescat.org/v3/learn_result.schema.json",
+  "type": "object",
+  "properties": {
+    "protocol_version": {
+      "const": "tddescat.learn.v3"
+    },
+    "codec_version": {
+      "const": "typed-free-slots.v1"
+    },
+    "job_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+    },
+    "round_index": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "definitions": {
+      "type": "array",
+      "items": {
+        "$ref": "definition.schema.json"
+      }
+    },
+    "rewritten_programs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "calls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "program_index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "call_path": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "definition_ref": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+          },
+          "argument_terms": {
+            "type": "array",
+            "items": {
+              "$ref": "../v1/typed_terms.schema.json#/$defs/program_term"
+            }
+          },
+          "source_occurrences": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+            },
+            "uniqueItems": true
+          },
+          "proof_ref": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+          }
+        },
+        "required": [
+          "program_index",
+          "call_path",
+          "definition_ref",
+          "argument_terms",
+          "source_occurrences",
+          "proof_ref"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "proofs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "proof_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+          },
+          "left_term": {
+            "$ref": "../v1/typed_terms.schema.json#/$defs/program_term"
+          },
+          "right_term": {
+            "$ref": "../v1/typed_terms.schema.json#/$defs/program_term"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "rule"
+                    },
+                    "rule_id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+                    },
+                    "direction": {
+                      "enum": [
+                        "forward",
+                        "reverse"
+                      ]
+                    },
+                    "site_path": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "substitution": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "parameter": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "term": {
+                            "$ref": "../v1/typed_terms.schema.json#/$defs/program_term"
+                          }
+                        },
+                        "required": [
+                          "parameter",
+                          "term"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "premise_refs": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+                      }
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "rule_id",
+                    "direction",
+                    "site_path",
+                    "substitution",
+                    "premise_refs"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "congruence"
+                    },
+                    "operator": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "site_path": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "premise_refs": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+                      }
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "operator",
+                    "site_path",
+                    "premise_refs"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "proof_id",
+          "left_term",
+          "right_term",
+          "steps"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "cost": {
+      "type": "object",
+      "properties": {
+        "pre_rewrite_input": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "post_rewrite_baseline": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "output_programs": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "initial_library": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "new_definitions": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "final_total": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "ratio_numerator": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "ratio_denominator": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        }
+      },
+      "required": [
+        "pre_rewrite_input",
+        "post_rewrite_baseline",
+        "output_programs",
+        "initial_library",
+        "new_definitions",
+        "final_total",
+        "ratio_numerator",
+        "ratio_denominator"
+      ],
+      "additionalProperties": false
+    },
+    "input_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "parent_checkpoint_sha256": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "search_exhausted": {
+      "type": "boolean"
+    },
+    "match_support_exact": {
+      "type": "boolean"
+    },
+    "apply_complete": {
+      "type": "boolean"
+    },
+    "round_committed": {
+      "type": "boolean"
+    },
+    "input_scope_complete": {
+      "type": "boolean"
+    },
+    "saturation_complete": {
+      "const": true
+    },
+    "round_outcome": {
+      "enum": [
+        "definition_accepted",
+        "no_positive_gain"
+      ]
+    },
+    "round_metrics": {
+      "type": "object",
+      "properties": {
+        "heap_pops": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "arena_peak": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "frontier_peak": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "egraph_nodes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "egraph_classes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "proof_visits": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "heap_pops",
+        "arena_peak",
+        "frontier_peak",
+        "egraph_nodes",
+        "egraph_classes",
+        "proof_visits"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "protocol_version",
+    "codec_version",
+    "job_id",
+    "round_index",
+    "definitions",
+    "rewritten_programs",
+    "calls",
+    "proofs",
+    "cost",
+    "input_sha256",
+    "parent_checkpoint_sha256",
+    "search_exhausted",
+    "match_support_exact",
+    "apply_complete",
+    "round_committed",
+    "input_scope_complete",
+    "saturation_complete",
+    "round_outcome",
+    "round_metrics"
+  ],
+  "additionalProperties": false
+}

@@ -1,6 +1,7 @@
 function freeze_stitch_job(directory, job_id, snapshot_id, library::LibrarySnapshot,
                            signature, programs, origins, slots; repo_root, config_path=nothing,
-                           config_text=nothing, engine_identity=nothing, input_scope_complete=true)
+                           config_text=nothing, engine_identity=nothing, input_scope_complete=true,
+                           intent="symbolic", consumer="structural-search", obligation_refs=String[])
     xor(isnothing(config_path), isnothing(config_text)) || error("Provide one worker configuration source")
     config = isnothing(config_text) ? read(config_path, String) : config_text
     stitch_policy(config)
@@ -26,10 +27,13 @@ function freeze_stitch_job(directory, job_id, snapshot_id, library::LibrarySnaps
         "program_count" => length(programs), "slot_context" => slots, "engine_pin" => engine,
         "input_scope_complete" => input_scope_complete,
     )
+    sources, semantics = describe_learning_context(signature,library.entries,programs,origins,slots;
+        intent,consumer,obligation_refs)
     for (name, extension, data) in (
         ("signature", "json", JSON.json(signature)),
         ("programs", "json", JSON.json(programs)),
-        ("origins", "json", JSON.json(origins)),
+        ("origins", "json", JSON.json(sources)),
+        ("semantic_context", "json", JSON.json(semantics)),
         ("initial_library", "json", JSON.json(library.entries)),
         ("rules", "json", "[]"),
         ("config", "toml", config),
@@ -40,6 +44,54 @@ function freeze_stitch_job(directory, job_id, snapshot_id, library::LibrarySnaps
     end
     atomic_json(joinpath(directory, "manifest.json"), manifest)
     return manifest
+end
+
+function describe_learning_context(signature, entries, programs, origins, slots;
+        intent, consumer, obligation_refs)
+    intent in ("effect","relation","program","symbolic") && valid_id(consumer) &&
+        all(valid_id,obligation_refs) && allunique(obligation_refs) || error("Invalid learning intent")
+    registry, definitions = registry_from(signature,entries)
+    terms = [decode_program(text,registry) for text in programs]
+    sorts = String[slot["sort"] for slot in slots]
+    sources = [Dict{String,Any}(source) for source in origins]
+    sites = Dict((source["program_index"],Tuple(source["expression_path"]))=>source for source in sources)
+    length(sites) == length(sources) || error("Repeated learning origin")
+    graphs = Dict{String,Any}[]
+    contexts = Dict{String,Any}[]
+    for (index,term) in enumerate(terms)
+        program_index = index - 1
+        events = String[]
+        scope = String[]
+        first_graph = length(graphs)
+        walk_wire(term) do node,path
+            row = sites[(program_index,Tuple(path))]
+            push!(events,row["event_ref"])
+            push!(scope,row["slot_bindings_ref"])
+            construct = false
+            if node["kind"] == "Call"
+                op = node["operator"]
+                descriptor = get(registry[op],"descriptor",nothing)
+                construct = (haskey(definitions,op) || (!isnothing(descriptor) && descriptor["kind"] != "Atom"))
+            end
+            row["source_kind"] = construct ? "constructed" : "observed"
+            if construct
+                id = row["occurrence_id"]
+                parents = [sites[(program_index,(path...,arg-1))]["occurrence_id"] for arg in eachindex(node["args"])]
+                push!(graphs,Dict("id"=>id,"operator"=>node["operator"],"parents"=>parents,
+                    "scope"=>row["slot_bindings_ref"]))
+            end
+        end
+        reverse!(@view graphs[first_graph+1:end])
+        sort = wire_sort(term,registry;slots=sorts)
+        (intent == "symbolic" || intent == "effect" && sort == "Relation" ||
+            intent == "relation" && startswith(sort,"rel_") || intent == "program" && startswith(sort,"prog_")) ||
+            error("Program return sort disagrees with its frozen intent")
+        push!(contexts,Dict("program_index"=>program_index,"sort"=>sort,
+            "event_refs"=>unique!(events),"scope_refs"=>unique!(scope)))
+    end
+    object = Dict("schema_version"=>3,"intent"=>intent,"consumer"=>consumer,
+        "obligation_refs"=>collect(obligation_refs),"programs"=>contexts,"constructions"=>graphs)
+    return sources,object
 end
 
 function stitch_blob(job_dir, manifest, field)
@@ -153,6 +205,11 @@ function read_stitch_rounds(job_dir, output_dir)
     entries = stitch_input(job_dir, manifest, "initial_library")
     text = stitch_input(job_dir, manifest, "programs")
     origins = stitch_input(job_dir, manifest, "origins")
+    context = stitch_input(job_dir, manifest, "semantic_context")
+    expected_origins, expected_context = describe_learning_context(signature,entries,text,origins,
+        manifest["slot_context"]; intent=context["intent"], consumer=context["consumer"],
+        obligation_refs=context["obligation_refs"])
+    origins == expected_origins && context == expected_context || error("Semantic context differs from the frozen derivation")
     policy = stitch_policy(String(stitch_blob(job_dir, manifest, "config")))
     paths = filter(name -> occursin(r"^round-[0-9]{6,}\z", name), readdir(output_dir))
     sort!(paths; by=name -> parse(Int, name[7:end]))
@@ -209,12 +266,15 @@ function read_stitch_rounds(job_dir, output_dir)
     summary = isfile(summary_path) ? read_json(summary_path) : nothing
     if !isnothing(summary)
         summary["protocol_version"] == LEARN_PROTOCOL && summary["input_sha256"] == input_sha &&
-            summary["effective_policy"] == policy && all(isnothing, values(summary["effective_limits"])) ||
+            summary["effective_policy"] == policy &&
+            summary["effective_search_options"] == effective_stitch_options(policy) &&
+            all(isnothing, values(summary["effective_limits"])) ||
             error("Learning summary does not match the frozen policy")
         refs = summary["scope_refs"]
         all(refs[key] == manifest[field * "_file"]["sha256"] for (key,field) in
             (("signature","signature"),("programs","programs"),("origins","origins"),
-             ("base_library","initial_library"),("equations","rules"),("policy","config"))) ||
+             ("base_library","initial_library"),("equations","rules"),("policy","config"),
+             ("semantic_context","semantic_context"))) ||
             error("Learning summary does not match the frozen inputs")
         all(refs[key] == manifest["engine_pin"][key * "_sha256"] for key in ("binary","build")) ||
             error("Learning summary has a different worker identity")
@@ -227,6 +287,20 @@ function read_stitch_rounds(job_dir, output_dir)
             summary["search_rounds"] == length(verified) && isnothing(summary["interrupted_phase"]))) ||
             error("Unproved fixed point")
     end
-    return (; manifest, signature, verified, input_sha, entries, text, origins, summary,
+    return (; manifest, signature, verified, input_sha, entries, text, origins, context, summary,
         checkpoint_digests, policy)
+end
+
+function effective_stitch_options(policy)
+    options = copy(policy["search_options"])
+    options["max_arity"] = policy["max_arity"]
+    for mode in ("freeze_rule","lower_bound")
+        options[mode] = options[mode] != "off"
+    end
+    if options["allow_useless_vars"]
+        for name in ("opt_dominance_reuse","opt_useless_frozen","opt_useless_inline")
+            options[name] = false
+        end
+    end
+    return options
 end

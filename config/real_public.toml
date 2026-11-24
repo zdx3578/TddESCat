@@ -1,4 +1,4 @@
-schema_version = 1
+schema_version = 2
 run_name = "phase1-public"
 run_root = "../runs"
 
@@ -19,9 +19,6 @@ batch_confirmed_events = 16
 context_radii = [1, 2, 4]
 allow_full_frame_context = true
 history_lengths = [0, 1, 2, 4, 8]
-max_guard_atoms = 4
-max_parameter_term_nodes = 7
-max_guard_candidates = 4096
 max_action_coordinates = 10000
 
 [execution]

@@ -53,16 +53,14 @@ function prior_trials(config)
     return (; events,pairs,trials)
 end
 
-function small_components(frame)
-    return filter(shape -> length(shape) <= 192, color_components(frame).groups)
-end
+public_components(frame) = sort!(color_components(frame).groups; by=shape->(length(shape),anchor(shape)))
 
 function fit_joint_condition(rule, trials, limits)
     chosen = []
     for trial in trials
         trial.action["id"] == rule.action_id || continue
         row = trial.sample
-        groups = small_components(row.before)
+        groups = public_components(row.before)
         evaluation = evaluate_joint_rule(rule,row.before,groups,enclosure_pairs(groups),trial.action)
         evaluation.truth == proven || continue
         assessed = measure_joint((model=rule, fragments=evaluation.fragments),row.after)
@@ -84,14 +82,13 @@ function fit_joint_condition(rule, trials, limits)
     bindings = [isnothing(move_index) ? nothing : MotionBinding(r.fragments[move_index].basis,
         r.fragments[move_index].value) for r in chosen]
     delta = isnothing(move_index) ? (0,0) : Tuple(effect.values)
-    work = get(limits,:max_guard_work,4096)
-    pool = predicate_pool(rows,effect.template,delta; max_atoms=work,
+    pool = predicate_pool(rows,effect.template,delta;
         context_radii=get(limits,:context_radii,(1,2,4)),
         allow_full_frame=get(limits,:allow_full_frame,true),
         history_lengths=get(limits,:history_lengths,(1,)))
-    test = (atom,i)->evaluate_predicate(atom,rows[i].before,bindings[i],delta,rows[i].previous_actions)
-    found = search_guards(ids,support,broken,pool.pool,test;
-        max_atoms=get(limits,:max_guard_atoms,2),max_work=work)
+    components = [color_components(row.before) for row in rows]
+    test = (atom,i)->evaluate_predicate(atom,rows[i].before,bindings[i],delta,rows[i].previous_actions,components[i])
+    found = search_guards(ids,support,broken,pool.pool,test)
     updated = GuardSearch(found.atoms,found.support,found.excluded,found.unresolved,
         found.complete && pool.complete,found.feasible,found.visited)
     return ActiveMechanism(rule,updated,ids[broken],unknowns)
@@ -153,7 +150,7 @@ end
 
 function public_action_candidates(observation, max_action_coordinates)
     frame = last(observation.frames)
-    groups = small_components(frame)
+    groups = public_components(frame)
     enclosure = enclosure_pairs(groups)
     actions = Dict{String,Int}[]
     click_count = 0
@@ -184,7 +181,7 @@ function enabled_condition(knowledge, item, current, history)
     for part in selected, (x,y,_) in part.basis
         result[y+1,x+1] = UInt8(part.expected)
     end
-    groups = small_components(result)
+    groups = public_components(result)
     enclosures = enclosure_pairs(groups)
     for other in knowledge.active
         isempty(other.condition.atoms) && continue
@@ -404,7 +401,8 @@ function online_learn!(knowledge, config, store, pairs, repo_root; existing_job=
     else
         freeze_stitch_job(input,basename(job),evidence,base,corpus.signature,
             corpus.programs,corpus.origins,corpus.slots;repo_root,config_text,
-            engine_identity=supervision["engine_identity"],input_scope_complete=corpus.complete)
+            engine_identity=supervision["engine_identity"],input_scope_complete=corpus.complete,
+            intent="effect", consumer="joint-mechanisms", obligation_refs=[row[2] for row in batch["inputs"]])
     end
     status = wait_worker(job,store_path(store))
     status["policy_sha256"] == manifest["config_file"]["sha256"] == supervision["policy_sha256"] ||
@@ -431,8 +429,7 @@ function online_learn!(knowledge, config, store, pairs, repo_root; existing_job=
         current.publication : publish_stitch!(publication_dir,checked;current_evidence=evidence)
     published = read_published_stitch(publication_dir;publication=digest)
     knowledge.definition_depths = definition_depths(published.snapshot.entries)
-    term_limit = isnothing(config.search) ? 7 : config.search["max_parameter_term_nodes"]
-    incoming = read_joint_mechanisms(published,corpus,pairs; term_limit)
+    incoming = read_joint_mechanisms(published,corpus,pairs)
     composing = !isnothing(config.planning) && haskey(config.planning,"goal")
     known = Dict(mechanism_key(rule;composing)=>rule for rule in knowledge.rules)
     for rule in incoming
@@ -545,6 +542,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             model = item.chosen.model
             decision_record["mechanism_version"] = active_id(model)
             decision_record["definition_refs"] = model.rule.references
+            decision_record["binding_views"] = binding_view.(model.rule.effects)
         end
         atomic_json(store_path(rec.store,"decisions",id * ".json"),decision_record)
         args = item.action["id"] == 6 ? (x=item.action["x"],y=item.action["y"]) : (;)

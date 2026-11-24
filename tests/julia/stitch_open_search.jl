@@ -7,7 +7,7 @@ const PROFILE = TOML.parsefile(EXPERIMENT)
 const POLICY = normpath(joinpath(dirname(EXPERIMENT), PROFILE["stitch_policy"]))
 const EMPTY = LibrarySnapshot()
 
-signature_for(name, sorts, ops) = Dict("schema_version"=>1, "signature_id"=>name,
+signature_for(name, sorts, ops) = Dict("schema_version"=>3, "signature_id"=>name,
     "sorts"=>[Dict("id"=>sort) for sort in sorts], "operators"=>ops)
 slots_for(sorts) = [Dict("index"=>i-1,"sort"=>sort,"time_role"=>"timeless",
     "role_constraints"=>[]) for (i,sort) in enumerate(sorts)]
@@ -47,6 +47,7 @@ function codec_fixture(width)
     sig = signature_for("codec",["Atom"],[symbol("atom",String[]),symbol("wrap",["Atom"]),
         symbol("combine",["Atom","Atom"])])
     registry, known = TC.registry_from(sig,[])
+    definitions["semantic_digest"] = TC.definition_semantics(body,registry)
     TC.check_register!(registry,known,"fn_0",definitions)
     return definitions, registry
 end

@@ -51,7 +51,7 @@ marker_color = {marker_color}
 {gap}
 """
     path.write_text(
-        f'''schema_version = 1
+        f'''schema_version = 2
 run_name = "supervised"
 run_root = "."
 [environment]
@@ -70,9 +70,6 @@ batch_confirmed_events = {batch}
 context_radii = [1, 2, 4]
 allow_full_frame_context = true
 history_lengths = [0, 1, 2, 4]
-max_guard_atoms = 2
-max_parameter_term_nodes = 7
-max_guard_candidates = 2048
 max_action_coordinates = 512
 [execution]
 max_public_commands = {budget}

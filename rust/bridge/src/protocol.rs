@@ -1,3 +1,4 @@
+use crate::codec::{Registry, Term};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
@@ -8,7 +9,7 @@ use std::{
     path::{Component, Path},
 };
 
-pub const PROTOCOL: &str = "tddescat.learn.v2";
+pub const PROTOCOL: &str = "tddescat.learn.v3";
 pub const BUILD_SHA: &str = env!("TDDESC_BUILD_SHA256");
 pub const CODEC: &str = "typed-free-slots.v1";
 
@@ -121,6 +122,7 @@ pub struct Manifest {
     pub signature_file: FileRef,
     pub programs_file: FileRef,
     pub origins_file: FileRef,
+    pub semantic_context_file: FileRef,
     pub initial_library_file: FileRef,
     pub rules_file: FileRef,
     pub config_file: FileRef,
@@ -148,6 +150,7 @@ impl Manifest {
             "signature": self.signature_file.sha256,
             "programs": self.programs_file.sha256,
             "origins": self.origins_file.sha256,
+            "semantic_context": self.semantic_context_file.sha256,
             "base_library": self.initial_library_file.sha256,
             "equations": self.rules_file.sha256,
             "policy": self.config_file.sha256,
@@ -288,12 +291,13 @@ pub struct Origin {
     pub interpretation_ref: String,
     pub slot_bindings_ref: String,
     pub support_ref: String,
+    pub source_kind: String,
 }
 
 pub type OriginSites = BTreeMap<Vec<usize>, String>;
 
 impl Origin {
-    pub fn index(origins: Vec<Origin>, sites: &[BTreeSet<Vec<usize>>]) -> Result<Vec<OriginSites>> {
+    pub fn index(origins: &[Origin], sites: &[BTreeSet<Vec<usize>>]) -> Result<Vec<OriginSites>> {
         let mut index = vec![BTreeMap::new(); sites.len()];
         let mut ids = BTreeSet::new();
         for o in origins {
@@ -303,10 +307,10 @@ impl Origin {
                     && identifier(&o.occurrence_id)
                     && ids.insert(o.occurrence_id.clone())
                     && [
-                        o.event_ref,
-                        o.interpretation_ref,
-                        o.slot_bindings_ref,
-                        o.support_ref
+                        &o.event_ref,
+                        &o.interpretation_ref,
+                        &o.slot_bindings_ref,
+                        &o.support_ref
                     ]
                     .into_iter()
                     .all(|name| !name.is_empty()),
@@ -314,7 +318,7 @@ impl Origin {
             );
             ensure!(
                 index[o.program_index]
-                    .insert(o.expression_path, o.occurrence_id)
+                    .insert(o.expression_path.clone(), o.occurrence_id.clone())
                     .is_none(),
                 "duplicate occurrence position"
             );
@@ -327,6 +331,128 @@ impl Origin {
             "a syntax occurrence is missing"
         );
         Ok(index)
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SemanticContext {
+    schema_version: u64,
+    intent: String,
+    consumer: String,
+    obligation_refs: Vec<String>,
+    programs: Vec<ProgramScope>,
+    constructions: Vec<Construction>,
+}
+
+#[derive(Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct ProgramScope {
+    program_index: usize,
+    sort: String,
+    event_refs: Vec<String>,
+    scope_refs: Vec<String>,
+}
+
+#[derive(Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct Construction {
+    id: String,
+    operator: String,
+    parents: Vec<String>,
+    scope: String,
+}
+
+impl SemanticContext {
+    pub fn check(&self, terms: &[Term], registry: &Registry, origins: &[Origin]) -> Result<()> {
+        ensure!(
+            self.schema_version == 3
+                && identifier(&self.consumer)
+                && matches!(
+                    self.intent.as_str(),
+                    "effect" | "relation" | "program" | "symbolic"
+                )
+                && self
+                    .obligation_refs
+                    .iter()
+                    .all(|reference| identifier(reference))
+                && self.obligation_refs.iter().collect::<BTreeSet<_>>().len()
+                    == self.obligation_refs.len()
+                && self.programs.len() == terms.len(),
+            "invalid learning intent or semantic context"
+        );
+        let sites = origins
+            .iter()
+            .map(|origin| {
+                (
+                    (origin.program_index, origin.expression_path.as_slice()),
+                    origin,
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        let mut constructions = Vec::new();
+        for (i, (term, declared)) in terms.iter().zip(&self.programs).enumerate() {
+            let sort = registry.sorts[registry.infer(term, None)? as usize].clone();
+            ensure!(
+                match self.intent.as_str() {
+                    "relation" => sort.starts_with("rel_"),
+                    "program" => sort.starts_with("prog_"),
+                    "effect" => sort == "Relation",
+                    _ => true,
+                },
+                "program result is outside the frozen learning intent"
+            );
+            let mut scope = ProgramScope {
+                program_index: i,
+                sort,
+                event_refs: Vec::new(),
+                scope_refs: Vec::new(),
+            };
+            let first = constructions.len();
+            let mut invalid = false;
+            let mut seen_events = BTreeSet::new();
+            let mut seen_scopes = BTreeSet::new();
+            term.walk(&mut Vec::new(), &mut |path, node| {
+                let origin = sites[&(i, path.as_slice())];
+                if seen_events.insert(&origin.event_ref) {
+                    scope.event_refs.push(origin.event_ref.clone());
+                }
+                if seen_scopes.insert(&origin.slot_bindings_ref) {
+                    scope.scope_refs.push(origin.slot_bindings_ref.clone());
+                }
+                if let Term::Call { operator, args } = node
+                    && registry.is_constructed(operator)
+                {
+                    invalid |= origin.source_kind != "constructed";
+                    let mut child = path.clone();
+                    child.push(0);
+                    let parents = (0..args.len())
+                        .map(|index| {
+                            child[path.len()] = index;
+                            sites[&(i, child.as_slice())].occurrence_id.clone()
+                        })
+                        .collect();
+                    constructions.push(Construction {
+                        id: origin.occurrence_id.clone(),
+                        operator: operator.clone(),
+                        parents,
+                        scope: origin.slot_bindings_ref.clone(),
+                    });
+                } else {
+                    invalid |= origin.source_kind != "observed";
+                }
+            });
+            ensure!(
+                !invalid && scope == *declared,
+                "semantic source scope differs"
+            );
+            constructions[first..].reverse();
+        }
+        ensure!(
+            constructions == self.constructions,
+            "frozen construction provenance differs"
+        );
+        Ok(())
     }
 }
 

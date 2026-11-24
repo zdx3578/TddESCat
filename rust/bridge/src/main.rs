@@ -151,7 +151,12 @@ impl Job {
                 paths
             })
             .collect::<Vec<_>>();
-        let origins = Origin::index(manifest.origins_file.json(&root)?, &paths)?;
+        let origins = manifest.origins_file.json::<Vec<Origin>>(&root)?;
+        let sites = Origin::index(&origins, &paths)?;
+        manifest
+            .semantic_context_file
+            .json::<protocol::SemanticContext>(&root)?
+            .check(&original, &registry, &origins)?;
         ensure!(
             fs::read_dir(&args.output)?.next().is_none(),
             "output directory must be empty"
@@ -163,7 +168,7 @@ impl Job {
             search_args,
             registry,
             original,
-            origins,
+            origins: sites,
             library,
             order,
             old_cost,
@@ -211,8 +216,7 @@ impl Job {
             }
             let accepted = result.found.is_some();
             if let Some((name, def)) = result.found {
-                self.registry
-                    .register(&name, &def.parameter_sorts, &def.result_sort)?;
+                self.registry.register_definition(&name, &def)?;
                 self.order.push(name.clone());
                 self.library.insert(name, def.clone());
                 new_cost = new_cost

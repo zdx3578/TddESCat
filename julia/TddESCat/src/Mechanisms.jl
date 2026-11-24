@@ -64,22 +64,23 @@ function typed_motion_signature(deltas)
     primitives = evidence_signature()
     operators = [
         Dict("symbol"=>name, "inputs"=>op.inputs, "output"=>op.output,
-             "purity"=>"pure", "read_rule"=>op.reads .- 1, "binder_children"=>Int[])
+             "purity"=>"pure", "read_rule"=>op.reads .- 1, "binder_children"=>Int[],
+             "semantic_version"=>"finite-pixel-v1")
         for (name, op) in sort!(collect(primitives); by=first)
     ]
     values = sort!(unique([value for delta in deltas for value in delta]))
     append!(operators, [
         Dict("symbol"=>"i" * string(value), "inputs"=>String[], "output"=>"Integer",
-             "purity"=>"pure", "read_rule"=>Int[], "binder_children"=>Int[])
+             "purity"=>"pure", "read_rule"=>Int[], "binder_children"=>Int[], "semantic_version"=>"integer-v1")
         for value in values
     ])
     append!(operators, [
         Dict("symbol"=>"color" * string(value), "inputs"=>String[], "output"=>"Color",
-             "purity"=>"pure", "read_rule"=>Int[], "binder_children"=>Int[])
+             "purity"=>"pure", "read_rule"=>Int[], "binder_children"=>Int[], "semantic_version"=>"color-v1")
         for value in 0:15
     ])
-    return Dict("schema_version"=>1, "signature_id"=>"frame-motion-v1",
-        "sorts"=>[Dict("id"=>name) for name in ("Integer", "Color", "Coord", "Delta", "RoleBefore", "RoleAfter", "Relation")],
+    return Dict("schema_version"=>3, "signature_id"=>"frame-motion-v1",
+        "sorts"=>[Dict{String,Any}("id"=>name) for name in ("Integer", "Color", "Coord", "Delta", "RoleBefore", "RoleAfter", "Relation")],
         "operators"=>operators)
 end
 

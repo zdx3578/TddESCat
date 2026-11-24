@@ -39,7 +39,7 @@ pub fn import(
             "missing or non-topological dependency"
         );
         d.check(registry)?;
-        registry.register(&item.stable_id, &d.parameter_sorts, &d.result_sort)?;
+        registry.register_definition(&item.stable_id, &d)?;
         total = total
             .checked_add(d.body.cost())
             .context("library cost overflow")?;
@@ -395,13 +395,14 @@ pub fn search(
             parameter_sorts,
             result_sort,
             body_cost: body.cost().to_string(),
+            semantic_digest: registry.definition_semantics(&body)?,
             dependencies: dependencies(&body),
             body,
             pattern_text,
             closed_lambda_text,
         };
         def.check(&registry)?;
-        registry.register(&temporary_name, &def.parameter_sorts, &def.result_sort)?;
+        registry.register_definition(&temporary_name, &def)?;
         Arc::make_mut(data.egraph.analysis.typed.as_mut().unwrap()).ports = registry.ports.clone();
         let apply_phase = resources::phase(Phase::Apply);
         data.egraph = cost::build_rewritten_egraph(

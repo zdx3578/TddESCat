@@ -15,7 +15,7 @@ from .contracts import Contracts
 from .isolation import sandbox
 from .run import write_json
 
-LEARNING_PROTOCOL = "tddescat.learn.v2"
+LEARNING_PROTOCOL = "tddescat.learn.v3"
 TEST_FAULTS = (
     "before-first-commit",
     "after-first-commit",
@@ -108,18 +108,25 @@ def run_worker(
     manifest = json.loads(manifest_file.read_bytes())
     contracts = Contracts(root / "protocol")
     contracts.validate("learn_job", manifest)
-    config_file = manifest["config_file"]
-    config_path = (job / config_file["path"]).resolve(strict=True)
-    if not config_path.is_relative_to(job):
-        raise ValueError("Frozen worker config path escaped job")
-    config_data = config_path.read_bytes()
-    if (
-        len(config_data) != config_file["bytes"]
-        or hashlib.sha256(config_data).hexdigest() != config_file["sha256"]
-    ):
-        raise ValueError("Frozen worker config hash differs")
+
+    def frozen_bytes(name):
+        descriptor = manifest[f"{name}_file"]
+        path = (job / descriptor["path"]).resolve(strict=True)
+        if not path.is_relative_to(job):
+            raise ValueError(f"Frozen worker {name} path escaped job")
+        data = path.read_bytes()
+        if (
+            len(data) != descriptor["bytes"]
+            or hashlib.sha256(data).hexdigest() != descriptor["sha256"]
+        ):
+            raise ValueError(f"Frozen worker {name} hash differs")
+        return data
+
+    config_data = frozen_bytes("config")
+    for name in ("signature", "origins", "semantic_context"):
+        contracts.validate(name, json.loads(frozen_bytes(name)))
     policy = tomllib.loads(config_data.decode())
-    policy_sha = config_file["sha256"]
+    policy_sha = manifest["config_file"]["sha256"]
     if policy.get("schema_version") != 2 or ("budget" in policy):
         raise ValueError("Expected the schema 2 learning policy")
     if expected_policy is not None and policy_sha != expected_policy:

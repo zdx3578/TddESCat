@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "program_index": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "expression_path": {
+        "type": "array",
+        "items": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "occurrence_id": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+        "maxLength": 256
+      },
+      "event_ref": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+        "maxLength": 256
+      },
+      "interpretation_ref": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+        "maxLength": 256
+      },
+      "slot_bindings_ref": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+        "maxLength": 256
+      },
+      "support_ref": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+        "maxLength": 256
+      },
+      "source_kind": {
+        "enum": [
+          "observed",
+          "constructed"
+        ]
+      }
+    },
+    "required": [
+      "program_index",
+      "expression_path",
+      "occurrence_id",
+      "event_ref",
+      "interpretation_ref",
+      "slot_bindings_ref",
+      "support_ref",
+      "source_kind"
+    ],
+    "additionalProperties": false
+  },
+  "$id": "https://schemas.tddescat.org/v3/origins.schema.json"
+}

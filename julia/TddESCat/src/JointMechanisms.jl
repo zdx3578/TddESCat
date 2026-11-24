@@ -94,14 +94,14 @@ function projection_references(indices, original, calls, occurrences)
     return sort!(collect(evidence))
 end
 
-function joint_model(compiled, program, original, definitions, calls, occurrences, before, after, term_limit)
+function joint_model(compiled, program, original, definitions, calls, occurrences, before, after)
     isempty(calls) && return nothing
     expanded = expand_library_term(program, definitions)
     effects = compiled.output.effects
     terms = flatten_effect_terms(expanded)
     length(terms) == length(effects) || error("Published effects differ from the certified relation")
     int_value(term) = term["value"]::Int
-    enclosed = enclosure_pairs(small_components(before))
+    enclosed = enclosure_pairs(public_components(before))
     enclosed_targets = [item.target for item in enclosed]
     models = EffectModel[]
     moving = MotionShape[]
@@ -110,7 +110,6 @@ function joint_model(compiled, program, original, definitions, calls, occurrence
         term == expected || error("A published effect does not use its typed binding")
         before_role = effect.before
         parameters = term["args"][3:end]
-        all(value->wire_cost(value) <= term_limit,parameters) || return nothing
         values = effect.family in (:translation,:selection) ? int_value.(only(parameters)["args"]) : int_value.(parameters)
         if effect.family == :translation
             push!(moving, before_role)
@@ -152,7 +151,7 @@ function decode_model_term(effect, pre, post)
     return convert(effect_program(effect, Slot(pre), Slot(post)))
 end
 
-function read_joint_mechanisms(published, corpus, pairs; term_limit=7)
+function read_joint_mechanisms(published, corpus, pairs)
     bundle = published.bundle
     bundle["source_programs"] == corpus.programs && bundle["origins"] == corpus.origins ||
         error("Released training sources differ from public evidence")
@@ -165,11 +164,13 @@ function read_joint_mechanisms(published, corpus, pairs; term_limit=7)
         calls = filter(call -> call["program_index"] == index - 1, bundle["calls"])
         original = decode_program(corpus.programs[index],registry)
         learned = joint_model(compiled,decode_program(text,registry),original,definitions,calls,
-            occurrences,frames[compiled.output.event_id]...,term_limit)
+            occurrences,frames[compiled.output.event_id]...)
         isnothing(learned) || append!(models,learned)
     end
     return models
 end
+
+binding_view(model) = model.enclosed ? "geometry-support" : "color-support"
 
 function model_binding(model, groups, enclosed_targets)
     if model.enclosed
@@ -177,9 +178,6 @@ function model_binding(model, groups, enclosed_targets)
     else
         expected = support_grid(model.template).canonical
         candidates = filter(s -> support_grid(s).canonical == expected, groups)
-        if isempty(candidates)
-            candidates = filter(s -> geometry(s) == geometry(model.template), groups)
-        end
     end
     return length(candidates) == 1 ? only(candidates) : nothing
 end
@@ -295,7 +293,7 @@ function judge_joint(models, denied, before, action)
 end
 
 function measure_joint(choice, after)
-    groups = small_components(after)
+    groups = public_components(after)
     enclosure = enclosure_pairs(groups)
     actual = Dict{String,Any}()
     assessments = Dict{String,String}()

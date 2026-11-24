@@ -49,7 +49,7 @@ def source_manifest(catalog, games, ids):
 
 def write_episode_config(path, url, game_id, actions_per_game):
     path.write_text(
-        f"""schema_version = 1
+        f"""schema_version = 2
 run_name = "{game_id}"
 run_root = "."
 

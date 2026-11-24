@@ -27,14 +27,16 @@ predicate_key(p) = JSON.json(predicate_record(p))
 
 position_offsets(shape) = [(x, y) for (x, y, _) in shape_template(shape)]
 
-function evaluate_predicate(p::ComponentColor, frame, binding, delta, history)
-    parts = color_components(frame)
+function evaluate_predicate(p::ComponentColor, frame, binding, delta, history, parts=color_components(frame))
     x, y = p.at
     checkbounds(Bool, frame, y + 1, x + 1) || return unknown_truth
     shape = parts.groups[parts.owner[y + 1, x + 1]]
     anchor(shape) == p.at && position_offsets(shape) == p.offsets || return unknown_truth
     return frame[y + 1, x + 1] == p.pigment ? proven : disproven
 end
+
+evaluate_predicate(p::MotionPredicate, frame, binding, delta, history, parts) =
+    evaluate_predicate(p,frame,binding,delta,history)
 
 function destination_entry(frame, binding, delta)
     isnothing(binding) && return nothing
@@ -73,13 +75,13 @@ function in_context(shape, binding, radius)
         y0 - radius <= cell[2] <= ymax + radius, shape)
 end
 
-function predicate_pool(samples, template, delta; max_atoms=192, context_radii=(1, 2, 4),
+function predicate_pool(samples, template, delta; max_atoms=nothing, context_radii=(1, 2, 4),
                         allow_full_frame=true, history_lengths=(1,))
     predicates = Dict{String,MotionPredicate}()
     function add!(predicate)
         key = predicate_key(predicate)
         haskey(predicates, key) && return true
-        length(predicates) >= max_atoms && return false
+        !isnothing(max_atoms) && length(predicates) >= max_atoms && return false
         predicates[key] = predicate
         return true
     end
@@ -97,7 +99,6 @@ function predicate_pool(samples, template, delta; max_atoms=192, context_radii=(
                 return (pool=collect(values(predicates)), complete=false)
         end
         for shape in color_components(sample.before).groups
-            1 <= length(shape) <= 96 || continue
             allow_full_frame || any(r -> in_context(shape, bound, r), context_radii) || continue
             add!(ComponentColor(anchor(shape), position_offsets(shape), first(shape)[3])) ||
                 return (pool=collect(values(predicates)), complete=false)
@@ -126,23 +127,26 @@ struct GuardSearch
     visited::Int
 end
 
-function search_guards(ids, support, broken, pool, evaluate; max_atoms=2, max_work=4096)
+function search_guards(ids, support, broken, pool, evaluate; max_atoms=nothing, max_work=nothing)
     S, B = BitSet(support), BitSet(broken)
     ideals = []
+    distinct = Set{Tuple{BitSet,BitSet}}()
     for predicate in sort(pool; by=predicate_key)
         t = BitSet(i for i in S if evaluate(predicate, i) == proven)
         f = BitSet(i for i in B if evaluate(predicate, i) == disproven)
-        isempty(t) || isempty(f) || push!(ideals, (predicate=predicate, t=t, f=f))
+        (isempty(t) || isempty(f) || (t,f) in distinct) && continue
+        push!(distinct,(t,f))
+        push!(ideals,(predicate=predicate,t=t,f=f))
     end
     best = Ref{Any}(nothing)
-    remaining = max_work
+    visited = 0
     complete = true
     function visit(first, selected, survivors, excluded)
-        if remaining == 0
+        if !isnothing(max_work) && visited == max_work
             complete = false
             return
         end
-        remaining -= 1
+        visited += 1
         if excluded == B
             rank = (-length(survivors), length(selected), Tuple(selected))
             if isnothing(best[]) || isless(rank, best[].rank)
@@ -150,9 +154,15 @@ function search_guards(ids, support, broken, pool, evaluate; max_atoms=2, max_wo
             end
             return
         end
-        length(selected) < max_atoms || return
+        !isnothing(max_atoms) && length(selected) == max_atoms && return
+        if !isnothing(best[])
+            rank = best[].rank
+            (-length(survivors) > rank[1] || -length(survivors) == rank[1] &&
+                length(selected) >= rank[2]) && return
+        end
         for index in first:length(ideals)
             candidate = ideals[index]
+            issubset(candidate.f,excluded) && continue
             new_support = intersect(survivors, candidate.t)
             isempty(new_support) && continue
             visit(index + 1, [selected; index], new_support, union(excluded, candidate.f))
@@ -160,7 +170,6 @@ function search_guards(ids, support, broken, pool, evaluate; max_atoms=2, max_wo
         end
     end
     isempty(S) || visit(1, Int[], S, BitSet())
-    visited = max_work - remaining
     if isnothing(best[])
         return GuardSearch(MotionPredicate[], String[], String[], ids[collect(B)], complete, false, visited)
     end
@@ -181,8 +190,8 @@ struct MotionClaim
     unknown_events::Vector{String}
 end
 
-function fit_motion_claim(definition, action, template, parameter, samples; max_guard_atoms=2,
-                          max_guard_work=4096, context_radii=(1, 2, 4), allow_full_frame=true,
+function fit_motion_claim(definition, action, template, parameter, samples; max_guard_atoms=nothing,
+                          max_guard_work=nothing, context_radii=(1, 2, 4), allow_full_frame=true,
                           history_lengths=(1,))
     rows = [sample for sample in samples if sample.action == action]
     ids = [row.event_id for row in rows]
@@ -198,7 +207,9 @@ function fit_motion_claim(definition, action, template, parameter, samples; max_
         generated = predicate_pool(rows, template, parameter.value;
             max_atoms=max_guard_work, context_radii, allow_full_frame, history_lengths)
         bound = [bind_motion(row.before, template) for row in rows]
-        evaluate = (p, i) -> evaluate_predicate(p, rows[i].before, bound[i], parameter.value, rows[i].previous_actions)
+        components = [color_components(row.before) for row in rows]
+        evaluate = (p, i) -> evaluate_predicate(p, rows[i].before, bound[i], parameter.value,
+            rows[i].previous_actions,components[i])
         result = search_guards(ids, S, B, generated.pool, evaluate; max_atoms=max_guard_atoms, max_work=max_guard_work)
         guard = GuardSearch(result.atoms, result.support, result.excluded, result.unresolved,
             generated.complete && result.complete, result.feasible, result.visited)

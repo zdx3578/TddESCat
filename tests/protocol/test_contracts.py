@@ -15,7 +15,7 @@ class SchemaContracts(unittest.TestCase):
     def test_job_files_and_exact_versions(self):
         descriptor = {"path": "input/signature.json", "sha256": "1" * 64, "bytes": 128}
         job = {
-            "protocol_version": "tddescat.learn.v2",
+            "protocol_version": "tddescat.learn.v3",
             "codec_version": "typed-free-slots.v1",
             "job_id": "job-1",
             "evidence_snapshot_id": "snapshot-1",
@@ -26,6 +26,7 @@ class SchemaContracts(unittest.TestCase):
                     "signature",
                     "programs",
                     "origins",
+                    "semantic_context",
                     "initial_library",
                     "rules",
                     "config",
@@ -41,14 +42,15 @@ class SchemaContracts(unittest.TestCase):
                 "rust_version": "1.90.0",
                 "build_sha256": "5" * 64,
                 "binary_sha256": "6" * 64,
-                "protocol_version": "tddescat.learn.v2",
+                "protocol_version": "tddescat.learn.v3",
             },
         }
         self.contracts.validate("learn_job", job)
-        with self.assertRaises(ValidationError):
-            self.contracts.validate(
-                "learn_job", {**job, "protocol_version": "tddescat.learn.v1"}
-            )
+        for version in ("tddescat.learn.v1", "tddescat.learn.v2"):
+            with self.subTest(version=version), self.assertRaises(ValidationError):
+                self.contracts.validate(
+                    "learn_job", {**job, "protocol_version": version}
+                )
         for path in ("/tmp/config", "../config", "a/../config", "a/./config", "a//b"):
             with self.subTest(path=path), self.assertRaises(ValidationError):
                 modified = copy.deepcopy(job)
@@ -77,6 +79,7 @@ class SchemaContracts(unittest.TestCase):
             "closed_lambda_text": "(lam (copy $0))",
             "dependencies": [],
             "body_cost": "2",
+            "semantic_digest": "1" * 64,
         }
         self.contracts.validate("definition", definition)
         definition["body"]["args"][0]["kind"] = "Slot"

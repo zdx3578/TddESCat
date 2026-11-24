@@ -15,16 +15,40 @@ function definition_depths(entries)
 end
 
 function definition_id(definition)
-    signature = [definition["parameter_sorts"], definition["result_sort"], wire_text(definition["body"])]
-    return "lib_" * content_hash(JSON.json(signature))
+    material = [definition["parameter_sorts"], definition["result_sort"], wire_text(definition["body"]),
+        definition["semantic_digest"]]
+    return "lib_" * semantic_hash(material)
 end
 
 function registry_from(signature, entries)
+    signature["schema_version"] == 3 || error("Unsupported semantic signature")
     registry = Dict{String,Any}()
     definitions = Dict{String,Any}()
+    sorts = Set{String}()
+    for sort in signature["sorts"]
+        id = sort["id"]
+        valid_id(id) && id ∉ sorts || error("Invalid or repeated semantic sort")
+        if startswith(id,"rel_") || startswith(id,"prog_")
+            prefix, digest = split(id,'_';limit=2)
+            kind = prefix == "rel" ? "relation" : "program"
+            sort["descriptor"]["kind"] == kind && digest == semantic_hash(sort["descriptor"]) ||
+                error("Sort descriptor digest differs")
+        elseif haskey(sort,"descriptor")
+            error("Unexpected descriptor on a primitive sort")
+        end
+        push!(sorts,id)
+    end
     for op in signature["operators"]
         name = op["symbol"]
         haskey(registry, name) && error("Duplicate operator")
+        valid_id(op["semantic_version"]) && op["purity"] == "pure" && isempty(op["binder_children"]) &&
+            op["read_rule"] == collect(0:length(op["inputs"])-1) &&
+            all(in(sorts),op["inputs"]) && op["output"] in sorts || error("Invalid semantic operator")
+        if haskey(op,"descriptor")
+            name == "op_" * operator_digest(op) || error("Operator descriptor digest differs")
+        elseif startswith(name,"op_")
+            error("Missing descriptor on a semantic operator")
+        end
         registry[name] = op
     end
     for entry in entries
@@ -39,7 +63,10 @@ function check_register!(registry, definitions, id, definition)
     haskey(registry, id) && error("Definition name already in use")
     all(name -> haskey(definitions, name), definition["dependencies"]) || error("Definition dependency missing")
     decode_definition(definition, registry)
-    registry[id] = Dict("inputs" => definition["parameter_sorts"], "output" => definition["result_sort"])
+    digest = definition_semantics(definition["body"],registry)
+    definition["semantic_digest"] == digest || error("Definition semantic digest differs")
+    registry[id] = Dict("inputs" => definition["parameter_sorts"], "output" => definition["result_sort"],
+        "semantic_digest"=>digest)
     definitions[id] = definition
 end
 
@@ -75,9 +102,12 @@ function publish_library(base::LibrarySnapshot, result, manifest, signature;
         definition["dependencies"] = sort!([get(names, name, name) for name in definition["dependencies"]])
         definition["pattern_text"] = wire_text(definition["body"])
         definition["closed_lambda_text"] = lambda_text(definition["body"], definition["arity"])
+        definition["semantic_digest"] == definition_semantics(definition["body"],registry) ||
+            error("Definition semantic digest changed during publication")
         id = definition_id(definition)
         if haskey(stored, id)
-            stored[id]["body"] == definition["body"] || error("Definition content collision")
+            definition_id(stored[id]) == id && stored[id]["body"] == definition["body"] ||
+                error("Definition content collision")
         else
             check_register!(registry, stored, id, definition)
             push!(entries, Dict("stable_id" => id, "definition" => definition))
@@ -143,7 +173,7 @@ function publication_from(base, checkpoint, result; current_version, current_evi
         "slot_context"=>checkpoint.manifest["slot_context"], "library"=>accepted.snapshot.entries,
         "initial_library_count"=>length(base.entries), "new_definition_ids"=>sort!(unique!(collect(values(names)))),
         "definition_depths"=>depths, "verified_prefixes"=>prefixes,
-        "source_programs"=>checkpoint.text, "origins"=>checkpoint.origins,
+        "source_programs"=>checkpoint.text, "origins"=>checkpoint.origins, "semantic_context"=>checkpoint.context,
         "rewritten_programs"=>programs, "calls"=>calls, "proofs"=>[rename_proof(proof, names) for proof in result["proofs"]],
         "cost"=>cost)
 end
@@ -172,6 +202,11 @@ function verify_published_stitch(bundle)
     older = bundle["initial_library_count"]
     strict_integer(older) && 0 <= older <= length(entries) || error("Invalid frozen library boundary")
     old_registry, _ = registry_from(signature, entries[1:older])
+    context = bundle["semantic_context"]
+    origins, expected_context = describe_learning_context(signature,entries[1:older],texts,bundle["origins"],
+        bundle["slot_context"]; intent=context["intent"],consumer=context["consumer"],
+        obligation_refs=context["obligation_refs"])
+    origins == bundle["origins"] && context == expected_context || error("Published semantic derivation differs")
     for text in texts
         wire_sort(decode_program(text, old_registry), old_registry; slots)
     end

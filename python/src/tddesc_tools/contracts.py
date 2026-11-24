@@ -21,17 +21,17 @@ def references(node):
 
 class Contracts:
     def __init__(self, schema_dir: Path):
-        self.schemas = {
-            path.name.removesuffix(".schema.json"): json.loads(path.read_bytes())
+        documents = [
+            (path.name.removesuffix(".schema.json"), json.loads(path.read_bytes()))
             for path in sorted(schema_dir.rglob("*.schema.json"))
-        }
+        ]
+        self.schemas = dict(documents)
         if not self.schemas:
             raise ValueError(f"No schemas at {schema_dir}")
         registry = Registry().with_resources(
-            (schema["$id"], Resource.from_contents(schema))
-            for schema in self.schemas.values()
+            (schema["$id"], Resource.from_contents(schema)) for _, schema in documents
         )
-        for schema in self.schemas.values():
+        for _, schema in documents:
             Draft202012Validator.check_schema(schema)
             resolver = registry.resolver(base_uri=schema["$id"])
             for reference in references(schema):

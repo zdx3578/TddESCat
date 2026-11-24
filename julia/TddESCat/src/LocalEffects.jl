@@ -22,12 +22,10 @@ struct PublicEffects
 end
 
 effect_points(shape) = Set((x, y) for (x,y,_) in shape)
-shape_key(shape) = Tuple(shape_template(shape))
-
 function group_by_shape(groups)
-    by_shape = Dict{Tuple,Vector{MotionShape}}()
+    by_shape = Dict{MotionShape,Vector{MotionShape}}()
     for shape in groups
-        push!(get!(Vector{MotionShape}, by_shape, shape_key(shape)), shape)
+        push!(get!(Vector{MotionShape}, by_shape, shape_template(shape)), shape)
     end
     return by_shape
 end
@@ -45,10 +43,17 @@ function enclosure_pairs(groups)
         bottom = maximum(cell -> cell[2], surround)
         right > left + 1 && bottom > top + 1 || continue
         outline = effect_points(surround)
-        all(((x, y),) -> (x, y) in outline,
-            ((x,y) for y in top:bottom for x in left:right if x in (left,right) || y in (top,bottom))) || continue
+        center = (left + right) ÷ 2
+        interior = findfirst(y->(center,y) ∉ outline,top:bottom)
+        isnothing(interior) && continue
+        band = interior - 1
+        width,height = right-left+1,bottom-top+1
+        0 < 2band < min(width,height) || continue
+        length(outline) == width*height - (width-2band)*(height-2band) || continue
+        all(((x,y),)->min(x-left,right-x,y-top,bottom-y) < band,outline) || continue
         for enclosed in groups
-            all(cell -> left < cell[1] < right && top < cell[2] < bottom, enclosed) || continue
+            all(cell -> left+band <= cell[1] <= right-band &&
+                top+band <= cell[2] <= bottom-band,enclosed) || continue
             push!(pairs, (signal=surround, target=enclosed))
         end
     end
@@ -107,7 +112,7 @@ function possible_scene_transform(effects)
     return false
 end
 
-function observed_effects(previous, current; max_support_pixels=192)
+function observed_effects(previous, current)
     sample = motion_example(previous, current)
     action = current.observation.action
     frame_before = length(previous.observation.frames) - 1
@@ -121,16 +126,16 @@ function observed_effects(previous, current; max_support_pixels=192)
             effects, Pixel[], ["different_frame_domains"], public_delta, false, 0)
     end
     changed = Set((pixel.x, pixel.y) for pixel in frame_difference(before, after))
-    before_groups = filter(shape -> length(shape) <= max_support_pixels, color_components(before).groups)
-    after_groups = filter(shape -> length(shape) <= max_support_pixels, color_components(after).groups)
+    before_groups = color_components(before).groups
+    after_groups = color_components(after).groups
     candidate_roles = length(before_groups) + length(after_groups)
     B, A = group_by_shape(before_groups), group_by_shape(after_groups)
-    static_support = Set(Tuple(shape) for shape in intersect(before_groups, after_groups))
+    static_support = Set(intersect(before_groups,after_groups))
     for key in sort!(collect(intersect(keys(B), keys(A))))
         old, new = B[key], A[key]
         length(old) == length(new) || continue
-        departed = filter(s -> Tuple(s) ∉ static_support, old)
-        arrived = filter(s -> Tuple(s) ∉ static_support, new)
+        departed = filter(s -> s ∉ static_support, old)
+        arrived = filter(s -> s ∉ static_support, new)
         isempty(departed) && continue
         if length(departed) == 1 && length(arrived) == 1
             a, b = only(departed), only(arrived)
@@ -156,8 +161,12 @@ function observed_effects(previous, current; max_support_pixels=192)
     for key in sort!(collect(union(keys(B), keys(A))))
         old, new = get(B, key, MotionShape[]), get(A, key, MotionShape[])
         length(old) == length(new) && continue
-        departed = reduce(vcat, filter(s -> Tuple(s) ∉ static_support, old); init=ColorCell[])
-        arrived = reduce(vcat, filter(s -> Tuple(s) ∉ static_support, new); init=ColorCell[])
+        departed = reduce(vcat, filter(s -> s ∉ static_support, old); init=ColorCell[])
+        arrived = reduce(vcat, filter(s -> s ∉ static_support, new); init=ColorCell[])
+        # A contour changing while part of the same support stays visible does not
+        # certify a disappearing/appearing whole component of this prototype.
+        any(((x,y,color),)->after[y+1,x+1] == color,departed) && continue
+        any(((x,y,color),)->before[y+1,x+1] == color,arrived) && continue
         !isempty(intersect(seen_outline, union(effect_points(departed), effect_points(arrived)))) && continue
         witnesses = count_visibility(before, after, departed, arrived, changed)
         isempty(witnesses) && continue
@@ -279,7 +288,7 @@ function relation_corpus(pairs; previous_signature=nothing)
             push!(origins, Dict("program_index"=>index, "expression_path"=>path,
                 "occurrence_id"=>"occ-" * join([index;path],"."),
                 "event_ref"=>output.event_id, "interpretation_ref"=>"bounded-event-effects-v1",
-                "slot_bindings_ref"=>reference,"support_ref"=>reference))
+                "slot_bindings_ref"=>reference,"support_ref"=>reference,"source_kind"=>"observed"))
         end
     end
     slots = [Dict("index"=>index - 1, "sort"=>isodd(index) ? "RoleBefore" : "RoleAfter",

@@ -24,6 +24,7 @@ def main(config, run):
         "semantic": ("semantic_kernel", ("semantic_kernel.jl", "guard_repair.jl")),
         "stitch": ("stitch_bridge", ("stitch_rounds.jl", "stitch_open_search.jl")),
         "planning": ("finite_policy", ("finite_policy.jl",)),
+        "association_kernel": ("association_kernel", ("association_kernel.jl",)),
     }
     identifier, selected = scripts[kind]
     evidence = []
@@ -37,7 +38,11 @@ def main(config, run):
     for script in selected:
         name = script.removesuffix(".jl")
         log = run / "grade" / (name + ".log")
-        arguments = [str(run / "public/rust-jobs" / name)] if kind == "stitch" else []
+        arguments = (
+            [str(run / "public/rust-jobs" / name)]
+            if kind in ("stitch", "association_kernel")
+            else []
+        )
         if name == "stitch_open_search":
             arguments.append(str(task["experiment_config"]))
         command = julia_command(

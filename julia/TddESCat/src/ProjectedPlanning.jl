@@ -9,7 +9,7 @@ struct ObservedGoal
 end
 
 function bind_observed_goal(frame, config)
-    groups = small_components(frame)
+    groups = public_components(frame)
     roles = filter(s -> first(s)[3] == config["role_color"], groups)
     marks = filter(s -> first(s)[3] == config["marker_color"], groups)
     length(roles) == length(marks) == 1 || return nothing
@@ -21,7 +21,7 @@ function bind_observed_goal(frame, config)
 end
 
 function goal_truth(goal::ObservedGoal, frame)
-    groups = small_components(frame)
+    groups = public_components(frame)
     goal.marker in groups || return unknown_truth
     roles = filter(s -> first(s)[3] == goal.role_color && geometry(s) == goal.role_geometry, groups)
     length(roles) == 1 || return unknown_truth

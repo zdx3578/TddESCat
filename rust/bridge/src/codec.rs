@@ -88,6 +88,7 @@ pub struct Signature {
 #[serde(deny_unknown_fields)]
 struct Sort {
     id: String,
+    descriptor: Option<Value>,
 }
 
 #[derive(Deserialize)]
@@ -99,6 +100,27 @@ struct Operator {
     purity: String,
     read_rule: Vec<usize>,
     binder_children: Vec<usize>,
+    semantic_version: String,
+    descriptor: Option<Value>,
+}
+
+impl Operator {
+    fn semantic_digest(&self) -> Result<String> {
+        let material = serde_json::json!([
+            "operator-v1",
+            self.inputs,
+            self.output,
+            self.read_rule,
+            self.semantic_version,
+            self.descriptor
+        ]);
+        let identity = if self.descriptor.is_some() {
+            material
+        } else {
+            serde_json::json!([self.symbol, material])
+        };
+        Ok(digest(&serde_json::to_vec(&identity)?))
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -106,14 +128,31 @@ pub struct Registry {
     pub sorts: Vec<String>,
     pub ports: BTreeMap<String, PortTypes>,
     pub slots: Vec<u32>,
+    semantics: BTreeMap<String, String>,
+    constructed: BTreeSet<String>,
 }
 
 impl Registry {
     pub fn new(signature: Signature, slots: &[SlotSpec]) -> Result<Self> {
         ensure!(
-            signature.schema_version == 1 && identifier(&signature.signature_id),
+            signature.schema_version == 3 && identifier(&signature.signature_id),
             "invalid signature identity"
         );
+        for sort in &signature.sorts {
+            let prefix = sort
+                .id
+                .strip_prefix("rel_")
+                .map(|id| (id, "relation"))
+                .or_else(|| sort.id.strip_prefix("prog_").map(|id| (id, "program")));
+            match (prefix, &sort.descriptor) {
+                (Some((id, kind)), Some(descriptor)) => ensure!(
+                    descriptor["kind"] == kind && id == digest(&serde_json::to_vec(descriptor)?),
+                    "invalid sort descriptor identity"
+                ),
+                (None, None) => {}
+                _ => bail!("missing or unexpected sort descriptor"),
+            }
+        }
         let sorts = signature
             .sorts
             .into_iter()
@@ -129,17 +168,33 @@ impl Registry {
             sorts,
             ports: BTreeMap::new(),
             slots: Vec::new(),
+            semantics: BTreeMap::new(),
+            constructed: BTreeSet::new(),
         };
         for o in signature.operators {
             ensure!(
                 operator(&o.symbol)
+                    && identifier(&o.semantic_version)
                     && o.purity == "pure"
                     && o.binder_children.is_empty()
                     && o.read_rule.iter().copied().eq(0..o.inputs.len()),
                 "unsupported operator {}",
                 o.symbol
             );
+            let semantic_digest = o.semantic_digest()?;
+            ensure!(
+                if o.descriptor.is_some() {
+                    o.symbol == format!("op_{semantic_digest}")
+                } else {
+                    !o.symbol.starts_with("op_")
+                },
+                "operator descriptor identity differs"
+            );
             r.register(&o.symbol, &o.inputs, &o.output)?;
+            if o.descriptor.as_ref().is_some_and(|d| d["kind"] != "Atom") {
+                r.constructed.insert(o.symbol.clone());
+            }
+            r.semantics.insert(o.symbol, semantic_digest);
         }
         for (i, slot) in slots.iter().enumerate() {
             ensure!(
@@ -151,8 +206,8 @@ impl Registry {
             let sort = r.sort_id(&slot.sort)?;
             ensure!(
                 match slot.sort.as_str() {
-                    "RoleBefore" => slot.time_role == "before",
-                    "RoleAfter" => slot.time_role == "after",
+                    "RoleBefore" | "SceneBefore" => slot.time_role == "before",
+                    "RoleAfter" | "SceneAfter" => slot.time_role == "after",
                     _ => true,
                 },
                 "slot time role conflicts with its sort"
@@ -169,6 +224,40 @@ impl Registry {
             .position(|n| n == name)
             .with_context(|| format!("unknown sort {name}"))
             .and_then(|i| Ok(u32::try_from(i)?))
+    }
+
+    pub fn definition_semantics(&self, body: &Term) -> Result<String> {
+        let mut used = BTreeSet::new();
+        let mut missing = false;
+        body.walk(&mut Vec::new(), &mut |_, term| {
+            let op = match term {
+                Term::Call { operator, .. } => std::borrow::Cow::Borrowed(operator.as_str()),
+                Term::Const { .. } => std::borrow::Cow::Owned(term.show("?#")),
+                _ => return,
+            };
+            if let Some(signature) = self.semantics.get(op.as_ref()) {
+                used.insert(signature);
+            } else {
+                missing = true;
+            }
+        });
+        ensure!(
+            !missing,
+            "definition uses an operation without semantic identity"
+        );
+        Ok(digest(&serde_json::to_vec(&used)?))
+    }
+
+    pub fn register_definition(&mut self, name: &str, definition: &Definition) -> Result<()> {
+        self.register(name, &definition.parameter_sorts, &definition.result_sort)?;
+        self.semantics
+            .insert(name.to_owned(), definition.semantic_digest.clone());
+        self.constructed.insert(name.to_owned());
+        Ok(())
+    }
+
+    pub fn is_constructed(&self, name: &str) -> bool {
+        self.constructed.contains(name)
     }
 
     pub fn register(&mut self, name: &str, inputs: &[String], output: &str) -> Result<()> {
@@ -412,6 +501,7 @@ pub struct Definition {
     pub closed_lambda_text: String,
     pub dependencies: Vec<String>,
     pub body_cost: String,
+    pub semantic_digest: String,
 }
 
 #[derive(Deserialize)]
@@ -428,6 +518,7 @@ pub fn stable_id(def: &Definition) -> Result<String> {
             &def.parameter_sorts,
             &def.result_sort,
             def.body.show("?#"),
+            &def.semantic_digest,
         ))?)
     ))
 }
@@ -480,6 +571,10 @@ impl Definition {
             self.dependencies == dependencies(&body) && self.body_cost == body.cost().to_string(),
             "definition dependencies or cost mismatch"
         );
+        ensure!(
+            self.semantic_digest == r.definition_semantics(&body)?,
+            "definition semantic digest differs"
+        );
         let inputs = self
             .parameter_sorts
             .iter()
@@ -527,11 +622,11 @@ mod tests {
             let mut registry = Registry::new(
                 serde_json::from_str(
                     r#"{
-                    "schema_version":1,"signature_id":"codec","sorts":[{"id":"Atom"}],
+                    "schema_version":3,"signature_id":"codec","sorts":[{"id":"Atom"}],
                     "operators":[
-                        {"symbol":"a","inputs":[],"output":"Atom","purity":"pure","read_rule":[],"binder_children":[]},
-                        {"symbol":"wrap","inputs":["Atom"],"output":"Atom","purity":"pure","read_rule":[0],"binder_children":[]},
-                        {"symbol":"combine","inputs":["Atom","Atom"],"output":"Atom","purity":"pure","read_rule":[0,1],"binder_children":[]}
+                        {"symbol":"a","inputs":[],"output":"Atom","purity":"pure","read_rule":[],"binder_children":[],"semantic_version":"symbolic-v1"},
+                        {"symbol":"wrap","inputs":["Atom"],"output":"Atom","purity":"pure","read_rule":[0],"binder_children":[],"semantic_version":"symbolic-v1"},
+                        {"symbol":"combine","inputs":["Atom","Atom"],"output":"Atom","purity":"pure","read_rule":[0,1],"binder_children":[],"semantic_version":"symbolic-v1"}
                     ]
                 }"#,
                 )?,
@@ -566,6 +661,7 @@ mod tests {
                 result_sort: "Atom".into(),
                 parameter_reads: (0..width).collect(),
                 body_cost: body.cost().to_string(),
+                semantic_digest: registry.definition_semantics(&body)?,
                 body,
                 pattern_text: pattern.clone(),
                 closed_lambda_text: lambda.clone(),
@@ -574,7 +670,7 @@ mod tests {
             d.check(&registry)?;
             let wire: Definition = serde_json::from_slice(&serde_json::to_vec(&d)?)?;
             wire.check(&registry)?;
-            registry.register("fn_0", &sorts, "Atom")?;
+            registry.register_definition("fn_0", &d)?;
             let call = Term::call(
                 "fn_0",
                 (0..width).map(|index| Term::Slot { index }).collect(),

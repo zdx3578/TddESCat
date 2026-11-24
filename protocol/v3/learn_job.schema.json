@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.tddescat.org/v3/learn_job.schema.json",
+  "type": "object",
+  "properties": {
+    "protocol_version": {
+      "const": "tddescat.learn.v3"
+    },
+    "codec_version": {
+      "const": "typed-free-slots.v1"
+    },
+    "job_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+    },
+    "evidence_snapshot_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+    },
+    "library_base_version": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+    },
+    "signature_file": {
+      "$ref": "../v1/common.schema.json#/$defs/file"
+    },
+    "programs_file": {
+      "$ref": "../v1/common.schema.json#/$defs/file"
+    },
+    "origins_file": {
+      "$ref": "../v1/common.schema.json#/$defs/file"
+    },
+    "initial_library_file": {
+      "$ref": "../v1/common.schema.json#/$defs/file"
+    },
+    "rules_file": {
+      "$ref": "../v1/common.schema.json#/$defs/file"
+    },
+    "config_file": {
+      "$ref": "../v1/common.schema.json#/$defs/file"
+    },
+    "program_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "slot_context": {
+      "type": "array",
+      "items": {
+        "$ref": "../v1/typed_terms.schema.json#/$defs/slot"
+      }
+    },
+    "engine_pin": {
+      "type": "object",
+      "properties": {
+        "upstream_commit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "source_git_tree": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "cargo_lock_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "rust_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "protocol_version": {
+          "const": "tddescat.learn.v3"
+        },
+        "build_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "binary_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "upstream_commit",
+        "source_git_tree",
+        "cargo_lock_sha256",
+        "rust_version",
+        "protocol_version",
+        "build_sha256",
+        "binary_sha256"
+      ],
+      "additionalProperties": false
+    },
+    "input_scope_complete": {
+      "type": "boolean"
+    },
+    "semantic_context_file": {
+      "$ref": "../v1/common.schema.json#/$defs/file"
+    }
+  },
+  "required": [
+    "protocol_version",
+    "codec_version",
+    "job_id",
+    "evidence_snapshot_id",
+    "library_base_version",
+    "signature_file",
+    "programs_file",
+    "origins_file",
+    "initial_library_file",
+    "rules_file",
+    "config_file",
+    "program_count",
+    "slot_context",
+    "engine_pin",
+    "input_scope_complete",
+    "semantic_context_file"
+  ],
+  "additionalProperties": false
+}
