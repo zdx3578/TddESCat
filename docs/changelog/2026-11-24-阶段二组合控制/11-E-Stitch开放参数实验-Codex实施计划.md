@@ -232,6 +232,8 @@ batch_confirmed_events = 8
 | 测试动态写回旧值 | `check_online.py::online_config`等 | 20秒、4定义、64程序、12槽、512MiB | 开放策略失效 | 引用唯一policy，不复制策略字段 |
 | 每个成功轮都写requested_rounds | `main.rs`；结果schema；Julia签收 | 轮结果与任务终止共用字段 | 中间成功被误当任务结束 | 拆round_outcome与job_termination，新增摘要 |
 | 旧测试依赖字符串replace | `tests/julia/stitch_rounds.jl` | 按旧字段文字制造小限制 | 删除字段后测试失效/误测 | 明确故障注入，断言注入点确实被触发 |
+| 不同用途共享匹配上限 | `Config.jl`、`OnlineSession.jl::effective_limits`及识别调用 | 同一max_match_witnesses限制证据匹配、动作坐标和歧义预测 | 只放开语料入口，后继识别仍可能截断 | 证据/效果/后继识别完整迭代；动作坐标范围独立命名；取消两个min(512, ...) |
+| 前置PASS缺少当前构建比对 | `suite.py::verified_prerequisite` | 检查前置suite配置及子产物摘要，未与当前运行构建和学习策略比对 | 旧代码/旧配置PASS可能被新阶段二接纳 | 比较运行构建、学习协议和有效策略摘要，旧身份明确拒绝 |
 
 局部源码改动仍通过 `rust/bridge/build.rs` 的构建摘要纳入身份。更新 `third_party/egg-stitch/UPSTREAM.toml` 的本地修改说明，不伪造新的上游pin。
 
@@ -242,6 +244,8 @@ batch_confirmed_events = 8
 每条公共动作都保存；没有可编译效果、解释歧义、当前语言不支持和容量/实现失败分别登记。容量失败不能被写成语义无效果，零Diff也不能丢掉完整公共响应。
 
 硬编码 `max_roles=min(...,512)` 要解除；有形状/颜色/坐标语义依据的合法域继续校验。现有 `abs(value)>64` 对不同效果值一刀切应拆分：位置位移按帧域验证，数量变化按其计数语义验证；已有整数原语需要的字面量从合法观测构造签名，不能把资源计数错误当作坐标范围。这个修改扩展现有数值域，不引入新机制类别。
+
+**拆开共享的匹配范围。** 旧 `[search].max_match_witnesses` 同时被 `Config`、`effective_limits` 和 `OnlineSession` 用于对象识别、效果语料、ACTION6坐标枚举及歧义预测，不能删除一个字段后任由其他用途回填旧值。本版将证据/效果/后继识别一侧改为完整匹配迭代，取消 `LocalEffects` 和 `OnlineSession`（旧代码约509行）中的 `min(512, ...)` 截断并检查剩余调用点；分块仍必须处理完全部见证。动作候选坐标枚举单独改名为 `max_action_coordinates`，迁移本次用例已经声明的枚举范围；`max_guard_atoms`、`max_guard_candidates` 继续各自表达现有条件语言/搜索范围。它们不再用于裁剪证据匹配。字段迁移一次完成，不保留共享旧字段或隐式fallback。每条公共证据是否完整解释、是否含未决对象对应均写入作用域记录，不能把不完整识别当作固定点证据。
 
 ### 5.2 资源和隔离
 
@@ -358,6 +362,8 @@ check every required parameter index and each type
 
 额外/缺失binder、内部非法binder、参数乱序、错误类型仍拒绝。参数表可扩展并不表示放松变量捕获与作用域检查。
 
+宽参数与树深度分开验证：1000参数的正文使用全部参数、采用平衡二叉组合树，正文深度约10，避免左结合千层JSON把接口宽度测试变成递归栈测试。Rust现有 `serde_json` 解析和Julia正文遍历的深度边界必须明确记录；本次通过1000参数往返不等于已支持任意深度JSON。若实际输入触及仍未解决的解析边界，必须明确报解析未完成，不能丢弃该输入后声明固定点。
+
 ### 7.3 Python和Julia等待
 
 ```text
@@ -382,8 +388,6 @@ publish only independently verified valid definitions
 
 ## 8. 能独立核算的测试数据
 
-**实现补充：拆开共享的匹配范围。** 旧 `[search].max_match_witnesses` 同时被 `Config`、`effective_limits` 和 `OnlineSession` 用于对象识别、效果语料、ACTION6坐标枚举及歧义预测，不能删除一个字段后任由其他用途回填旧值。本版将证据/效果/后继识别一侧改为完整匹配迭代，取消 `LocalEffects` 和 `OnlineSession`（旧代码约509行）中的 `min(512, ...)` 截断并检查剩余调用点；分块仍必须处理完全部见证。动作候选枚举与条件搜索使用分别命名、明确声明域的配置，保留本轮既定动作/条件语义。字段迁移一次完成，不保留共享旧字段或隐式fallback。每条公共证据是否完整解释、是否含未决对象对应均写入作用域记录，不能把不完整识别当作固定点证据。
-
 附件 `experiment.toml` 中的数量定义测试材料，不是正式系统截断。其字段含义：
 
 - `stitch_policy`：指向唯一学习策略，按测试档案目录解析。
@@ -404,7 +408,7 @@ publish only independently verified valid definitions
 
 ### 8.2 宽接口自动发现：4、6、10、12、15、19
 
-对每个宽度w，生成固定的有类型二叉组合树，每个叶位置有一个固定一元包装，叶值使用互不相同的自由槽位。每份输入对槽位作合法替换/置换，角色结构共享。叶不是可内联常量。
+对每个宽度w，生成固定的有类型二叉组合树，每个叶位置使用彼此不同的一元包装算子；内部位置也避免额外同构重复，以隔离接口宽度这一变量。叶值使用互不相同的自由槽位。每份输入对槽位作合法替换/置换，角色结构共享。叶不是可内联常量。
 
 ```text
 for w in [4,6,10,12,15,19]:
@@ -561,6 +565,8 @@ cargo build --release --bin tddesc-stitch
 
 执行目录必须新建，避免污染冻结数据。若实际suite汇总产物位置变化，应依据 `suite.py` 的真实文件路径调整，并验证前置验收摘要、源码身份与任务结果，不传旧版本PASS冒充新版本前置。
 
+这需要明确修改 `suite.py::verified_prerequisite`，不能假定旧实现已经保证源码身份相同。阶段一与阶段二均记录并比对：运行源码/协议schema的构建摘要、Rust二进制及本地vendored修改身份、Julia/Python运行工具链与依赖锁定身份、学习协议版本、冻结后有效策略摘要。沿现有provenance扩展这些字段，使用确定的运行文件集合计算内容摘要；运行输出、时间戳和新增中文日志不进入构建摘要。拒绝旧代码或旧策略的PASS，不能仅比较分支名、suite_id或提交号字符串。新增一个故障测试：只改变策略或一个运行代码文件，前置报告必须失效；仅新增本日报告时不得错误地把相同构建判为不同。
+
 原生参照采用同一配置档案指定的1000参数和单轮，例：
 
 ```bash
@@ -629,3 +635,27 @@ Codex交付时必须区分：参数/接口已开放、结构测试已通过、�
 - [U2] [上游最佳优先完成语义](https://github.com/mlb2251/egg-stitch/blob/cdbba10e3075a14c9d7933c125807d7dc6a04b42/src/best_first.rs)
 - [U3] [上游高参数参照配置](https://github.com/mlb2251/egg-stitch/blob/cdbba10e3075a14c9d7933c125807d7dc6a04b42/expts/arity.py)
 
+
+[R1]: 08-E-Stitch功能与参数完整核查.md
+[R2]: 09-复杂移动实验的E-Stitch配置定案与验收缺口.md
+[R3]: 10-复杂移动与E-Stitch高复杂度案例对照及配置参考.md
+[R4]: https://github.com/zdx3578/TddESCat/blob/257e277a9b784f6c81d685c547fdddb68345aa50/rust/bridge/src/main.rs
+[R5]: https://github.com/zdx3578/TddESCat/blob/257e277a9b784f6c81d685c547fdddb68345aa50/tests/julia/stitch_rounds.jl
+[R6]: https://github.com/zdx3578/TddESCat/blob/257e277a9b784f6c81d685c547fdddb68345aa50/rust/bridge/src/protocol.rs
+[R7]: https://github.com/zdx3578/TddESCat/blob/257e277a9b784f6c81d685c547fdddb68345aa50/rust/bridge/src/codec.rs
+[R8]: https://github.com/zdx3578/TddESCat/blob/257e277a9b784f6c81d685c547fdddb68345aa50/julia/TddESCat/src/StitchBridge.jl
+[R9]: https://github.com/zdx3578/TddESCat/blob/257e277a9b784f6c81d685c547fdddb68345aa50/julia/TddESCat/src/StitchCodec.jl
+[R10]: https://github.com/zdx3578/TddESCat/blob/257e277a9b784f6c81d685c547fdddb68345aa50/julia/TddESCat/src/Library.jl
+[R11]: https://github.com/zdx3578/TddESCat/blob/257e277a9b784f6c81d685c547fdddb68345aa50/julia/TddESCat/src/OnlineSession.jl
+[R12]: https://github.com/zdx3578/TddESCat/blob/257e277a9b784f6c81d685c547fdddb68345aa50/python/src/tddesc_tools/stitch.py
+[R13]: https://github.com/zdx3578/TddESCat/blob/257e277a9b784f6c81d685c547fdddb68345aa50/julia/TddESCat/src/JointMechanisms.jl
+[R14]: https://github.com/zdx3578/TddESCat/blob/257e277a9b784f6c81d685c547fdddb68345aa50/python/src/tddesc_tools/public_run.py
+[R15]: https://github.com/zdx3578/TddESCat/blob/257e277a9b784f6c81d685c547fdddb68345aa50/python/src/tddesc_tools/run.py
+[R16]: https://github.com/zdx3578/TddESCat/blob/257e277a9b784f6c81d685c547fdddb68345aa50/third_party/egg-stitch/src/lang/mod.rs
+[R17]: https://github.com/zdx3578/TddESCat/blob/257e277a9b784f6c81d685c547fdddb68345aa50/rust/bridge/src/engine.rs
+[R18]: https://github.com/zdx3578/TddESCat/blob/257e277a9b784f6c81d685c547fdddb68345aa50/tests/bench/check_kernel.py
+[R19]: https://github.com/zdx3578/TddESCat/blob/257e277a9b784f6c81d685c547fdddb68345aa50/python/src/tddesc_tools/contracts.py
+[R20]: https://github.com/zdx3578/TddESCat/blob/257e277a9b784f6c81d685c547fdddb68345aa50/python/src/tddesc_tools/suite.py
+[U1]: https://github.com/mlb2251/egg-stitch/blob/cdbba10e3075a14c9d7933c125807d7dc6a04b42/src/lib.rs
+[U2]: https://github.com/mlb2251/egg-stitch/blob/cdbba10e3075a14c9d7933c125807d7dc6a04b42/src/best_first.rs
+[U3]: https://github.com/mlb2251/egg-stitch/blob/cdbba10e3075a14c9d7933c125807d7dc6a04b42/expts/arity.py
