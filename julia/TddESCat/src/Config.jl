@@ -93,7 +93,9 @@ function load_run_config(path::AbstractString)
     learning = get(data, "learning", nothing)
     if !isnothing(learning)
         require_keys(learning, ("engine", "policy_file", "batch_confirmed_events");
-            optional=("prior_evidence",), at="learning")
+            optional=("prior_evidence","association","sequences"), at="learning")
+        all(get(learning,key,false) isa Bool for key in ("association","sequences")) ||
+            throw(ArgumentError("Invalid association or sequence learning option"))
         check_values(learning, ("batch_confirmed_events",), positive_integer, "learning")
         learning["engine"] = config_path(dir, learning["engine"])
         learning["policy_file"] = config_path(dir, learning["policy_file"])
@@ -155,4 +157,9 @@ function motion_guard_limits(config::RunConfig)
     isnothing(search) && return (;)
     return (; context_radii=Tuple(search["context_radii"]), history_lengths=Tuple(search["history_lengths"]),
         allow_full_frame=search["allow_full_frame_context"])
+end
+
+function mechanism_limits(config)
+    association = !isnothing(config.learning) && get(config.learning,"association",false)
+    return merge(motion_guard_limits(config),(; association))
 end

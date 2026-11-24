@@ -67,6 +67,7 @@ class Scene:
     goal_distance: int = 1
     goal_with_signal: bool = False
     tracking_origin: int | None = None
+    contact_rule: tuple[int, int] | None = None
 
     @property
     def start_state(self):
@@ -106,6 +107,8 @@ class Scene:
             data["signal"] = tuple(data["signal"])
         if data.get("goal") is not None:
             data["goal"] = tuple(data["goal"])
+        if data.get("contact_rule") is not None:
+            data["contact_rule"] = tuple(data["contact_rule"])
         for name, cls_part in (("switch", Switch), ("resource", Resource)):
             if data.get(name) is not None:
                 spec = data[name]

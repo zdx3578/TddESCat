@@ -27,6 +27,8 @@ def online_config(
     planning=False,
     goal=None,
     adapt=False,
+    association=False,
+    sequences=False,
 ):
     prior_setting = "" if prior is None else f'prior_evidence = "{prior}"'
     execution = (
@@ -65,6 +67,8 @@ request_timeout_seconds = 5.0
 engine = "{root / "target/release/tddesc-stitch"}"
 policy_file = "{root / "config/stitch.toml"}"
 batch_confirmed_events = {batch}
+association = {str(association).lower()}
+sequences = {str(sequences).lower()}
 {prior_setting}
 [search]
 context_radii = [1, 2, 4]

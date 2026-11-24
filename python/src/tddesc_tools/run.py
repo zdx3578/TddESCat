@@ -37,6 +37,12 @@ KIND_IDS = {
     "camera_composition": ("C03",),
     "association_recovery": ("A01", "A02"),
     "association_kernel": ("association_kernel",),
+    "association_online": ("A04", "A05"),
+    "sequence_learning": (
+        "sequence_discovery",
+        "sequence_consumption",
+        "sequence_withdrawal",
+    ),
 }
 MODULES = {
     "protocol": "tests.protocol.test_faults",
@@ -61,6 +67,8 @@ MODULES = {
     "camera_composition": "tests.bench.check_camera_composition",
     "association_recovery": "tests.bench.check_association_recovery",
     "association_kernel": "tests.bench.check_kernel",
+    "association_online": "tests.bench.check_association",
+    "sequence_learning": "tests.bench.check_sequence_learning",
 }
 
 
@@ -224,6 +232,8 @@ def run_task(root, config_path, task, run_dir, runtime):
         "resource_composition",
         "camera_composition",
         "association_recovery",
+        "association_online",
+        "sequence_learning",
     )
     offline_arc = kind in ("arc_offline", "arc_public25")
     isolated = (

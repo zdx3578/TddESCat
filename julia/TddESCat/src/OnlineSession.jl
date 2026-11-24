@@ -16,9 +16,10 @@ mutable struct OnlineKnowledge
     trials::Vector{PublicTrial}
     learning_jobs::Int
     definition_depths::Dict{String,Int}
+    programs::Vector{Any}
 end
 
-OnlineKnowledge() = OnlineKnowledge(JointMechanism[], ActiveMechanism[], PublicTrial[], 0, Dict{String,Int}())
+OnlineKnowledge() = OnlineKnowledge(JointMechanism[], ActiveMechanism[], PublicTrial[], 0, Dict{String,Int}(), Any[])
 
 function prior_trials(config)
     directory = isnothing(config.learning) ? nothing : get(config.learning,"prior_evidence",nothing)
@@ -82,6 +83,16 @@ function fit_joint_condition(rule, trials, limits)
     bindings = [isnothing(move_index) ? nothing : MotionBinding(r.fragments[move_index].basis,
         r.fragments[move_index].value) for r in chosen]
     delta = isnothing(move_index) ? (0,0) : Tuple(effect.values)
+    if get(limits,:association,false) && !isnothing(move_index)
+        examples = [AssociationExample(item.row,binding,item.verdict)
+            for (item,binding) in zip(chosen,bindings) if item.verdict != unknown_truth]
+        query = construct_relation(examples)
+        if !isnothing(query)
+            condition = GuardSearch(MotionPredicate[query],ids[support],ids[broken],String[],true,true,
+                length(query.programs))
+            return ActiveMechanism(rule,condition,ids[broken],unknowns)
+        end
+    end
     pool = predicate_pool(rows,effect.template,delta;
         context_radii=get(limits,:context_radii,(1,2,4)),
         allow_full_frame=get(limits,:allow_full_frame,true),
@@ -102,7 +113,8 @@ end
 function frozen_knowledge_digest(knowledge)
     interpretations = [(active_id(model),model.rule.references,model.condition.support,
         model.counterexamples,model.unknown) for model in knowledge.active]
-    return content_hash(JSON.json([interpretations,[trial.sample.event_id for trial in knowledge.trials]]))
+    return content_hash(JSON.json([interpretations,[trial.sample.event_id for trial in knowledge.trials],
+        [p.definition for p in knowledge.programs]]))
 end
 
 function archive_trial!(knowledge, trial, limits)
@@ -219,9 +231,16 @@ function ranked_public_actions(knowledge, observation, history, attempts, max_ac
         blocked_parents = Set{String}()
         blocked_resources = Set{Tuple}()
         rejected = false
+        relation_reads = []
         for model in knowledge.active
             model.rule.action_id == action["id"] || continue
             selected = candidate_evaluation(model,values.frame,values.groups,values.enclosure,action,history)
+            for atom in model.condition.atoms
+                atom isa RelationPredicate || continue
+                selected.reason in ("published_joint_effects","learned_condition_false","learned_condition_unknown") || continue
+                push!(relation_reads,merge(predicate_record(atom),Dict("truth"=>string(selected.truth),
+                    "model"=>active_id(model))))
+            end
             push!(reasons,selected.reason)
             rejected |= selected.truth == disproven
             selected.reason == "resource_precondition" && push!(blocked_parents,model.rule.id)
@@ -293,7 +312,8 @@ function ranked_public_actions(knowledge, observation, history, attempts, max_ac
         elseif isnothing(chosen) && action["id"] == 6 && last(history) == 6
             priority += 1
         end
-        push!(judged,(; action, chosen, reason, rejected, follow, experiment,projection,rank=(priority,trial_count)))
+        push!(judged,(; action, chosen, reason, rejected, follow, experiment,projection,relation_reads,
+            rank=(priority,trial_count)))
     end
     sort!(judged;by=row->row.rank,alg=Base.Sort.MergeSort)
     return (; ranked=judged, values.click_count)
@@ -384,6 +404,7 @@ function online_learn!(knowledge, config, store, pairs, repo_root; existing_job=
     current = read_published_stitch(publication_dir)
     base = isnothing(current) ? LibrarySnapshot() : current.snapshot
     corpus = relation_corpus(pairs; previous_signature=isnothing(current) ? nothing : current.bundle["signature"])
+    isnothing(current) || merge_semantic_signature!(corpus.signature,current.bundle["signature"])
     atomic_json(joinpath(job,"observations.json"),Dict("scope_complete"=>corpus.complete,
         "events"=>public_effect_record.(corpus.observed),"bindings"=>corpus.bindings,
         "dispositions"=>corpus.dispositions, "scope"=>motion_guard_limits(config)))
@@ -436,8 +457,9 @@ function online_learn!(knowledge, config, store, pairs, repo_root; existing_job=
         get!(known,mechanism_key(rule;composing),rule)
     end
     knowledge.rules = sort!(collect(values(known));by=rule->rule.id)
-    limits = motion_guard_limits(config)
+    limits = mechanism_limits(config)
     knowledge.active = [fit_joint_condition(rule,knowledge.trials,limits) for rule in knowledge.rules]
+    persist_relation_certificates!(store,knowledge.active)
     learning_assessment!(job,batch,"published"; complete, status, termination_reason, fixed_point,
         publication=digest, definitions=published.bundle["new_definition_ids"],
         current_mechanisms=active_id.(knowledge.active))
@@ -459,9 +481,11 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     count = 0
     continuation = nothing
     goal_pending = nothing
+    program_cursor = nothing
+    tried_program = false
     composing = !isnothing(config.planning) && haskey(config.planning,"goal")
     goal = composing ? bind_observed_goal(last(rec.observation.frames),config.planning["goal"]) : nothing
-    limits = motion_guard_limits(config)
+    limits = mechanism_limits(config)
     coordinates = isnothing(config.search) ? 4096 : config.search["max_action_coordinates"]
     consumed_depth = 0
     frozen_version = frozen ? frozen_knowledge_digest(knowledge) : nothing
@@ -502,7 +526,34 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             end
             continuation = nothing
         end
-        experiment = if !frozen && !composing
+        program_note = nothing
+        if !composing && (!tried_program || !isnothing(program_cursor))
+            if !tried_program
+                tried_program = true
+                for program in knowledge.programs
+                    length(program.steps) <= rec.limit-rec.sent_count || continue
+                    cursor = ProgramCursor(program,1,Any[])
+                    if !isnothing(current_program_step(cursor,decision))
+                        program_cursor = cursor
+                        break
+                    end
+                end
+            end
+            if !isnothing(program_cursor)
+                next = current_program_step(program_cursor,decision)
+                definition = program_cursor.program
+                program_note = Dict("definition"=>definition.definition,"publication"=>definition.publication,
+                    "depth"=>definition.depth,"index"=>program_cursor.next_step,
+                    "length"=>length(definition.steps),"training_events"=>definition.sources)
+                if isnothing(next)
+                    program_note["feedback"] = "withdrawn_before_unproved_step"
+                    program_cursor = nothing
+                else
+                    item = next
+                end
+            end
+        end
+        experiment = if !frozen && !composing && isnothing(program_cursor)
             select_experiment!(experiments,rec.store,decision.ranked,obs.available_actions,rec.before_ref)
         end
         if !isnothing(experiment) && experiment.action != item.action
@@ -518,9 +569,10 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         plan_reads = isnothing(goal_cursor) ? String[] : reduce(vcat,
             (recovery_reads(rec,model) for model in knowledge.active if haskey(goal_cursor.node.dependencies,model.rule.id));
             init=String[])
+        isnothing(program_cursor) || append!(plan_reads,program_cursor.program.sources)
         prediction = predict_public(rec,item;plan_reads)
         id = command_id(rec.next_sequence)
-        plan = composing || isnothing(config.planning) || isnothing(item.follow) ? nothing :
+        plan = composing || !isnothing(program_cursor) || isnothing(config.planning) || isnothing(item.follow) ? nothing :
             propose_condition_plan(item,config.planning,id)
         if !isnothing(plan)
             policy_note = Dict("operation"=>"freeze_projected_policy","status"=>"ready",
@@ -531,18 +583,24 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             "reason"=>item.reason,"tried_after_previous"=>get(attempts,action_key(item.action),0),
             "decision_seconds"=>(time_ns() - decision_started)/1e9,
             "confirmed_to_decision_seconds"=>(time_ns() - ready_at)/1e9,
-            "candidates"=>[Dict("action"=>x.action,"reason"=>x.reason,"rank"=>x.rank) for x in decision.ranked],
+            "candidates"=>[Dict("action"=>x.action,"reason"=>x.reason,"rank"=>x.rank,
+                "relation_reads"=>x.relation_reads) for x in decision.ranked],
             "coordinate_domain"=>Dict("visible_candidates"=>decision.click_count,
                 "protocol_points"=>6 in obs.available_actions ? 4096 : 0,
                 "attempted"=>sum(key[1] == 6 for key in keys(attempts);init=0)))
         isnothing(policy_note) || (decision_record["policy"] = policy_note)
         isnothing(item.experiment) || (decision_record["experiment"] = item.experiment)
         isnothing(experiment) || (decision_record["experiment_obligation"] = experiment)
+        isnothing(program_note) || (decision_record["program"] = program_note)
         if !isnothing(item.chosen)
             model = item.chosen.model
             decision_record["mechanism_version"] = active_id(model)
             decision_record["definition_refs"] = model.rule.references
             decision_record["binding_views"] = binding_view.(model.rule.effects)
+            decision_record["relations"] = predicate_record.(filter(p->p isa RelationPredicate,model.condition.atoms))
+        end
+        if !isnothing(program_cursor)
+            decision_record["definition_refs"] = unique([decision_record["definition_refs"];program_cursor.program.definition])
         end
         atomic_json(store_path(rec.store,"decisions",id * ".json"),decision_record)
         args = item.action["id"] == 6 ? (x=item.action["x"],y=item.action["y"]) : (;)
@@ -562,6 +620,15 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         effects = observed_effects(entry,resulting)
         assessment = isnothing(item.chosen) ? (actual=Dict(),assessments=Dict()) :
             measure_joint((model=item.chosen.model.rule,fragments=item.chosen.fragments),sample.after)
+        if !isnothing(program_cursor)
+            response = program_feedback!(program_cursor,item,assessment,effects)
+            program_note["feedback"] = response
+            if response != "advance"
+                program_note["withdrawn_suffix"] = response == "completed" ? Int[] :
+                    collect(program_cursor.next_step+1:length(program_cursor.program.steps))
+                program_cursor = nothing
+            end
+        end
         if !isnothing(plan)
             if !isempty(assessment.assessments) && all(==("supported"),values(assessment.assessments))
                 continuation = plan
@@ -579,6 +646,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             goal_pending = feedback.next
         end
         old = frozen ? Dict() : archive_trial!(knowledge,PublicTrial(sample,item.action),limits)
+        frozen || persist_relation_certificates!(rec.store,knowledge.active)
         revisions = []
         for model in knowledge.active
             prior = get(old,model.rule.id,nothing)
@@ -596,7 +664,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 "expected"=>isnothing(item.chosen) ? Dict() : item.chosen.expected,
                 "actual"=>assessment.actual,"assessments"=>assessment.assessments,"revisions"=>revisions,
                 "evidence"=>public_effect_record(effects),"coverage"=>coverage_record(decision,item,effects,assessment),
-                "policy"=>policy_note))
+                "policy"=>policy_note,"program"=>program_note))
         attempts[action_key(item.action)] = get(attempts,action_key(item.action),0) + 1
         push!(history,item.action["id"])
         frozen || push!(pairs,(entry,resulting))

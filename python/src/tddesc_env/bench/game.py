@@ -192,7 +192,17 @@ class ShapeGame(ARCBaseGame):
         ):
             self._click()
         elif self.positions and action in self._moves:
-            self._shift(*self._moves[action])
+            rule = scene.contact_rule
+            allowed = True
+            if rule is not None and rule[0] == action:
+                subject = self._footprint(self.selected, *self.positions[self.selected])
+                allowed = any(
+                    pigment == rule[1]
+                    and any(abs(x - u) + abs(y - v) == 1 for u, v in subject)
+                    for x, y, pigment in scene.static
+                )
+            if allowed:
+                self._shift(*self._moves[action])
             if tuple(self.positions) != before and mode.startswith("undo-"):
                 self.previous_positions = before
             if tuple(self.positions) != before and mode in (

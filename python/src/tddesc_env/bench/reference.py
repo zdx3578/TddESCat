@@ -100,6 +100,18 @@ def rigid_transition(scene, state, action):
         for shape, (x, y) in zip(scene.bodies, positions, strict=True)
     ]
     moving = state.selected
+    if scene.contact_rule is not None and scene.contact_rule[0] == action:
+        visible = {
+            (x, y) for x, y, color in scene.static if color == scene.contact_rule[1]
+        }
+        subject = footprints[moving]
+        fringe = {
+            (x + dx, y + dy)
+            for x, y in subject
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+        }
+        if visible.isdisjoint(fringe):
+            return state
     occupied = set().union(
         *(cells for i, cells in enumerate(footprints) if i != moving)
     )

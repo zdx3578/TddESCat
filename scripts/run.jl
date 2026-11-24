@@ -26,6 +26,7 @@ function capture(config, public_dir; supervised=false, collect_only=false)
             append!(knowledge.trials,prior.trials)
             prepared = TddESCat.online_learn!(knowledge,config,store,prior.pairs,ROOT)
             frozen && isnothing(prepared) && error("Frozen evaluation has no proved publication")
+            get(config.learning,"sequences",false) && TddESCat.train_prior_programs!(knowledge,config,store,ROOT)
         end
         games = list_games(rec.client)
         requested = get(config.environment, "game_id", nothing)
@@ -44,7 +45,8 @@ function capture(config, public_dir; supervised=false, collect_only=false)
                 else
                     if frozen
                         TddESCat.atomic_json(TddESCat.store_path(store,"learning","evaluation-boundary.json"),
-                            Dict("publication"=>prepared,"knowledge_sha256"=>TddESCat.frozen_knowledge_digest(knowledge)))
+                            Dict("publication"=>TddESCat.read_published_stitch(TddESCat.store_path(store,"publication")).publication,
+                                "knowledge_sha256"=>TddESCat.frozen_knowledge_digest(knowledge)))
                     end
                     event = TddESCat.read_json(TddESCat.store_path(store, "events", rec.before_ref * ".json"))
                     learned = TddESCat.run_online!(rec, (event=event, observation=rec.observation), config, ROOT;
@@ -54,8 +56,11 @@ function capture(config, public_dir; supervised=false, collect_only=false)
             rec.frozen || close_scorecard!(rec)
         end
         events = recover_run(store)
+        sequence = if !frozen && !isnothing(config.learning) && get(config.learning,"sequences",false)
+            TddESCat.persist_sequence_corpus([events],TddESCat.store_path(store,"learning","sequence-corpus.json"))
+        end
         output = (recorded=length(events), requested_game_id=game_id, quarantined=rec.frozen, learned,
-            prior_publication=prepared)
+            prior_publication=prepared, sequence)
         TddESCat.atomic_json(TddESCat.store_path(store, "public-run.json"), output)
         return output
     end
@@ -85,6 +90,10 @@ function explore!(rec)
 end
 
 function main(args)
+    if length(args) == 3 && first(args) == "--compile-sequences"
+        println(JSON.json(TddESCat.compile_evidence_sequences(args[2],args[3])))
+        return 0
+    end
     if length(args) == 5 && first(args) == "--recover-learning" &&
             args[2] == "--config" && args[4] == "--public-dir"
         config = load_run_config(args[3])
