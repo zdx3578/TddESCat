@@ -142,7 +142,8 @@ function control(cfg, run, request)
     for (index, game) in enumerate(request["evaluation_games"])
         measured = public_episode(cfg, joinpath(run, "evaluation-" * lpad(index, 2, '0')), game; prior=past) do rec, entry
             judgment = TC.cached_judgment(evaluation_policy, evaluation_policy.claim.action,
-                last(rec.observation.frames), rec.before_ref, [0])
+                last(rec.observation.frames), rec.before_ref, [0];
+                transients=TC.receipt_transient_colors(rec.observation.frames))
             if judgment.predicate == TC.proven
                 chosen = TC.motion_step!(evaluation_policy, rec, entry, [0], Dict{Int,Int}())
                 return chosen.result

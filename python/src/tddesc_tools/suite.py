@@ -177,7 +177,7 @@ def run_suite(root, path, run, runtime, prerequisite=None):
     required_previous = suite.get("prerequisite_suite")
     active_build = (
         learning_build_identity(root, runtime)
-        if suite["suite_id"] == "phase1" or required_previous == "phase1"
+        if suite["suite_id"] == "phase1" or required_previous is not None
         else None
     )
     upstream_pass = required_previous is None or verified_prerequisite(

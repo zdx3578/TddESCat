@@ -9,11 +9,28 @@ struct MotionExample
     before::Matrix{UInt8}
     after::Matrix{UInt8}
     previous_actions::Vector{Int}
+    previous_transients::Union{Nothing,Set{UInt8}}
 end
+
+MotionExample(id,before_id,action,before,after,history) =
+    MotionExample(id,before_id,action,before,after,history,nothing)
 
 struct MotionBinding
     support::MotionShape
     anchor::Pixel
+end
+
+function receipt_transient_colors(frames)
+    isempty(frames) && return nothing
+    start,stop = first(frames),last(frames)
+    all(frame->size(frame) == size(start),frames) || return nothing
+    colors = Set{UInt8}()
+    length(frames) <= 2 && return colors
+    for frame in @view(frames[2:end-1]), index in eachindex(frame)
+        color = frame[index]
+        color != start[index] && color != stop[index] && push!(colors,color)
+    end
+    return colors
 end
 
 function motion_example(previous, current; history=Int[])
@@ -21,7 +38,8 @@ function motion_example(previous, current; history=Int[])
     length(previous.observation.frames) > 0 && length(current.observation.frames) > 0 ||
         error("Missing public frames")
     return MotionExample(current.event["event_id"], previous.event["event_id"], current.observation.action["id"],
-        last(previous.observation.frames), last(current.observation.frames), collect(Int, history))
+        last(previous.observation.frames), last(current.observation.frames), collect(Int, history),
+        receipt_transient_colors(previous.observation.frames))
 end
 
 anchor(shape) = (minimum(first, shape), minimum(cell -> cell[2], shape))

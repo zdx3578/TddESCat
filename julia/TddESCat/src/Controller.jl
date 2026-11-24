@@ -1,10 +1,11 @@
 function choose_motion_action(controller, observation, before_ref, previous_actions, attempts)
     ranked = []
     frame = last(observation.frames)
+    transients = receipt_transient_colors(observation.frames)
     for action in observation.available_actions
         # Coordinate actions require an independently justified concrete binding.
         action == 6 && continue
-        judgment = cached_judgment(controller, action, frame, before_ref, previous_actions)
+        judgment = cached_judgment(controller, action, frame, before_ref, previous_actions;transients)
         score = judgment.predicate == proven ? 0 : judgment.predicate == unknown_truth ? 1 : 2
         push!(ranked, (; action, judgment, rank=(score, get(attempts, action, 0), action)))
     end

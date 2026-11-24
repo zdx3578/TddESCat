@@ -20,3 +20,9 @@ id = "sequence_depth"
 config = "sequence_depth.toml"
 required = true
 depends_on = ["sequence_execution"]
+
+[[tasks]]
+id = "trace_learning"
+config = "trace_learning.toml"
+required = true
+depends_on = ["sequence_execution"]

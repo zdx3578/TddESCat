@@ -29,7 +29,7 @@ freeze_motion(controller::MotionController) = FrozenMotionPolicy(deepcopy(contro
 
 truth_wire(t) = t == unknown_truth ? "unknown" : t == proven
 
-function judge_motion(claim, action, frame, event_id, history)
+function judge_motion(claim, action, frame, event_id, history; transients=nothing)
     reads = [event_id, claim.version, claim.definition]
     if action != claim.action
         return MotionJudgment(unknown_truth, nothing, nothing, reads, "uncovered_action")
@@ -39,19 +39,19 @@ function judge_motion(claim, action, frame, event_id, history)
     end
     bound = bind_motion(frame, claim.template)
     isnothing(bound) && return MotionJudgment(unknown_truth, nothing, nothing, reads, "ambiguous_or_missing_support")
-    predicate = conjunction(claim.guard.atoms, frame, bound, claim.parameter.value, history)
+    predicate = conjunction(claim.guard.atoms, frame, bound, claim.parameter.value, history;transients)
     predicate == proven && return MotionJudgment(proven, claim.parameter.value, bound, reads, "learned_support_translation")
     return MotionJudgment(predicate, nothing, bound, reads,
         predicate == disproven ? "condition_false" : "condition_evidence_unavailable")
 end
 
-cached_judgment(policy::FrozenMotionPolicy, action, frame, event_id, history) =
-    judge_motion(policy.claim, action, frame, event_id, history)
+cached_judgment(policy::FrozenMotionPolicy, action, frame, event_id, history; transients=nothing) =
+    judge_motion(policy.claim, action, frame, event_id, history;transients)
 
-function cached_judgment(controller, action, frame, event_id, history)
+function cached_judgment(controller, action, frame, event_id, history; transients=nothing)
     key = (controller.claim.version, event_id, action, Tuple(history))
     return get!(controller.cache, key) do
-        judge_motion(controller.claim, action, frame, event_id, history)
+        judge_motion(controller.claim, action, frame, event_id, history;transients)
     end
 end
 

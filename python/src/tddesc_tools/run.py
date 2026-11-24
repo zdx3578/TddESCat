@@ -49,6 +49,7 @@ KIND_IDS = {
         "sequence_click",
     ),
     "sequence_depth": ("eight_step_program",),
+    "trace_learning": ("learned_intermediate_response",),
 }
 MODULES = {
     "protocol": "tests.protocol.test_faults",
@@ -78,6 +79,7 @@ MODULES = {
     "association_background": "tests.bench.check_association_background",
     "sequence_learning": "tests.bench.check_sequence_learning",
     "sequence_depth": "tests.bench.check_sequence_depth",
+    "trace_learning": "tests.bench.check_trace_learning",
     "stitch_growth": "tests.bench.check_kernel",
 }
 
@@ -451,7 +453,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--run-dir", type=Path)
-    parser.add_argument("--prerequisite", type=Path)
+    parser.add_argument(
+        "--prerequisite", type=Path, help="The upstream run's public/acceptance.json"
+    )
     args = parser.parse_args()
     config_path = args.config.resolve()
     header = tomllib.loads(config_path.read_text(encoding="utf-8"))

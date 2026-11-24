@@ -98,7 +98,8 @@ function fit_joint_condition(rule, trials, limits)
         allow_full_frame=get(limits,:allow_full_frame,true),
         history_lengths=get(limits,:history_lengths,(1,)))
     components = [color_components(row.before) for row in rows]
-    test = (atom,i)->evaluate_predicate(atom,rows[i].before,bindings[i],delta,rows[i].previous_actions,components[i])
+    test = (atom,i)->evaluate_predicate(atom,rows[i].before,bindings[i],delta,rows[i].previous_actions,
+        components[i],rows[i].previous_transients)
     found = search_guards(ids,support,broken,pool.pool,test)
     updated = GuardSearch(found.atoms,found.support,found.excluded,found.unresolved,
         found.complete && pool.complete,found.feasible,found.visited)
@@ -113,8 +114,9 @@ end
 function frozen_knowledge_digest(knowledge)
     interpretations = [(active_id(model),model.rule.references,model.condition.support,
         model.counterexamples,model.unknown) for model in knowledge.active]
-    return content_hash(JSON.json([interpretations,[trial.sample.event_id for trial in knowledge.trials],
-        [p.definition for p in knowledge.programs]]))
+    programs = [(p.publication,p.definition,p.depth,p.sources,p.steps,p.shared) for p in knowledge.programs]
+    depths = [(id,knowledge.definition_depths[id]) for id in sort!(collect(keys(knowledge.definition_depths)))]
+    return content_hash(JSON.json([interpretations,[trial.sample.event_id for trial in knowledge.trials],programs,depths]))
 end
 
 function archive_trial!(knowledge, trial, limits)
@@ -145,7 +147,7 @@ function mechanism_key(rule; composing=false)
     return content_hash(JSON.json(meaning))
 end
 
-function candidate_evaluation(active, before, groups, enclosure, action, history)
+function candidate_evaluation(active, before, groups, enclosure, action, history; transients=nothing)
     rule = active.rule
     result = evaluate_joint_rule(rule,before,groups,enclosure,action)
     result.truth == proven || return result
@@ -155,7 +157,7 @@ function candidate_evaluation(active, before, groups, enclosure, action, history
     moving = isnothing(index) ? nothing : result.fragments[index]
     binding = isnothing(moving) ? nothing : MotionBinding(moving.basis,moving.value)
     delta = isnothing(moving) ? (0,0) : moving.expected
-    truth = conjunction(active.condition.atoms,before,binding,delta,history)
+    truth = conjunction(active.condition.atoms,before,binding,delta,history;transients)
     return (truth, fragments=result.fragments, reason=truth == proven ? "published_joint_effects" :
         truth == disproven ? "learned_condition_false" : "learned_condition_unknown")
 end
@@ -220,6 +222,7 @@ end
 function ranked_public_actions(knowledge, observation, history, attempts, max_action_coordinates;
         composing=false, required_action=nothing, programs_pending=false, program_cursor=nothing)
     values = public_action_candidates(observation,max_action_coordinates)
+    transients = receipt_transient_colors(observation.frames)
     if programs_pending
         for action in program_click_actions(knowledge,program_cursor,values.groups,observation.available_actions)
             action in values.actions || push!(values.actions,action)
@@ -239,7 +242,7 @@ function ranked_public_actions(knowledge, observation, history, attempts, max_ac
         relation_reads = []
         for model in knowledge.active
             model.rule.action_id == action["id"] || continue
-            selected = candidate_evaluation(model,values.frame,values.groups,values.enclosure,action,history)
+            selected = candidate_evaluation(model,values.frame,values.groups,values.enclosure,action,history;transients)
             for atom in model.condition.atoms
                 atom isa RelationPredicate || continue
                 selected.reason in ("published_joint_effects","learned_condition_false","learned_condition_unknown") || continue
@@ -637,6 +640,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             model = item.chosen.model
             decision_record["mechanism_version"] = active_id(model)
             decision_record["binding_views"] = binding_view.(model.rule.effects)
+            decision_record["condition_atoms"] = predicate_record.(model.condition.atoms)
             decision_record["relations"] = predicate_record.(filter(p->p isa RelationPredicate,model.condition.atoms))
             relation_macros = [ref for p in model.condition.atoms if p isa RelationPredicate for ref in p.macro_refs]
             decision_record["definition_refs"] = unique([model.rule.references;relation_macros])

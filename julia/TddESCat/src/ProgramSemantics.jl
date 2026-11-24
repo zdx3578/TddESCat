@@ -182,6 +182,9 @@ function program_click_actions(knowledge,cursor,groups,available)
     return unique!(actions)
 end
 
+program_input(fragment) = fragment.family == :count ?
+    (count=fragment.basis,support=fragment.token_support) : fragment.basis
+
 function current_program_step(cursor, decision)
     step = cursor.program.steps[cursor.next_step]
     action = step["action"]["id"]
@@ -201,7 +204,7 @@ function current_program_step(cursor, decision)
         matches || continue
         if cursor.next_step > 1
             shared = cursor.program.shared[cursor.next_step-1]
-            all(cursor.outputs[i+1] == item.chosen.fragments[j+1].basis for (i,j) in shared) || continue
+            all(cursor.outputs[i+1] == program_input(item.chosen.fragments[j+1]) for (i,j) in shared) || continue
         end
         selected = merge(item,(reason="revalidated_learned_program",))
         action != 6 && return selected
@@ -219,13 +222,13 @@ function program_feedback!(cursor, item, assessment, observed)
     for fragment in item.chosen.fragments
         matches = filter(observed.effects) do effect
             effect.family == fragment.family || return false
-            fragment.family == :count && return effect.context.before_count == fragment.basis
+            fragment.family == :count && return (count=effect.context.before_count,support=effect.before) == program_input(fragment)
             fragment.family == :selection && return effect.after == fragment.basis
             return effect.before == fragment.basis
         end
         length(matches) == 1 || return "output_binding_unproved"
         effect = only(matches)
-        push!(outputs,effect.family == :count ? effect.context.after_count : effect.after)
+        push!(outputs,effect.family == :count ? (count=effect.context.after_count,support=effect.after) : effect.after)
     end
     cursor.outputs = outputs
     cursor.next_step += 1

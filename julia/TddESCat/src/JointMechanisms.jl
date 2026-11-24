@@ -199,7 +199,8 @@ function result_model(model, before, groups, enclosure, action)
     elseif model.family == :count
         n = model_count(model, before, groups)
         isnothing(n) && return nothing
-        return (family=:count, basis=n, expected=n + only(model.values), value=n)
+        support = sort!(reduce(vcat,(part for part in groups if shape_template(part) == model.template);init=ColorCell[]))
+        return (family=:count, basis=n, expected=n + only(model.values), value=n, token_support=support)
     elseif model.family == :pigment
         x,y = model.position
         seen = [s for s in groups if anchor(s) == model.position && position_offsets(s) == position_offsets(model.template)]

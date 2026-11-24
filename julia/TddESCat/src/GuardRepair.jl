@@ -10,6 +10,10 @@ struct DestinationColor <: MotionPredicate
     pigment::UInt8
 end
 
+struct TransientColor <: MotionPredicate
+    pigment::UInt8
+end
+
 struct RecentAction <: MotionPredicate
     id::Int
 end
@@ -21,6 +25,7 @@ end
 predicate_record(p::ComponentColor) = Dict("kind"=>"component_color", "position"=>p.at,
     "offsets"=>p.offsets, "color"=>Int(p.pigment))
 predicate_record(p::DestinationColor) = Dict("kind"=>"destination_entry_color", "color"=>Int(p.pigment))
+predicate_record(p::TransientColor) = Dict("kind"=>"previous_response_transient_color", "color"=>Int(p.pigment))
 predicate_record(p::RecentAction) = Dict("kind"=>"previous_public_action", "id"=>p.id)
 predicate_record(p::HistorySuffix) = Dict("kind"=>"public_action_suffix", "actions"=>p.actions)
 predicate_key(p) = JSON.json(predicate_record(p))
@@ -37,6 +42,17 @@ end
 
 evaluate_predicate(p::MotionPredicate, frame, binding, delta, history, parts) =
     evaluate_predicate(p,frame,binding,delta,history)
+
+evaluate_predicate(p::MotionPredicate,frame,binding,delta,history,parts,transients) =
+    isnothing(parts) ? evaluate_predicate(p,frame,binding,delta,history) :
+        evaluate_predicate(p,frame,binding,delta,history,parts)
+
+evaluate_predicate(::TransientColor,frame,binding,delta,history) = unknown_truth
+
+function evaluate_predicate(p::TransientColor,frame,binding,delta,history,parts,transients)
+    isnothing(transients) && return unknown_truth
+    return p.pigment in transients ? proven : disproven
+end
 
 function destination_entry(frame, binding, delta)
     isnothing(binding) && return nothing
@@ -92,6 +108,10 @@ function predicate_pool(samples, template, delta; max_atoms=nothing, context_rad
             add!(DestinationColor(only(colors))) ||
                 return (pool=collect(values(predicates)), complete=false)
         end
+        for color in something(sample.previous_transients,())
+            add!(TransientColor(color)) ||
+                return (pool=collect(values(predicates)),complete=false)
+        end
         for n in history_lengths
             0 < n <= length(sample.previous_actions) || continue
             suffix = sample.previous_actions[end - n + 1:end]
@@ -107,10 +127,10 @@ function predicate_pool(samples, template, delta; max_atoms=nothing, context_rad
     return (pool=collect(values(predicates)), complete=true)
 end
 
-function conjunction(atoms, frame, binding, delta, history)
+function conjunction(atoms, frame, binding, delta, history; transients=nothing)
     uncertain = false
     for predicate in atoms
-        value = evaluate_predicate(predicate, frame, binding, delta, history)
+        value = evaluate_predicate(predicate,frame,binding,delta,history,nothing,transients)
         value == disproven && return disproven
         uncertain |= value == unknown_truth
     end
@@ -209,7 +229,7 @@ function fit_motion_claim(definition, action, template, parameter, samples; max_
         bound = [bind_motion(row.before, template) for row in rows]
         components = [color_components(row.before) for row in rows]
         evaluate = (p, i) -> evaluate_predicate(p, rows[i].before, bound[i], parameter.value,
-            rows[i].previous_actions,components[i])
+            rows[i].previous_actions,components[i],rows[i].previous_transients)
         result = search_guards(ids, S, B, generated.pool, evaluate; max_atoms=max_guard_atoms, max_work=max_guard_work)
         guard = GuardSearch(result.atoms, result.support, result.excluded, result.unresolved,
             generated.complete && result.complete, result.feasible, result.visited)
