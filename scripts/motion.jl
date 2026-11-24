@@ -43,7 +43,10 @@ function training_corpus(training)
     allunique(groups) || error("Training includes repeated interventions from one session")
     refs = [[p.event["event_id"], p.event["response_blob"], q.event["event_id"], q.event["response_blob"]] for (p,q) in pairs]
     snapshot = "snapshot-" * TC.content_hash(JSON.json(refs))
-    return (; pairs, snapshot, corpus=TC.motion_corpus(pairs))
+    corpus = TC.motion_corpus(pairs)
+    origins, semantic_context = TC.describe_learning_context(corpus.signature,[],corpus.programs,corpus.origins,
+        corpus.slots;intent="symbolic",consumer="structural-search",obligation_refs=String[])
+    return (; pairs, snapshot, corpus=merge(corpus,(;origins,semantic_context)))
 end
 
 function collect_training(cfg, run, request)
@@ -72,7 +75,7 @@ function publish_training(run)
     training = training_corpus(joinpath(run, "training"))
     checkpoint = read_stitch_rounds(joinpath(run, "learn-input"), joinpath(run, "learn-output"))
     for (name, recomputed) in (("programs", training.corpus.programs), ("origins", training.corpus.origins),
-             ("signature", training.corpus.signature))
+             ("signature", training.corpus.signature), ("semantic_context", training.corpus.semantic_context))
         TC.stitch_input(joinpath(run, "learn-input"), checkpoint.manifest, name) == recomputed ||
             error("Frozen corpus differs from the public events")
     end
@@ -87,7 +90,8 @@ function controller_from_public(run, cfg)
     result = restored.bundle
     result["evidence_snapshot_id"] == training.snapshot &&
         result["source_programs"] == training.corpus.programs &&
-        result["origins"] == training.corpus.origins || error("Published sources differ from replay")
+        result["origins"] == training.corpus.origins &&
+        result["semantic_context"] == training.corpus.semantic_context || error("Published sources differ from replay")
     _, definitions = TC.registry_from(result["signature"], restored.snapshot.entries)
     entries = training.corpus.proposals
     samples = TC.MotionExample[item.sample for item in entries]

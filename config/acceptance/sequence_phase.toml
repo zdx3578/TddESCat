@@ -14,3 +14,9 @@ id = "structural_growth"
 config = "stitch_growth.toml"
 required = true
 depends_on = []
+
+[[tasks]]
+id = "sequence_depth"
+config = "sequence_depth.toml"
+required = true
+depends_on = ["sequence_execution"]

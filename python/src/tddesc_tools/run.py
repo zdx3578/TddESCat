@@ -46,7 +46,9 @@ KIND_IDS = {
         "sequence_consumption",
         "sequence_withdrawal",
         "sequence_resource",
+        "sequence_click",
     ),
+    "sequence_depth": ("eight_step_program",),
 }
 MODULES = {
     "protocol": "tests.protocol.test_faults",
@@ -75,6 +77,7 @@ MODULES = {
     "association_revision": "tests.bench.check_association_revision",
     "association_background": "tests.bench.check_association_background",
     "sequence_learning": "tests.bench.check_sequence_learning",
+    "sequence_depth": "tests.bench.check_sequence_depth",
     "stitch_growth": "tests.bench.check_kernel",
 }
 
@@ -121,7 +124,7 @@ def read_task(path):
         required.add("offline_bundle")
     if kind == "arc_public25":
         required.update(("game_ids", "environment_config", "actions_per_game"))
-    if kind in ("stitch", "stitch_reference"):
+    if kind in ("stitch", "stitch_reference", "sequence_depth"):
         required.add("experiment_config")
         paths.add("experiment_config")
     if not required <= data.keys() or data.keys() - required - paths - {

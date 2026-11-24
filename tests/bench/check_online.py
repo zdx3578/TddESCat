@@ -29,6 +29,8 @@ def online_config(
     adapt=False,
     association=False,
     sequences=False,
+    policy_file=None,
+    learning_memory_bytes=None,
 ):
     prior_setting = "" if prior is None else f'prior_evidence = "{prior}"'
     execution = (
@@ -37,6 +39,12 @@ def online_config(
         else 'memory_enforcement = "cgroup_v2"'
     )
     frozen = "false" if prior is None or adapt else "true"
+    policy_file = root / "config/stitch.toml" if policy_file is None else policy_file
+    memory = (
+        ""
+        if learning_memory_bytes is None
+        else (f"learning_memory_bytes = {learning_memory_bytes}\n")
+    )
     plan = "\n[planning]\n" if planning else ""
     if goal is not None:
         role_color, marker_color, *cues = goal
@@ -62,7 +70,7 @@ connect_timeout_seconds = 2.0
 request_timeout_seconds = 5.0
 [learning]
 engine = "{root / "target/release/tddesc-stitch"}"
-policy_file = "{root / "config/stitch.toml"}"
+policy_file = "{policy_file}"
 batch_confirmed_events = {batch}
 association = {str(association).lower()}
 sequences = {str(sequences).lower()}
@@ -79,6 +87,7 @@ post_retry = false
 redirect = false
 frozen_evaluation = {frozen}
 {execution}
+{memory}
 {plan}
 ''',
         encoding="utf-8",

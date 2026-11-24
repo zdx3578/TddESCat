@@ -16,7 +16,7 @@ from tests.bench.check_core_learning import captured_rows
 from tests.bench.check_online import load, online_config
 
 
-def inspect_learning(path, prior):
+def inspect_learning(path, prior, *, expected_lengths=(2, 4)):
     phases = []
     all_refs = {
         row["event_id"]
@@ -40,6 +40,7 @@ def inspect_learning(path, prior):
         assert int(cost["final_total"]) < int(cost["ratio_numerator"])
         phases.append(
             {
+                "length": len(candidate["scopes"][0]["steps"]),
                 "publication": result["publication"],
                 "programs": result["programs"],
                 "depth": max(
@@ -49,8 +50,10 @@ def inspect_learning(path, prior):
                 "sources": history,
             }
         )
-    assert len(phases) == 2
-    assert phases[1]["depth"] > phases[0]["depth"], phases
+    assert tuple(phase["length"] for phase in phases) == expected_lengths, phases
+    assert all(new["depth"] > old["depth"] for old, new in zip(phases, phases[1:])), (
+        phases
+    )
     return phases
 
 
@@ -58,7 +61,9 @@ def check_scene(path, scene):
     state = scene.start_state
     events = captured_rows(path, "events")
     for event in events:
-        state = transition(scene, state, event["action"]["id"])
+        action = event["action"]
+        command = (6, action["x"], action["y"]) if action["id"] == 6 else action["id"]
+        state = transition(scene, state, command)
         actual = load(path, "blobs/" + event["response_blob"])
         assert actual["frame"] == [render(scene, state)]
     return events
@@ -128,6 +133,94 @@ def run_resource_program(root, runtime, url, public, previous, target):
     return {"shared_count": counts, "checks": feedback}
 
 
+def click_program_scenes(base):
+    base = replace(base, active=(3, 4, 21, 14))
+    previous = [
+        replace(
+            base,
+            public_id=base.public_id + f"C{i:02}",
+            start=((5 + i % 3, 6 + i // 3), (11 + i % 3, 6 + i // 3)),
+        )
+        for i in range(8)
+    ]
+    return previous, replace(
+        base,
+        public_id=base.public_id + "C99",
+        start=((7, 9), (15, 9)),
+        viewport=(1, 1, 21, 17),
+    )
+
+
+def click_command(scene):
+    x, y = scene.start[1]
+    left, top, width, height = scene.viewport
+    scale = 64 // max(width, height)
+    return {
+        "id": 6,
+        "x": (64 - width * scale) // 2 + (x - left + 1) * scale,
+        "y": (64 - height * scale) // 2 + (y - top) * scale,
+    }
+
+
+def run_click_program(root, runtime, url, public, previous, target):
+    prior = public / "click-training"
+    interventions = {}
+    for scene in previous:
+        click = click_command(scene)
+        command = (6, click["x"], click["y"])
+        selected = transition(scene, scene.start_state, command)
+        assert (
+            selected.selected == 1
+            and transition(scene, selected, 1).positions != selected.positions
+        )
+        interventions[scene.public_id] = [command, 1]
+    collect_training(
+        root,
+        runtime,
+        url,
+        prior,
+        [(scene, 3) for scene in previous],
+        interventions=interventions,
+    )
+    path = public / "click-held-out"
+    path.mkdir()
+    cfg = path / "agent.toml"
+    online_config(cfg, root, url, target, budget=3, prior=prior, sequences=True)
+    assert supervise(root, cfg, path) == 0, (path / "solver.log").read_text()
+    check_scene(path, target)
+    feedback = captured_rows(path, "checks")
+    assert [row["action"] for row in feedback] == [click_command(target), {"id": 1}]
+    assert click_command(target) not in [click_command(scene) for scene in previous]
+    assert all(set(row["assessments"].values()) == {"supported"} for row in feedback)
+    assert [row["program"]["feedback"] for row in feedback] == ["advance", "completed"]
+    job = next(path.glob("learning/job-*/sequence-corpus.json"))
+    corpus = load(job.parent, job.name)
+    for scope in corpus["scopes"]:
+        before, after = scope["steps"]
+        assert any(
+            before["effects"][i]["family"] == "selection"
+            and after["effects"][j]["family"] == "translation"
+            for i, j in scope["shared"][0]
+        )
+    adaptive = public / "click-adaptive"
+    adaptive.mkdir()
+    cfg = adaptive / "agent.toml"
+    online_config(
+        cfg, root, url, target, budget=3, prior=prior, sequences=True, adapt=True
+    )
+    assert supervise(root, cfg, adaptive) == 0, (adaptive / "solver.log").read_text()
+    events = check_scene(adaptive, target)
+    live = load(adaptive, "public-run.json")["sequence"]
+    assert live["confirmed_actions"] == live["approved_program_actions"] == 2
+    assert live["search"]["search_complete"]
+    job = adaptive / "learning" / live["search"]["job"]
+    inputs = load(job, "sequence-corpus.json")
+    assert [ref for scope in inputs["scopes"] for ref in scope["events"]] == [
+        event["event_id"] for event in events[1:]
+    ]
+    return {"click": click_command(target), "checks": feedback, "adaptive": live}
+
+
 def main(config, run):
     root = Path.cwd()
     runtime = runtime_paths(root)
@@ -157,8 +250,25 @@ def main(config, run):
         if scene.variant == "push-open"
     )
     resource_training, resource_target = resource_program_scenes(resource_base)
+    click_base = next(
+        scene
+        for scene in scenes(plan, plan["training_seeds"][0])
+        if scene.variant == "click-interior"
+    )
+    click_training, click_target = click_program_scenes(click_base)
     games = run / "private/games"
-    materialize(games, [*inputs, held, blocked, *resource_training, resource_target])
+    materialize(
+        games,
+        [
+            *inputs,
+            held,
+            blocked,
+            *resource_training,
+            resource_target,
+            *click_training,
+            click_target,
+        ],
+    )
     for scene in (held, blocked, resource_target):
         finite_engine_check(scene)
     public = run / "public"
@@ -214,12 +324,16 @@ def main(config, run):
         reports["resource"] = run_resource_program(
             root, runtime, url, public, resource_training, resource_target
         )
+        reports["click"] = run_click_program(
+            root, runtime, url, public, click_training, click_target
+        )
     write_json(public / "sequences.json", reports)
     for identifier in (
         "sequence_discovery",
         "sequence_consumption",
         "sequence_withdrawal",
         "sequence_resource",
+        "sequence_click",
     ):
         append_assertion(run, identifier, True, ["public/sequences.json"])
     return 0

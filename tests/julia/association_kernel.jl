@@ -95,6 +95,36 @@ end
     invalid = execute_stitch(sig,"copied-proof",programs,empty;slots,intent="relation",
         tamper=("semantic_context",invalid_context))
     @test invalid.code == 20
+
+    extended = deepcopy(sig)
+    push!(extended["sorts"],Dict("id"=>"Separate"))
+    append!(extended["operators"],[symbol("separate",["Integer"],"Separate"),
+        symbol("extend",["Separate"],"Separate")])
+    texts = ["(extend (extend (extend (separate i$i))))" for i in 1:8]
+    # Include the new literals in the same typed signature used by both jobs.
+    for i in 1:8
+        name = "i$i"
+        any(op->op["symbol"] == name,extended["operators"]) ||
+            push!(extended["operators"],symbol(name,String[],"Integer"))
+    end
+    prelude = TC.scoped_search_library(publication.snapshot,extended,texts,[])
+    @test isempty(prelude.entries)
+    separate = execute_stitch(extended,"scoped",texts,prelude)
+    @test separate.code == 0
+    scoped = read_stitch_rounds(separate.job,separate.output)
+    @test !isempty(first(scoped.verified)["definitions"])
+    scoped_digest = TC.publish_stitch!(directory,scoped;current_evidence="snapshot-scoped")
+    merged = TC.read_published_stitch(directory;publication=scoped_digest)
+    @test merged.snapshot.entries[1:length(publication.snapshot.entries)] == publication.snapshot.entries
+    @test merged.bundle["initial_library_count"] == 0
+    @test merged.bundle["cost"]["initial_library"] == "0"
+    @test length(merged.snapshot.entries) > length(merged.bundle["library"])
+    @test TC.scoped_search_library(merged.snapshot,extended,programs,slots).entries == publication.snapshot.entries
+    @test TC.read_published_stitch(directory).snapshot.version == merged.snapshot.version
+    @test_throws ErrorException TC.publish_stitch!(directory,scoped;current_evidence="snapshot-scoped")
+    damaged = deepcopy(merged.bundle)
+    empty!(damaged["global_library"]["entries"])
+    @test_throws ErrorException TC.verify_published_stitch(damaged)
 end
 
 @testset "Explicit connectivity and large support roles" begin

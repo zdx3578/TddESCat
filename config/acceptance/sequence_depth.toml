@@ -1,0 +1,6 @@
+schema_version = 1
+kind = "sequence_depth"
+output_name = "sequence-depth"
+environment_config = "../bench_server.toml"
+judge_config = "../bench_scenarios.toml"
+experiment_config = "../experiments/stitch_sequence.toml"

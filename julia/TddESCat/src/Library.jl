@@ -5,6 +5,29 @@ end
 
 LibrarySnapshot() = LibrarySnapshot("library-empty", Dict{String,Any}[])
 
+library_version(entries) = isempty(entries) ? "library-empty" :
+    "library-" * content_hash(JSON.json([entry["stable_id"] for entry in entries]))
+
+function scoped_search_library(base, signature, programs, slots)
+    registry,_ = registry_from(signature,base.entries)
+    sorts = Set{String}()
+    for program in programs
+        walk_wire(decode_program(program,registry)) do node,_
+            kind = node["kind"]
+            sort = kind == "Call" ? registry[node["operator"]]["output"] :
+                kind == "Slot" ? slots[node["index"]+1]["sort"] : node["sort"]
+            push!(sorts,sort)
+        end
+    end
+    selected = Set(entry["stable_id"] for entry in base.entries
+        if entry["definition"]["result_sort"] in sorts)
+    for entry in Iterators.reverse(base.entries)
+        entry["stable_id"] ∈ selected && union!(selected,entry["definition"]["dependencies"])
+    end
+    entries = filter(entry->entry["stable_id"] in selected,base.entries)
+    return LibrarySnapshot(base.version,entries)
+end
+
 function definition_depths(entries)
     depths = Dict{String,Int}()
     for entry in entries
@@ -114,8 +137,7 @@ function publish_library(base::LibrarySnapshot, result, manifest, signature;
         end
         names[candidate["temporary_name"]] = id
     end
-    version = length(entries) == length(base.entries) ? base.version :
-        "library-" * content_hash(JSON.json([entry["stable_id"] for entry in entries]))
+    version = length(entries) == length(base.entries) ? base.version : library_version(entries)
     return (snapshot=LibrarySnapshot(version, entries), names)
 end
 
@@ -190,8 +212,10 @@ function read_published_stitch(directory; publication=nothing)
     content_hash(bytes) == publication || error("Published artifact digest mismatch")
     bundle = JSON.parse(String(bytes))
     verify_published_stitch(bundle)
-    return (; publication, bundle, snapshot=LibrarySnapshot(bundle["library_version"],
-        collect(Dict{String,Any}, bundle["library"])))
+    state = get(bundle,"global_library",nothing)
+    snapshot = isnothing(state) ? LibrarySnapshot(bundle["library_version"],collect(Dict{String,Any},bundle["library"])) :
+        LibrarySnapshot(state["version"],collect(Dict{String,Any},state["entries"]))
+    return (; publication,bundle,snapshot)
 end
 
 function verify_published_stitch(bundle)
@@ -225,17 +249,38 @@ function verify_published_stitch(bundle)
         decimal_cost(bundle["cost"][key]) == value || error("Published cost mismatch at " * key)
     end
     decimal_cost(bundle["cost"]["engine_reported_post_rewrite_baseline"])
+    if haskey(bundle,"global_library")
+        state = bundle["global_library"]
+        state["version"] == library_version(state["entries"]) || error("Global library version differs")
+        state["prelude_digest"] == semantic_hash(entries[1:older]) || error("Published prelude digest differs")
+        _,global_defs = registry_from(signature,state["entries"])
+        all(entry->get(global_defs,entry["stable_id"],nothing) == entry["definition"],entries) ||
+            error("Global library does not contain the verified job definitions")
+        total = sum(entry->wire_cost(entry["definition"]["body"]),state["entries"];init=0)
+        decimal_cost(state["storage_cost"]) == total || error("Global library storage cost differs")
+    end
     return bundle
 end
 
 function publish_stitch!(directory, checkpoint; current_evidence)
     return with_run(directory) do store
         current = read_published_stitch(store.public_dir)
-        base = isnothing(current) ? LibrarySnapshot() : current.snapshot
+        global_base = isnothing(current) ? LibrarySnapshot() : current.snapshot
         isempty(checkpoint.verified) && error("No verified round to publish")
-        base.entries == checkpoint.entries || error("Frozen library content differs from the current version")
+        selected = Set(entry["stable_id"] for entry in checkpoint.entries)
+        frozen = filter(entry->entry["stable_id"] in selected,global_base.entries)
+        frozen == checkpoint.entries || error("Frozen library dependencies differ from the current version")
+        base = LibrarySnapshot(global_base.version,frozen)
         result = last(checkpoint.verified)
         bundle = publication_from(base, checkpoint, result; current_version=base.version, current_evidence)
+        if frozen != global_base.entries
+            existing = Set(entry["stable_id"] for entry in global_base.entries)
+            added = filter(entry->entry["stable_id"] ∉ existing,bundle["library"])
+            entries = vcat(global_base.entries,added)
+            bundle["global_library"] = Dict("version"=>library_version(entries),"entries"=>entries,
+                "prelude_digest"=>semantic_hash(frozen),"storage_cost"=>string(sum(
+                    entry->wire_cost(entry["definition"]["body"]),entries;init=0)))
+        end
         verify_published_stitch(bundle)
         bytes = JSON.json(bundle)
         digest = content_hash(bytes)

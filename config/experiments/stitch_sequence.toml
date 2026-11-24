@@ -1,0 +1,30 @@
+# 八步语料上的独立搜索对照。轮数、时间和候选容量保持开放。
+schema_version = 2
+language = "typed-op-children-db-v1"
+search = "best-first"
+max_arity = 1000
+sym_var_cost = 1
+
+[search_options]
+priority = "cost"
+freeze_rule = "on"
+var_order = "mean-nodes-per-class"
+lower_bound = "on"
+opt_seen = false
+opt_dedup_by_match = true
+opt_dominance_reuse = true
+opt_useless_frozen = true
+opt_useless_inline = true
+allow_useless_vars = false
+no_zero_arity = false
+decompose_min_rows = 48
+
+[processing]
+apply_chunk_rows = 128
+
+[termination]
+learning = "verified_compression_fixed_point"
+
+[progress]
+accepted_definition_checkpoints = [1, 2, 4, 8, 20, 50, 100]
+search_pop_checkpoints = [20000, 100000, 1000000, 10000000]

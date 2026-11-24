@@ -39,8 +39,7 @@ function compile_evidence_sequences(directory, destination)
     return persist_sequence_corpus(episodes,destination)
 end
 
-function persist_sequence_corpus(episodes,destination)
-    corpus = compile_sequence_corpus(episodes)
+function persist_sequence_corpus(episodes,destination; corpus=compile_sequence_corpus(episodes))
     sources, context = describe_learning_context(corpus.signature,[],corpus.programs,corpus.origins,corpus.slots;
         intent="program",consumer="sequence-corpus",obligation_refs=String[])
     records = [record for episode in episodes for record in episode if record.observation.action["id"] != 0]
@@ -71,6 +70,16 @@ function add_sequence_slot!(slots,positions,sort,phase,offset,port=0)
     return Slot(index)
 end
 
+function relative_click(xy,shape)
+    offset = Tuple(xy) .- anchor(shape)
+    unit = support_grid(shape).unit
+    divisor = gcd(unit,offset...)
+    return (;offset=div.(offset,divisor),denominator=div(unit,divisor))
+end
+
+click_descriptor(binding) = Dict("kind"=>"ClickBinding",
+    "layout"=>Dict("view"=>"target-support-grid","denominator"=>binding.denominator))
+
 function sequence_step!(signature, slots, positions, output, action, offset)
     ports = [string(effect.family) for effect in output.effects]
     before = add_sequence_slot!(slots,positions,"SceneBefore","before",offset)
@@ -85,11 +94,19 @@ function sequence_step!(signature, slots, positions, output, action, offset)
         input = add_sequence_slot!(slots,positions,"RoleBefore","before",offset,i)
         result = add_sequence_slot!(slots,positions,"RoleAfter","after",offset,i)
         push!(role_slots,(input.index,result.index))
-        push!(effects,effect_program(effect,input,result))
+        term = if effect.family == :selection
+            binding = relative_click(effect.values,effect.after)
+            op = semantic_operator!(signature,["RoleBefore","RoleAfter","Integer","Integer"],"Relation",
+                click_descriptor(binding);version="sequence-operators-v1")
+            Call(op,input,result,(Literal("Integer",d) for d in binding.offset)...)
+        else
+            effect_program(effect,input,result)
+        end
+        push!(effects,term)
     end
     sort = program_sort!(signature,ports,ports)
     layout = Dict("input_ports"=>ports,"output_ports"=>ports,"click_binding"=>
-        action["id"] == 6 ? "observed-selection-role" : nothing)
+        action["id"] == 6 ? "target-support-grid" : nothing)
     op = semantic_operator!(signature,["Integer",pre.sort,"Relation",post.sort],sort,
         Dict("kind"=>"Step","layout"=>layout);version="sequence-operators-v1")
     return (; term=Call(op,action_term,pre.term,compose_effects(effects),post.term),sort, output,
@@ -99,7 +116,8 @@ end
 function shared_sequence_ports(left, right)
     pairs = Tuple{Int,Int}[]
     for (i,outgoing) in enumerate(left.effects), (j,incoming) in enumerate(right.effects)
-        outgoing.family == incoming.family || continue
+        incoming.family == :selection && continue
+        (outgoing.family == incoming.family || outgoing.family == :selection && incoming.family == :translation) || continue
         isempty(outgoing.after) && continue
         outgoing.after == incoming.before || continue
         push!(pairs,(i-1,j-1))

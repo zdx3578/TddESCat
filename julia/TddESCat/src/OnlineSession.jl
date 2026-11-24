@@ -218,8 +218,13 @@ function resource_binding(rule, fragments)
 end
 
 function ranked_public_actions(knowledge, observation, history, attempts, max_action_coordinates;
-        composing=false, required_action=nothing)
+        composing=false, required_action=nothing, programs_pending=false, program_cursor=nothing)
     values = public_action_candidates(observation,max_action_coordinates)
+    if programs_pending
+        for action in program_click_actions(knowledge,program_cursor,values.groups,observation.available_actions)
+            action in values.actions || push!(values.actions,action)
+        end
+    end
     if !isnothing(required_action) && required_action ∉ values.actions
         required_action["id"] in observation.available_actions || error("Unavailable experiment action")
         push!(values.actions,required_action)
@@ -534,7 +539,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             goal = bind_observed_goal(last(obs.frames),config.planning["goal"])
         end
         !isnothing(goal) && goal_truth(goal,last(obs.frames)) == proven && break
-        decision = ranked_public_actions(knowledge,obs,history,attempts,coordinates;composing)
+        programs_pending = !composing && (!tried_program || !isnothing(program_cursor))
+        decision = ranked_public_actions(knowledge,obs,history,attempts,coordinates;
+            composing,programs_pending,program_cursor)
         isempty(decision.ranked) && break
         item = first(decision.ranked)
         policy_note = nothing
@@ -560,7 +567,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             continuation = nothing
         end
         program_note = nothing
-        if !composing && (!tried_program || !isnothing(program_cursor))
+        if programs_pending
             if !tried_program
                 tried_program = true
                 for program in knowledge.programs

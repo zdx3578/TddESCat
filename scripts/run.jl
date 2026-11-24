@@ -59,7 +59,12 @@ function capture(config, public_dir; supervised=false, collect_only=false)
         end
         events = recover_run(store)
         sequence = if !frozen && !isnothing(config.learning) && get(config.learning,"sequences",false)
-            TddESCat.persist_sequence_corpus([events],TddESCat.store_path(store,"learning","sequence-corpus.json"))
+            episodes = [events]
+            corpus = TddESCat.compile_sequence_corpus(episodes)
+            artifact = TddESCat.store_path(store,"learning","sequence-corpus.json")
+            compiled = TddESCat.persist_sequence_corpus(episodes,artifact;corpus)
+            searched = rec.frozen ? nothing : TddESCat.train_program_corpus!(knowledge,config,store,ROOT,corpus)
+            merge(compiled,(; search=searched))
         end
         output = (recorded=length(events), requested_game_id=game_id, quarantined=rec.frozen, learned,
             prior_publication=prepared, sequence)
