@@ -94,6 +94,20 @@ function visual_motifs(frame, size_limit)
     return maximal
 end
 
+function motif_contrast_boundary(frame, field, maximum_margin)
+    b = field.box
+    for margin in 1:maximum_margin
+        left,right = b.x+1-margin,b.x+b.width+margin
+        top,bottom = b.y+1-margin,b.y+b.height+margin
+        checkbounds(Bool,frame,top,left) && checkbounds(Bool,frame,bottom,right) || continue
+        color = frame[top,left]
+        color != field.background || continue
+        all(frame[top,x] == frame[bottom,x] == color for x in left:right) &&
+            all(frame[y,left] == frame[y,right] == color for y in top:bottom) && return true
+    end
+    return false
+end
+
 function rectangular_fields(frame, role_width, role_height)
     candidates = []
     for component in color_components(frame).groups

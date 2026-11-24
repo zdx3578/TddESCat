@@ -75,6 +75,13 @@ end
     pair = [m for m in motifs if m.field.background == 0x02 && m.value.width == m.value.height == 3]
     @test sort!([m.field.scale for m in pair]) == [1,2]
     @test allequal(m.value for m in pair)
+    @test TS.motif_contrast_boundary(pixels,first(pair).field,3)
+    clipped = fill(first(pair).field.background,size(pixels))
+    bounds = first(pair).field.box
+    ys = bounds.y+1:bounds.y+bounds.height
+    xs = bounds.x+1:bounds.x+bounds.width
+    clipped[ys,xs] = pixels[ys,xs]
+    @test !TS.motif_contrast_boundary(clipped,first(pair).field,3)
 
     original = first(pair).value
     op = (true,true,false)

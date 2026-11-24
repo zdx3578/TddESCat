@@ -637,7 +637,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             end
         end
         spatial_choice = if !isnothing(spatial) && isnothing(program_cursor)
-            planned = visual_plan(visual,spatial,obs,decision,rec.before_ref)
+            planned = autonomous_visual_plan(visual,spatial,obs,decision,rec.before_ref)
             isnothing(planned) ? spatial_experiment(spatial,obs,decision) : planned
         end
         experiment = if !frozen && !composing && isnothing(program_cursor) && isnothing(spatial_choice)

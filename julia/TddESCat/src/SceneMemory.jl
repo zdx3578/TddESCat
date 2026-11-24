@@ -20,9 +20,10 @@ mutable struct SceneMemory
     read_views::Set{String}
     viewpoints::Set{Pixel}
     tick::Int
+    occlusion_ref::Union{Nothing,String}
 end
 
-SceneMemory() = SceneMemory(Dict(),Dict(),Set(),Set(),0)
+SceneMemory() = SceneMemory(Dict(),Dict(),Set(),Set(),0,nothing)
 
 function observe_scene!(scene, spatial, frame, here, event)
     event in scene.read_views && return
@@ -34,12 +35,17 @@ function observe_scene!(scene, spatial, frame, here, event)
     h,w = size(frame)
     edges = findall(c->c[1] in (0,width-1) || c[2] in (0,height-1),spatial.role)
     landmarks = Dict{Tuple,Vector{Pixel}}()
+    obscured = 0
     for y in mod(here[2],stride[2]):stride[2]:h-height,
             x in mod(here[1],stride[1]):stride[1]:w-width
         p = (x,y)
         p == here && continue
         patch = Tuple(footprint(frame,spatial.role,p))
-        2count(==(base),patch) >= length(patch) || continue
+        if 2count(==(base),patch) < length(patch)
+            previous = get(scene.tiles,p,nothing)
+            obscured += !isnothing(previous) && previous.perimeter
+            continue
+        end
         perimeter = !isempty(edges) && all(patch[i] == base for i in edges)
         previous = get(scene.tiles,p,nothing)
         if perimeter || isnothing(previous) || !previous.perimeter
@@ -48,6 +54,9 @@ function observe_scene!(scene, spatial, frame, here, event)
         if perimeter && !allequal(patch)
             push!(get!(Vector{Pixel},landmarks,patch),p)
         end
+    end
+    if isnothing(scene.occlusion_ref) && obscured > 1
+        scene.occlusion_ref = event
     end
     for (patch,points) in landmarks
         length(points) == 1 || continue

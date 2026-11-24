@@ -98,6 +98,8 @@ function bind_visual_fields!(control, spatial, frame, here, event)
         for mark in motifs
             mark.field.scale < signal.field.scale || continue
             mark.field.background == signal.field.background || continue
+            mark.value.pigment == visual_floor(spatial) && continue
+            motif_contrast_boundary(frame,mark.field,max(w,h)) || continue
             (mark.value.width,mark.value.height) == (signal.value.width,signal.value.height) || continue
             b = mark.field.box
             p = (2b.x+b.width-w,2b.y+b.height-h)
@@ -120,6 +122,83 @@ function bind_visual_fields!(control, spatial, frame, here, event)
         merge!(control.targets,pair.targets)
     end
     modified && push!(control.reads,event)
+end
+
+function scene_survey(control, spatial, obs, decision)
+    scene = control.scene
+    isnothing(scene.occlusion_ref) && return nothing
+    frame = last(obs.frames)
+    here = locate_role(frame,spatial.role)
+    isnothing(here) && return nothing
+    floor = visual_floor(spatial)
+    isnothing(floor) && return nothing
+    stride = spatial_grid(spatial)
+    any(iszero,stride) && return nothing
+    targets = collect(keys(control.targets))
+    actions = sort!([row.action["id"] for row in decision.ranked if length(row.action) == 1 &&
+        haskey(spatial.offsets,row.action["id"])])
+    isempty(actions) && return nothing
+    motions = Dict(id=>measured_offset(spatial,id) for id in actions)
+    charge = isnothing(control.resource) ? typemax(Int) : read_counter(frame,control.resource)
+    rate = isnothing(control.resource) ? 0 : max(1,control.rate)
+    state = (here,charge,Tuple(sort!(collect(control.spent))))
+    agenda = NamedTuple[(state=state,action=0,first_point=here,reads=String[],depth=0)]
+    best = nothing
+    rank = (0,0,0)
+    reached = Dict{Tuple{Pixel,Tuple},Int}((here,state[3])=>charge)
+    edges = Dict{Tuple{Pixel,Int},Union{Nothing,NamedTuple}}()
+    for row in agenda
+        p,left,used = row.state
+        if p ∉ scene.viewpoints && !isempty(scene.viewpoints)
+            novelty = minimum(sum(abs.(p .- q) .÷ stride) for q in scene.viewpoints)
+            score = (novelty,left,-row.depth)
+            if score > rank
+                rank = score
+                best = row
+            end
+        end
+        left > 0 || continue
+        for id in actions
+            delta,sources = motions[id]
+            edge = get!(edges,(p,id)) do
+                projected_motion(control,spatial,frame,p,id,delta,here,floor,targets)
+            end
+            isnothing(edge) && continue
+            q = edge.point
+            q in targets && q ∉ control.matched && continue
+            tile = scene_tile(scene,spatial,frame,q,here)
+            isempty(tile.patch) && continue
+            haskey(spatial.layouts,q) || 2count(==(floor),tile.patch) >= length(tile.patch) || continue
+            remaining, next_used = max(0,left-rate),used
+            refills = !isnothing(control.resource) && haskey(control.refill,tile.patch) && q ∉ used
+            if refills
+                capacity = control.resource.box
+                remaining = max(capacity.width,capacity.height)
+                next_used = extend_visual_set(used,q)
+            end
+            key = (q,next_used)
+            remaining > get(reached,key,-1) || continue
+            reached[key] = remaining
+            reads = [row.reads;first(sources);edge.reads;tile.reads]
+            refills && push!(reads,control.refill[tile.patch])
+            push!(agenda,(state=(q,remaining,next_used),action=row.action == 0 ? id : row.action,
+                first_point=row.action == 0 ? q : row.first_point,reads=unique(reads),depth=row.depth+1))
+        end
+    end
+    isnothing(best) && return nothing
+    control.continuation = nothing
+    return (id=best.action,reason="inspect_unseen_neighborhood",
+        reads=unique([spatial.role_reads;control.reads;scene.occlusion_ref;best.reads]),
+        role=here,destination=best.first_point,frontier=best.state[1],expected=nothing)
+end
+
+function autonomous_visual_plan(control,spatial,obs,decision,event)
+    proposed = visual_plan(control,spatial,obs,decision,event)
+    if !isnothing(proposed) && proposed.reason in ("visual_goal_hypothesis","experiment_on_goal_route")
+        return proposed
+    end
+    survey = scene_survey(control,spatial,obs,decision)
+    return isnothing(survey) ? proposed : survey
 end
 
 function observe_visual!(control, spatial, before, after, move, effects)
