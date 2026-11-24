@@ -233,12 +233,26 @@ def available_actions(scene, state):
     )
 
 
-def reachable(scene):
-    frontier = deque([scene.start_state])
-    seen = {scene.start_state}
+def goal_reached(scene, state):
+    if scene.goal is None:
+        return False
+    x, y = state.positions[0]
+    target_x, target_y = scene.goal
+    return any(
+        abs(x + dx - target_x) + abs(y + dy - target_y) == 1
+        for dx, dy, _ in scene.bodies[0]
+    )
+
+
+def reachable(scene, start=None):
+    initial = scene.start_state if start is None else start
+    frontier = deque([initial])
+    seen = {initial}
     while frontier:
         state = frontier.popleft()
         yield state
+        if goal_reached(scene, state):
+            continue
         for action in concrete_actions(scene, state):
             candidate = transition(scene, state, action)
             if candidate not in seen:

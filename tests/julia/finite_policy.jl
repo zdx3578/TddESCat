@@ -128,3 +128,22 @@ end
     @test !TC.distinguish_predictions(map;max_work=2).complete
     @test TC.distinguish_predictions([Dict("brief"=>nothing),Dict("brief"=>false)];max_work=4).separated == 0
 end
+
+@testset "Competing projected observations block a deterministic suffix" begin
+    before = zeros(UInt8,4,5)
+    before[2,2] = 9
+    part = (family=:translation,basis=TC.MotionShape([(1,1,0x09)]),value=(1,1),expected=(1,0))
+    scope = TC.plan_channels([part])
+    effect = TC.EffectModel(:translation,[(0,0,0x09)],nothing,[1,0],TC.MotionShape(),false)
+    premise = TC.GuardSearch(TC.MotionPredicate[],["e1"],String[],String[],true,true,1)
+    function record(label, underlay)
+        patch = TC.FramePatch(size(before),[(0,0,0x09,underlay),(1,0,0x00,0x09)],TC.PixelChange[])
+        rule = TC.JointMechanism(label,1,[effect],["def"],"e1",[(1,1)],[(0,0)],UInt8[0],nothing,patch)
+        return (model=TC.ActiveMechanism(rule,premise,String[],String[]),fragments=[part],expected=scope)
+    end
+    first, second = record("one",0x00),record("two",0x01)
+    @test !isnothing(TC.project_frame(first,before))
+    @test !isnothing(TC.project_frame(second,before))
+    result = TC.compatible_frame_projection([first,second],scope,before)
+    @test result.conflict && isnothing(result.frame) && isnothing(result.choice)
+end

@@ -35,6 +35,8 @@ def finite_engine_check(scene):
     states, edges = 0, 0
     for state in reference.reachable(scene):
         states += 1
+        if reference.goal_reached(scene, state):
+            continue
         for action in reference.concrete_actions(scene, state):
             outcome = reference.transition(scene, state, action)
             actual, frames, actions = engine_transition(scene, state, action)
@@ -432,8 +434,11 @@ def http_trace(url, scene):
             assert len(response["guid"]) > 0 and (
                 guid is None or guid == response["guid"]
             )
-            assert response["state"] == "NOT_FINISHED"
-            assert response["levels_completed"] == 0 and response["win_levels"] == 1
+            won = reference.goal_reached(scene, expected_state)
+            assert response["state"] == ("WIN" if won else "NOT_FINISHED")
+            assert (
+                response["levels_completed"] == int(won) and response["win_levels"] == 1
+            )
             assert response["available_actions"] == list(
                 reference.available_actions(scene, expected_state)
             )

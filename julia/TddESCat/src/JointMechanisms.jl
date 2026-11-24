@@ -7,6 +7,14 @@ struct EffectModel
     enclosed::Bool
 end
 
+const PixelChange = Tuple{Int,Int,UInt8,UInt8}
+
+struct FramePatch
+    shape::Tuple{Int,Int}
+    moving::Vector{PixelChange}
+    fixed::Vector{PixelChange}
+end
+
 struct JointMechanism
     id::String
     action_id::Int
@@ -17,6 +25,21 @@ struct JointMechanism
     spacing::Vector{Pixel}
     entry_colors::Vector{UInt8}
     parent::Union{Nothing,String}
+    patch::Union{Nothing,FramePatch}
+end
+
+function frame_patch(output, before, after, anchors)
+    output.complete && isempty(output.residual) && isempty(output.public_delta) || return nothing
+    moving = Set{Pixel}()
+    fixed = Set{Pixel}()
+    for effect in output.effects
+        union!(effect.family == :translation ? moving : fixed, effect.changed)
+    end
+    isdisjoint(moving, fixed) || return nothing
+    shift_x, shift_y = isempty(anchors) ? (0,0) : first(anchors)
+    changes(points, dx, dy) = PixelChange[(x-dx,y-dy,before[y+1,x+1],after[y+1,x+1])
+        for (x,y) in sort!(collect(points))]
+    return FramePatch(size(before), changes(moving,shift_x,shift_y), changes(fixed,0,0))
 end
 
 function support_grid(shape)
@@ -71,7 +94,7 @@ function projection_references(indices, original, calls, occurrences)
     return sort!(collect(evidence))
 end
 
-function joint_model(compiled, program, original, definitions, calls, occurrences, before, term_limit)
+function joint_model(compiled, program, original, definitions, calls, occurrences, before, after, term_limit)
     isempty(calls) && return nothing
     expanded = expand_library_term(program, definitions)
     effects = compiled.output.effects
@@ -112,13 +135,14 @@ function joint_model(compiled, program, original, definitions, calls, occurrence
     id = "joint-" * content_hash(JSON.json([compiled.output.event_id, references, compiled.roles]))
     action = compiled.output.action["id"]
     event = compiled.output.event_id
-    joint = JointMechanism(id,action,models,references,event,anchors,spacing,entry_colors,nothing)
+    patch = frame_patch(compiled.output,before,after,anchors)
+    joint = JointMechanism(id,action,models,references,event,anchors,spacing,entry_colors,nothing,patch)
     moved = findall(effect->effect.family == :translation,models)
     (isempty(moved) || length(moved) == length(models)) && return [joint]
     projected = projection_references(moved,original,calls,occurrences)
     isempty(projected) && return [joint]
     subid = "joint-" * content_hash(JSON.json([id,moved,projected]))
-    return [joint,JointMechanism(subid,action,models[moved],projected,event,anchors,spacing,entry_colors,id)]
+    return [joint,JointMechanism(subid,action,models[moved],projected,event,anchors,spacing,entry_colors,id,nothing)]
 end
 
 function decode_model_term(effect, pre, post)
@@ -134,13 +158,14 @@ function read_joint_mechanisms(published, corpus, pairs; term_limit=7)
         error("Released training sources differ from public evidence")
     registry, definitions = registry_from(bundle["signature"], published.snapshot.entries)
     occurrences = Dict(row["occurrence_id"]=>row["expression_path"] for row in bundle["origins"])
-    before = Dict(after.event["event_id"]=>last(pre.observation.frames) for (pre,after) in pairs)
+    frames = Dict(post.event["event_id"]=>(last(pre.observation.frames),last(post.observation.frames))
+        for (pre,post) in pairs)
     models = JointMechanism[]
     for (index, (text, compiled)) in enumerate(zip(bundle["rewritten_programs"], corpus.compiled))
         calls = filter(call -> call["program_index"] == index - 1, bundle["calls"])
         original = decode_program(corpus.programs[index],registry)
         learned = joint_model(compiled,decode_program(text,registry),original,definitions,calls,
-            occurrences,before[compiled.output.event_id],term_limit)
+            occurrences,frames[compiled.output.event_id]...,term_limit)
         isnothing(learned) || append!(models,learned)
     end
     return models

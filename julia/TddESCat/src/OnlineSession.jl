@@ -123,12 +123,16 @@ function archive_trial!(knowledge, trial, limits)
     return old
 end
 
-function mechanism_key(rule)
-    return content_hash(JSON.json([rule.action_id,
+function mechanism_key(rule; composing=false)
+    patch = rule.patch
+    observation = composing && !isnothing(patch) ? (patch.shape,patch.moving,patch.fixed) : nothing
+    meaning = [rule.action_id,
         [(item.family,item.template,item.position,item.family == :selection ? Int[] : item.values,
           item.visibility,item.enclosed) for item in rule.effects],
         any(effect->effect.family == :count,rule.effects) ? rule.anchors : Pixel[],
-        rule.spacing,rule.entry_colors,isnothing(rule.parent)]))
+        rule.spacing,rule.entry_colors,isnothing(rule.parent)]
+    composing && push!(meaning,observation)
+    return content_hash(JSON.json(meaning))
 end
 
 function candidate_evaluation(active, before, groups, enclosure, action, history)
@@ -196,13 +200,21 @@ function enabled_condition(knowledge, item, current, history)
     return nothing
 end
 
-function ranked_public_actions(knowledge, observation, history, attempts, limit)
+function resource_binding(rule, fragments)
+    movers = [item for item in fragments if !isnothing(item) && item.family == :translation]
+    isempty(movers) && return nothing
+    [item.value for item in movers] == rule.anchors || return nothing
+    return Tuple(sort!(scope_key.(movers)))
+end
+
+function ranked_public_actions(knowledge, observation, history, attempts, limit; composing=false)
     values = public_action_candidates(observation,limit)
     judged = []
     for action in values.actions
         supports = []
         reasons = String[]
         blocked_parents = Set{String}()
+        blocked_resources = Set{Tuple}()
         rejected = false
         for model in knowledge.active
             model.rule.action_id == action["id"] || continue
@@ -210,18 +222,46 @@ function ranked_public_actions(knowledge, observation, history, attempts, limit)
             push!(reasons,selected.reason)
             rejected |= selected.truth == disproven
             selected.reason == "resource_precondition" && push!(blocked_parents,model.rule.id)
+            if composing && any(effect->effect.family == :count,model.rule.effects) &&
+                selected.reason in ("resource_precondition","incomplete_effect_binding")
+                binding = resource_binding(model.rule,selected.fragments)
+                isnothing(binding) || push!(blocked_resources,binding)
+            end
             selected.truth == proven || continue
             expected = plan_channels(selected.fragments)
             isnothing(expected) && continue
             push!(supports,(; model, selected.fragments, expected))
         end
         filter!(choice -> isnothing(choice.model.rule.parent) || choice.model.rule.parent ∉ blocked_parents,supports)
+        if !isempty(blocked_resources)
+            filter!(supports) do choice
+                movers = filter(item->item.family == :translation,choice.fragments)
+                Tuple(sort!(scope_key.(movers))) ∉ blocked_resources
+            end
+            push!(reasons,"shared_resource_binding_unproved")
+        end
         sort!(supports;by=choice->(-length(choice.expected),active_id(choice.model)))
         agreed = !isempty(supports) && all(other->all(get(first(supports).expected,key,value) == value
             for (key,value) in other.expected),supports)
         reason = isempty(supports) ? (isempty(reasons) ? "uncovered" : join(sort!(unique(reasons)),",")) :
             agreed ? "published_joint_effects" : "competing_predictions"
         chosen = agreed ? first(supports) : nothing
+        projection = nothing
+        if composing && !isnothing(chosen)
+            agreed = all(other->issubset(keys(other.expected),keys(chosen.expected)),supports)
+            if agreed
+                evaluated = compatible_frame_projection(supports,chosen.expected,values.frame)
+                if evaluated.conflict
+                    agreed = false
+                    reason = "competing_frame_projections"
+                elseif !isnothing(evaluated.choice)
+                    chosen,projection = evaluated.choice,evaluated.frame
+                end
+            else
+                reason = "uncombined_effect_scopes"
+            end
+            agreed || (chosen = nothing)
+        end
         follow = nothing
         priority = agreed ? 1 : rejected ? 4 : 3
         trial_count = get(attempts,action_key(action),0)
@@ -235,7 +275,7 @@ function ranked_public_actions(knowledge, observation, history, attempts, limit)
                 reason = "discriminates_competing_predictions"
             end
         end
-        if !isnothing(chosen)
+        if !isnothing(chosen) && !composing
             follow = enabled_condition(knowledge,chosen,values,history)
             if !isnothing(follow)
                 priority = 0
@@ -244,10 +284,10 @@ function ranked_public_actions(knowledge, observation, history, attempts, limit)
                 priority = 0
                 reason = "tests_changed_role_selection"
             end
-        elseif action["id"] == 6 && last(history) == 6
+        elseif isnothing(chosen) && action["id"] == 6 && last(history) == 6
             priority += 1
         end
-        push!(judged,(; action, chosen, reason, rejected, follow, experiment,rank=(priority,trial_count)))
+        push!(judged,(; action, chosen, reason, rejected, follow, experiment,projection,rank=(priority,trial_count)))
     end
     sort!(judged;by=row->row.rank,alg=Base.Sort.MergeSort)
     return (; ranked=judged, values.click_count)
@@ -285,12 +325,12 @@ function recovery_reads(rec, model)
     return sort!(unique([rec.before_ref; own_sources; tail]))
 end
 
-function predict_public(rec, item)
+function predict_public(rec, item; plan_reads=String[])
     choice = item.chosen
     if isnothing(choice)
         return nothing
     end
-    reads = recovery_reads(rec,choice.model)
+    reads = sort!(unique([recovery_reads(rec,choice.model);plan_reads]))
     binding = [
         Dict("slot"=>i-1,"ref"=>rec.before_ref * "-query-" * key)
         for (i,key) in enumerate(sort!(collect(keys(choice.expected))))
@@ -363,9 +403,10 @@ function online_learn!(knowledge, config, store, pairs, repo_root)
     published = read_published_stitch(publication_dir;publication=digest)
     term_limit = isnothing(config.search) ? 7 : config.search["max_parameter_term_nodes"]
     incoming = read_joint_mechanisms(published,corpus,pairs; term_limit)
-    known = Dict(mechanism_key(rule)=>rule for rule in knowledge.rules)
+    composing = !isnothing(config.planning) && haskey(config.planning,"goal")
+    known = Dict(mechanism_key(rule;composing)=>rule for rule in knowledge.rules)
     for rule in incoming
-        get!(known,mechanism_key(rule),rule)
+        get!(known,mechanism_key(rule;composing),rule)
     end
     knowledge.rules = sort!(collect(values(known));by=rule->rule.id)
     limits = motion_guard_limits(config)
@@ -383,6 +424,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     publications = String[]
     count = 0
     continuation = nothing
+    goal_pending = nothing
+    composing = !isnothing(config.planning) && haskey(config.planning,"goal")
+    goal = composing ? bind_observed_goal(last(rec.observation.frames),config.planning["goal"]) : nothing
     limits = motion_guard_limits(config)
     caps = effective_limits(config)
     frozen_version = frozen ? frozen_knowledge_digest(knowledge) : nothing
@@ -391,11 +435,20 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         decision_started = time_ns()
         obs = rec.observation
         obs.state in ("WIN","GAME_OVER") && break
-        decision = ranked_public_actions(knowledge,obs,history,attempts,caps.max_match_witnesses)
+        !isnothing(goal) && goal_truth(goal,last(obs.frames)) == proven && break
+        decision = ranked_public_actions(knowledge,obs,history,attempts,caps.max_match_witnesses;composing)
         isempty(decision.ranked) && break
         item = first(decision.ranked)
         policy_note = nothing
-        if !isnothing(continuation)
+        goal_cursor = nothing
+        if composing
+            selection = choose_observed_goal_step(rec,knowledge,goal,config.planning,history,decision,
+                goal_pending,limits,caps.max_match_witnesses)
+            item = isnothing(selection.item) ? item : selection.item
+            goal_cursor = selection.cursor
+            policy_note = selection.note
+            goal_pending = nothing
+        elseif !isnothing(continuation)
             restored = recheck_condition_plan(knowledge,continuation,decision.ranked)
             policy_note = Dict("operation"=>"revalidate_suffix","status"=>restored.status,
                 "parent_command"=>continuation.command,"action"=>continuation.target.action)
@@ -404,9 +457,12 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             end
             continuation = nothing
         end
-        prediction = predict_public(rec,item)
+        plan_reads = isnothing(goal_cursor) ? String[] : reduce(vcat,
+            (recovery_reads(rec,model) for model in knowledge.active if haskey(goal_cursor.node.dependencies,model.rule.id));
+            init=String[])
+        prediction = predict_public(rec,item;plan_reads)
         id = command_id(rec.next_sequence)
-        plan = isnothing(config.planning) || isnothing(item.follow) ? nothing :
+        plan = composing || isnothing(config.planning) || isnothing(item.follow) ? nothing :
             propose_condition_plan(item,config.planning,id)
         if !isnothing(plan)
             policy_note = Dict("operation"=>"freeze_projected_policy","status"=>"ready",
@@ -449,6 +505,11 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 policy_note["feedback"] = "withdrawn_after_feedback"
             end
         end
+        if !isnothing(goal_cursor)
+            feedback = confirm_goal_step(goal_cursor,resulting.observation,assessment)
+            policy_note["feedback"] = feedback.status
+            goal_pending = feedback.next
+        end
         old = frozen ? Dict() : archive_trial!(knowledge,PublicTrial(sample,item.action),limits)
         revisions = []
         for model in knowledge.active
@@ -481,6 +542,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     end
     after_version = frozen ? frozen_knowledge_digest(knowledge) : nothing
     after_version == frozen_version || error("Frozen evaluation changed the mechanism")
-    return (; actions=count, publications, state=rec.observation.state, models=length(knowledge.active),
+    outcome = (; actions=count, publications, state=rec.observation.state, models=length(knowledge.active),
         frozen_before=frozen_version, frozen_after=after_version)
+    composing || return outcome
+    truth = isnothing(goal) ? unknown_truth : goal_truth(goal,last(rec.observation.frames))
+    return merge(outcome,(goal=truth == proven ? "observed" : truth == disproven ? "not_reached" : "unknown",))
 end

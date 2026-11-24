@@ -62,6 +62,7 @@ class Scene:
     initial_selection: int = 0
     dynamics: str = "static"
     signal: Cell | None = None
+    goal: Point | None = None
 
     @property
     def start_state(self):
@@ -99,6 +100,8 @@ class Scene:
         )
         if data.get("signal") is not None:
             data["signal"] = tuple(data["signal"])
+        if data.get("goal") is not None:
+            data["goal"] = tuple(data["goal"])
         for name, cls_part in (("switch", Switch), ("resource", Resource)):
             if data.get(name) is not None:
                 spec = data[name]

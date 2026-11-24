@@ -107,9 +107,20 @@ function load_run_config(path::AbstractString)
     planning = get(data,"planning",nothing)
     if !isnothing(planning)
         isnothing(learning) && throw(ArgumentError("Planning requires learned mechanisms"))
-        require_keys(planning,("depth","max_work");at="planning")
+        require_keys(planning,("depth","max_work");optional=("max_states","goal"),at="planning")
         check_values(planning,("depth","max_work"),positive_integer,"planning")
         planning["depth"] <= 16 || throw(ArgumentError("Planning depth exceeds the finite profile"))
+        if haskey(planning,"goal")
+            require_keys(planning["goal"],("role_color","marker_color");at="planning.goal")
+            check_values(planning["goal"],("role_color","marker_color"),
+                n -> strict_integer(n) && 0 <= n <= 15,"planning.goal")
+            goal = planning["goal"]
+            goal["role_color"] != goal["marker_color"] || throw(ArgumentError("Goal colors coincide"))
+        end
+        if haskey(planning,"max_states")
+            limit = planning["max_states"]
+            positive_integer(limit) && limit <= 256 || throw(ArgumentError("Invalid planning.max_states"))
+        end
     end
     return RunConfig(path, data["run_name"], config_path(dir, data["run_root"]), env, exec, learning, search, planning)
 end

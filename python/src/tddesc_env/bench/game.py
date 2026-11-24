@@ -206,6 +206,13 @@ class ShapeGame(ARCBaseGame):
                 self.positions[1] = min(x + 1, self.scene.logical_size[0] - 1), y
         self._update_camera()
         self._render()
+        if action != 0 and scene.goal is not None:
+            x, y = scene.goal
+            if any(
+                abs(u - x) + abs(v - y) == 1
+                for u, v in self._footprint(0, *self.positions[0])
+            ):
+                self.next_level()
         self.complete_action()
 
     def _render(self, *, display_offset=0, flash=False):

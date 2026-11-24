@@ -25,6 +25,7 @@ def online_config(
     prior=None,
     collection=False,
     planning=False,
+    goal=None,
     adapt=False,
 ):
     prior_setting = "" if prior is None else f'prior_evidence = "{prior}"'
@@ -37,6 +38,16 @@ learning_memory_bytes = 536870912"""
     )
     frozen = "false" if prior is None or adapt else "true"
     plan = "\n[planning]\ndepth = 2\nmax_work = 20\n" if planning else ""
+    if goal is not None:
+        role_color, marker_color = goal
+        plan = f"""\n[planning]
+depth = 5
+max_work = 384
+max_states = 64
+[planning.goal]
+role_color = {role_color}
+marker_color = {marker_color}
+"""
     path.write_text(
         f'''schema_version = 1
 run_name = "supervised"

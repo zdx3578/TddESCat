@@ -31,6 +31,8 @@ KIND_IDS = {
     "planning": ("finite_policy",),
     "planning_public": ("public_revalidated_policy",),
     "planning_composition": ("guard_then_joint_push", "plan_withdrawal"),
+    "movement_composition": ("C01",),
+    "resource_composition": ("C02",),
 }
 MODULES = {
     "protocol": "tests.protocol.test_faults",
@@ -48,6 +50,8 @@ MODULES = {
     "planning": "tests.bench.check_kernel",
     "planning_public": "tests.bench.check_core_learning",
     "planning_composition": "tests.bench.check_core_learning",
+    "movement_composition": "tests.bench.check_composition",
+    "resource_composition": "tests.bench.check_composition",
 }
 
 
@@ -186,6 +190,8 @@ def run_task(root, config_path, task, run_dir, runtime):
         "movement_boundaries",
         "planning_public",
         "planning_composition",
+        "movement_composition",
+        "resource_composition",
     )
     isolated = official_local or kind == "arc_offline"
     environment = (
