@@ -506,8 +506,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         policy_note = nothing
         goal_cursor = nothing
         if composing
-            selection = choose_observed_goal_step(rec,knowledge,goal,config.planning,history,decision,
-                goal_pending,limits,coordinates)
+            selection = choose_observed_goal_step(rec,knowledge,goal,history,decision,goal_pending,coordinates)
             item = isnothing(selection.item) ? item : selection.item
             if isnothing(goal)
                 request = argmin(candidate->(get(attempts,action_key(candidate.action),0),
@@ -573,7 +572,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         prediction = predict_public(rec,item;plan_reads)
         id = command_id(rec.next_sequence)
         plan = composing || !isnothing(program_cursor) || isnothing(config.planning) || isnothing(item.follow) ? nothing :
-            propose_condition_plan(item,config.planning,id)
+            propose_condition_plan(item,id)
         if !isnothing(plan)
             policy_note = Dict("operation"=>"freeze_projected_policy","status"=>"ready",
                 "goal"=>"observed_condition_then_bound_effect","first"=>item.action,
@@ -595,9 +594,10 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         if !isnothing(item.chosen)
             model = item.chosen.model
             decision_record["mechanism_version"] = active_id(model)
-            decision_record["definition_refs"] = model.rule.references
             decision_record["binding_views"] = binding_view.(model.rule.effects)
             decision_record["relations"] = predicate_record.(filter(p->p isa RelationPredicate,model.condition.atoms))
+            relation_macros = [ref for p in model.condition.atoms if p isa RelationPredicate for ref in p.macro_refs]
+            decision_record["definition_refs"] = unique([model.rule.references;relation_macros])
         end
         if !isnothing(program_cursor)
             decision_record["definition_refs"] = unique([decision_record["definition_refs"];program_cursor.program.definition])

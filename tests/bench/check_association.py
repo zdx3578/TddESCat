@@ -91,12 +91,16 @@ def main(config, run):
     interventions = {
         scene.public_id: [1 if i < 2 else 2] for i, scene in enumerate(inputs)
     }
+    repeated = [
+        fixture(base, i, 3 + i % 4, 6 + (i - 10) // 4, marker, decoy, True)
+        for i in range(10, 15)
+    ]
     tests = [
         fixture(base, 7, 8, 8, marker, decoy, True),
         fixture(base, 8, 8, 8, marker, decoy, False),
     ]
     games = run / "private/games"
-    materialize(games, [*inputs, *tests])
+    materialize(games, [*inputs, *tests, *repeated])
     for scene in (*inputs, *tests):
         finite_engine_check(scene)
     public = run / "public"
@@ -133,8 +137,52 @@ def main(config, run):
             )
             assert supervise(root, cfg, path) == 0, (path / "solver.log").read_text()
             results.append(verify(path, scene, index, event_refs))
+        prior_repeat = public / "repeated-training"
+        collect_training(
+            root,
+            runtime,
+            url,
+            prior_repeat,
+            [(scene, 2) for scene in (*inputs, *repeated)],
+            interventions={
+                **interventions,
+                **{scene.public_id: [1] for scene in repeated},
+            },
+        )
+        episode = public / "recalled-macro"
+        episode.mkdir()
+        cfg = episode / "agent.toml"
+        online_config(
+            cfg, root, url, tests[0], budget=2, prior=prior_repeat, association=True
+        )
+        assert supervise(root, cfg, episode) == 0, (episode / "solver.log").read_text()
+        repeated_refs = {
+            row["event_id"]
+            for path in prior_repeat.glob("episode-*")
+            for row in captured_rows(path, "events")
+            if row["action"]["id"] != 0
+        }
+        macro = verify(episode, tests[0], 1, repeated_refs)
+        used = set(macro["relation"]["search_macros"])
+        assert used
+        jobs = [
+            load(job, "assessment.json")
+            for job in (episode / "learning").glob("job-*")
+            if (job / "relation-corpus.json").is_file()
+        ]
+        assert len(jobs) == 1 and jobs[0]["result"] == "published"
+        bundle = load(episode, f"publication/{jobs[0]['publication']}.json")
+        assert used <= set(bundle["new_definition_ids"])
+        assert bundle["semantic_context"]["intent"] == "relation"
+        assert int(bundle["cost"]["final_total"]) < int(
+            bundle["cost"]["ratio_numerator"]
+        )
+        assert used <= set(captured_rows(episode, "checks")[0]["definition_refs"])
+        macro["publication"] = jobs[0]["publication"]
+        macro["cost"] = bundle["cost"]
+        results.append(macro)
     write_json(public / "association.json", results)
-    for gate in ("A04", "A05"):
+    for gate in ("A04", "A05", "A06"):
         append_assertion(run, gate, True, ["public/association.json"])
     return 0
 

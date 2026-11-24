@@ -96,3 +96,23 @@ end
         tamper=("semantic_context",invalid_context))
     @test invalid.code == 20
 end
+
+@testset "Explicit connectivity and large support roles" begin
+    frame = fill(UInt8(0),64,64)
+    frame[4,4] = 0x07
+    frame[5,5] = 0x07
+    sizes(connectivity) = [length(group) for group in TC.color_components(frame,connectivity).groups
+        if first(group)[3] == 0x07]
+    @test sizes(4) == [1,1]
+    @test sizes(8) == [2]
+    frame[12:52,12:52] .= 0x02
+    frame[14:50,14:50] .= 0x00
+    frame[26:32,26:32] .= 0x03
+    parts = TC.public_components(frame)
+    contour = only(group for group in parts if first(group)[3] == 0x02)
+    @test length(contour) > 192
+    @test any(item->item.signal == contour && first(item.target)[3] == 0x03,TC.enclosure_pairs(parts))
+    cropped = frame[25:45,25:45]
+    @test !any(item->first(item.target)[3] == 0x03,
+        TC.enclosure_pairs(TC.public_components(cropped)))
+end

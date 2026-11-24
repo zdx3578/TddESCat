@@ -138,11 +138,10 @@ end
 frame_key(frame) = content_hash(vec(frame))
 state_key(state) = (frame_key(state.frame), Tuple(state.actions), Tuple(state.history))
 
-function project_goal_model(knowledge, obs, history, goal, limits, max_action_coordinates)
+function project_goal_model(knowledge, obs, history, goal, history_width, max_action_coordinates)
     initial = ProjectedState(last(obs.frames),sort(obs.available_actions),copy(history))
     states = [initial]
     ids = Dict{Tuple{String,Tuple,Tuple},Int}(state_key(initial)=>1)
-    depths = [0]
     model_versions = Dict(rule.rule.id=>active_id(rule) for rule in knowledge.active)
     enabled = Dict{Int,Set{ConcreteAction}}()
     effects = Dict{Tuple{Int,ConcreteAction},SuccessorScope{Int}}()
@@ -156,17 +155,17 @@ function project_goal_model(knowledge, obs, history, goal, limits, max_action_co
         reached = goal_truth(goal,state.frame)
         if reached == proven
             push!(goals,index)
-        elseif depths[index] < limits.depth && work < limits.work
+            break
+        else
             view = (frames=[state.frame],available_actions=state.actions)
             decision = ranked_public_actions(knowledge,view,state.history,Dict{ConcreteAction,Int}(),
                 max_action_coordinates; composing=true)
             enabled[index] = Set(action_key(item.action) for item in decision.ranked)
+            if 6 in state.actions && decision.click_count < 4096
+                push!(gaps,(state=index,action=nothing,reason="unmodeled_click_domain"))
+            end
             for item in decision.ranked
                 action = action_key(item.action)
-                if work == limits.work
-                    push!(gaps,(state=index,action,reason="projection_work_limit"))
-                    break
-                end
                 work += 1
                 choice = item.chosen
                 predicted = item.projection
@@ -176,26 +175,18 @@ function project_goal_model(knowledge, obs, history, goal, limits, max_action_co
                     continue
                 end
                 advanced = [state.history;action[1]]
-                next_history = last(advanced,min(limits.history,length(advanced)))
+                next_history = last(advanced,min(history_width,length(advanced)))
                 after = ProjectedState(predicted,state.actions,next_history)
                 key = state_key(after)
                 target = get(ids,key,0)
                 if target == 0
-                    if length(states) == limits.states
-                        push!(gaps,(state=index,action,reason="projection_state_limit"))
-                        continue
-                    end
                     push!(states,after)
-                    push!(depths,depths[index]+1)
                     target = ids[key] = length(states)
                 end
                 rule = choice.model.rule.id
                 edges[(index,action)] = ProjectedEdge(target,rule,choice.expected)
                 effects[(index,action)] = SuccessorScope(Set([target]),proven,true,Set([rule]))
             end
-        else
-            reason = work == limits.work ? "projection_work_limit" : "projection_depth_limit"
-            push!(gaps,(state=index,action=nothing,reason))
         end
         index += 1
     end
@@ -204,12 +195,10 @@ function project_goal_model(knowledge, obs, history, goal, limits, max_action_co
     return GoalProjection(model,states,edges,goals,gaps,work,obs.levels_completed)
 end
 
-function search_observed_goal(knowledge, obs, history, goal, limits, max_action_coordinates, command)
-    projection = project_goal_model(knowledge,obs,last(history,min(limits.history,length(history))),
-        goal,limits,max_action_coordinates)
-    remaining = limits.work - projection.work
-    remaining > 0 || return (cursor=nothing,projection,status="projection_work_limit",search_work=0)
-    solved = solve_policy(projection.model,Set([1]),projection.goals;depth=limits.depth,max_work=remaining)
+function search_observed_goal(knowledge, obs, history, goal, history_width, max_action_coordinates, command)
+    projection = project_goal_model(knowledge,obs,last(history,min(history_width,length(history))),
+        goal,history_width,max_action_coordinates)
+    solved = solve_policy(projection.model,Set([1]),projection.goals)
     cursor = nothing
     if !isnothing(solved.policy) && !isnothing(solved.policy.action)
         index = index_observed_policy(projection,solved.policy,command)
@@ -217,7 +206,8 @@ function search_observed_goal(knowledge, obs, history, goal, limits, max_action_
             if haskey(solved.policy.dependencies,model.rule.id))
         cursor = GoalCursor(projection,solved.policy,command,1,index,sort!(collect(refs)))
     end
-    return (; cursor, projection, solved.status, search_work=solved.work)
+    status = isnothing(solved.policy) && !isempty(projection.gaps) ? "incomplete" : solved.status
+    return (; cursor, projection, status, search_work=solved.work)
 end
 
 function live_goal_step(cursor::GoalCursor, knowledge, decision, obs)
@@ -296,7 +286,7 @@ function public_projection_record(result)
             Dict(key=>sort!(collect(value)) for (key,value) in result.cursor.index.readers))
 end
 
-function choose_observed_goal_step(rec, knowledge, goal, goal_config, history, decision, pending, limits, max_action_coordinates)
+function choose_observed_goal_step(rec, knowledge, goal, history, decision, pending, max_action_coordinates)
     note = Dict{String,Any}("operation"=>"search_observed_goal","status"=>"unbound_observed_goal")
     isnothing(goal) && return (item=nothing,cursor=nothing,note)
     if !isnothing(pending)
@@ -310,16 +300,16 @@ function choose_observed_goal_step(rec, knowledge, goal, goal_config, history, d
         note["withdrawn_suffix"] = checked.reason
         note["invalidation"] = goal_invalidation!(pending,"condition")
     end
-    budget = (depth=min(goal_config["depth"],rec.limit-rec.sent_count),work=goal_config["max_work"],
-        states=get(goal_config,"max_states",96),history=max(1,maximum(get(limits,:history_lengths,(1,)))))
+    history_width = maximum((atom isa HistorySuffix ? length(atom.actions) : atom isa RecentAction ? 1 : 0
+        for model in knowledge.active for atom in model.condition.atoms);init=1)
     id = command_id(rec.next_sequence)
-    result = search_observed_goal(knowledge,rec.observation,history,goal,budget,max_action_coordinates,id)
+    result = search_observed_goal(knowledge,rec.observation,history,goal,history_width,max_action_coordinates,id)
     proof = public_projection_record(result)
     proof["before_ref"] = rec.before_ref
     proof["goal"] = Dict("relation"=>"distance_to_marker","role_color"=>goal.role_color,
         "marker"=>goal.marker,"maximum_pixel_distance"=>goal.pixel_distance)
     isnothing(goal.cue_color) || (proof["goal"]["cue_color"] = goal.cue_color)
-    proof["budget"] = budget
+    proof["history_width"] = history_width
     atomic_json(store_path(rec.store,"plans",id * ".json"),proof)
     note["status"] = result.status
     note["artifact"] = "plans/" * id * ".json"

@@ -164,6 +164,7 @@ def audit_camera(path, scene, positive, proof):
     assert [edge["action"][0] for edge in plan["steps"]] == [6, 3, 7]
     if positive:
         assert learned["state"] == "WIN" and learned["goal"] == "observed"
+        assert not learned["publications"]
         assert commands[2:] == [3, 7]
         assert all(row["reason"] == "revalidated_goal_policy" for row in decisions[2:])
         assert all(
@@ -183,7 +184,25 @@ def audit_camera(path, scene, positive, proof):
         assert len(revised["retained_definitions"]) > 0
         assert len(decisions) > 2 and decisions[2]["before_ref"] == dispute["event_ref"]
         assert decisions[2]["reason"] != "revalidated_goal_policy" and commands[2] != 3
-        assert not learned["publications"]
+        # The adaptive episode closes its partial batch after its final action.
+        refs = {row["event_ref"] for row in checks}
+        ledger = load(path, "learning/dispositions.json")
+        disposition = {
+            row["event_ref"]: row
+            for row in ledger["events"]
+            if row["event_ref"] in refs
+        }
+        assert set(disposition) == refs
+        assert all(row["complete"] for row in disposition.values())
+        assert len({row["job"] for row in disposition.values()}) == 1
+        job = path / "learning" / next(iter(disposition.values()))["job"]
+        assert {ref for _, ref, _ in load(job, "batch.json")["inputs"]} == refs
+        for publication in learned["publications"]:
+            bundle = load(path, f"publication/{publication}.json")
+            assert {row["event_ref"] for row in bundle["origins"]} <= refs
+            assert set(bundle["new_definition_ids"]).isdisjoint(
+                ref for row in checks for ref in row["definition_refs"]
+            )
     return {
         "actions": commands,
         "plans": plan["steps"],

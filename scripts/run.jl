@@ -26,6 +26,7 @@ function capture(config, public_dir; supervised=false, collect_only=false)
             append!(knowledge.trials,prior.trials)
             prepared = TddESCat.online_learn!(knowledge,config,store,prior.pairs,ROOT)
             frozen && isnothing(prepared) && error("Frozen evaluation has no proved publication")
+            get(config.learning,"association",false) && TddESCat.train_prior_relations!(knowledge,config,store,ROOT)
             get(config.learning,"sequences",false) && TddESCat.train_prior_programs!(knowledge,config,store,ROOT)
         end
         games = list_games(rec.client)
@@ -44,8 +45,9 @@ function capture(config, public_dir; supervised=false, collect_only=false)
                     explore!(rec)
                 else
                     if frozen
+                        publication = TddESCat.read_published_stitch(TddESCat.store_path(store,"publication"))
                         TddESCat.atomic_json(TddESCat.store_path(store,"learning","evaluation-boundary.json"),
-                            Dict("publication"=>TddESCat.read_published_stitch(TddESCat.store_path(store,"publication")).publication,
+                            Dict("publication"=>isnothing(publication) ? nothing : publication.publication,
                                 "knowledge_sha256"=>TddESCat.frozen_knowledge_digest(knowledge)))
                     end
                     event = TddESCat.read_json(TddESCat.store_path(store, "events", rec.before_ref * ".json"))

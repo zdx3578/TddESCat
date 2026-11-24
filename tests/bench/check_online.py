@@ -37,15 +37,12 @@ def online_config(
         else 'memory_enforcement = "cgroup_v2"'
     )
     frozen = "false" if prior is None or adapt else "true"
-    plan = "\n[planning]\ndepth = 2\nmax_work = 20\n" if planning else ""
+    plan = "\n[planning]\n" if planning else ""
     if goal is not None:
         role_color, marker_color, *cues = goal
         cue = f"cue_color = {cues[0]}\n" if cues else ""
         gap = f"marker_gap = {cues[1]}\n" if len(cues) > 1 else ""
         plan = f"""\n[planning]
-depth = 5
-max_work = 384
-max_states = 64
 [planning.goal]
 role_color = {role_color}
 marker_color = {marker_color}

@@ -37,7 +37,9 @@ KIND_IDS = {
     "camera_composition": ("C03",),
     "association_recovery": ("A01", "A02"),
     "association_kernel": ("association_kernel",),
-    "association_online": ("A04", "A05"),
+    "association_online": ("A04", "A05", "A06"),
+    "association_revision": ("A07",),
+    "stitch_growth": ("stitch_growth",),
     "sequence_learning": (
         "sequence_discovery",
         "sequence_consumption",
@@ -68,12 +70,41 @@ MODULES = {
     "association_recovery": "tests.bench.check_association_recovery",
     "association_kernel": "tests.bench.check_kernel",
     "association_online": "tests.bench.check_association",
+    "association_revision": "tests.bench.check_association_revision",
     "sequence_learning": "tests.bench.check_sequence_learning",
+    "stitch_growth": "tests.bench.check_kernel",
 }
 
 
 def now():
     return datetime.now(timezone.utc).isoformat()
+
+
+def write_artifact_index(run_dir):
+    """Index the exact public receipts and verification files of a run."""
+    entries = []
+    index = run_dir / "public/artifact-index.json"
+    for folder in ("public", "grade"):
+        for path in sorted((run_dir / folder).rglob("*")):
+            if path == index or not path.is_file() or path.is_symlink():
+                continue
+            relative = path.relative_to(run_dir)
+            if any(
+                part.startswith(".") or part.endswith(".lock")
+                for part in relative.parts
+            ):
+                continue
+            if not path.resolve().is_relative_to(run_dir.resolve()):
+                raise ValueError(f"Artifact path escapes its run directory: {relative}")
+            with path.open("rb") as stream:
+                entries.append(
+                    {
+                        "path": relative.as_posix(),
+                        "bytes": path.stat().st_size,
+                        "sha256": file_digest(stream, "sha256").hexdigest(),
+                    }
+                )
+    write_json(index, {"schema_version": 1, "files": entries})
 
 
 def read_task(path):
@@ -233,13 +264,14 @@ def run_task(root, config_path, task, run_dir, runtime):
         "camera_composition",
         "association_recovery",
         "association_online",
+        "association_revision",
         "sequence_learning",
     )
     offline_arc = kind in ("arc_offline", "arc_public25")
     isolated = (
         official_local
         or offline_arc
-        or kind in ("stitch", "stitch_reference", "association_kernel")
+        or kind in ("stitch", "stitch_reference", "association_kernel", "stitch_growth")
     )
     environment = (
         "official_offline_http"
@@ -393,6 +425,15 @@ def run_task(root, config_path, task, run_dir, runtime):
     (run_dir / "public/report.md").write_text(
         "\n".join(report) + "\n", encoding="utf-8"
     )
+    if kind in (
+        "association_recovery",
+        "association_kernel",
+        "association_online",
+        "association_revision",
+        "sequence_learning",
+        "stitch_growth",
+    ):
+        write_artifact_index(run_dir)
     print(f"{acceptance['status']} {run_dir}", flush=True)
     return 0 if passed else 3 if blocked else 1
 

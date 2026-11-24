@@ -25,6 +25,7 @@ def main(config, run):
         "stitch": ("stitch_bridge", ("stitch_rounds.jl", "stitch_open_search.jl")),
         "planning": ("finite_policy", ("finite_policy.jl",)),
         "association_kernel": ("association_kernel", ("association_kernel.jl",)),
+        "stitch_growth": ("stitch_growth", ("stitch_growth.jl",)),
     }
     identifier, selected = scripts[kind]
     evidence = []
@@ -40,7 +41,7 @@ def main(config, run):
         log = run / "grade" / (name + ".log")
         arguments = (
             [str(run / "public/rust-jobs" / name)]
-            if kind in ("stitch", "association_kernel")
+            if kind in ("stitch", "association_kernel", "stitch_growth")
             else []
         )
         if name == "stitch_open_search":
@@ -62,6 +63,8 @@ def main(config, run):
                 run, identifier, False, evidence, f"test_exit:{result.returncode}"
             )
             return 1
+    if kind == "stitch_growth":
+        evidence.append("public/rust-jobs/stitch_growth/growth.json")
     if kind == "stitch":
         check_open_matches(root, runtime, run)
         evidence.extend(

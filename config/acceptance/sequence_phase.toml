@@ -1,0 +1,16 @@
+schema_version = 1
+suite_id = "sequence_phase"
+artifact_root = "../../runs"
+prerequisite_suite = "association_phase"
+
+[[tasks]]
+id = "sequence_execution"
+config = "sequence_learning.toml"
+required = true
+depends_on = []
+
+[[tasks]]
+id = "structural_growth"
+config = "stitch_growth.toml"
+required = true
+depends_on = []

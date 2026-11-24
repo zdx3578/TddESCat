@@ -49,54 +49,84 @@ function observable_successors(model::PlanningModel{S,A,O},belief,action) where 
     return (branches=observations,complete=true,reason="exhausted",dependencies=reads)
 end
 
-function solve_policy(model::PlanningModel{S,A,O},belief,goal;depth,max_work) where {S,A,O}
-    depth >= 0 && positive_integer(max_work) || throw(ArgumentError("Invalid policy budget"))
+function solve_policy(model::PlanningModel{S,A,O},belief,goal;depth=nothing,max_work=nothing) where {S,A,O}
+    (isnothing(depth) || strict_integer(depth) && depth >= 0) &&
+        (isnothing(max_work) || positive_integer(max_work)) || throw(ArgumentError("Invalid policy query limit"))
     issubset(belief,model.states) && issubset(goal,model.states) ||
         throw(ArgumentError("Policy query is outside the model"))
-    used = Ref(0)
-    cache = Dict()
-    function solve(selected,remaining)
-        isempty(selected) && return (status="belief_needs_revision",policy=nothing)
+    isempty(belief) && return (status="belief_needs_revision",policy=nothing,work=0)
+
+    beliefs = [Set{S}(belief)]
+    ids = Dict(first(beliefs)=>1)
+    edges = Vector{NamedTuple}[NamedTuple[]]
+    goals = Set{Int}()
+    missing = false
+    interrupted = false
+    work = 0
+    index = 1
+    while index <= length(beliefs)
+        selected = beliefs[index]
         if issubset(selected,goal)
-            return (status="achieved",policy=PolicyNode{S,A,O}(copy(selected),nothing,Dict(),Dict()))
-        end
-        remaining == 0 && return (status="depth_limit",policy=nothing)
-        key = (Set(selected),remaining)
-        haskey(cache,key) && return cache[key]
-        uncertain = false
-        for action in sort!(collect(common_actions(model,selected));by=repr)
-            used[] >= max_work && return (status="work_limit",policy=nothing)
-            used[] += 1
-            predicted = observable_successors(model,selected,action)
-            if !predicted.complete
-                uncertain = true
-                continue
-            end
-            branches = Dict{O,PolicyNode{S,A,O}}()
-            reads = Dict(ref=>model.versions[ref] for ref in predicted.dependencies)
-            for label in sort!(collect(keys(predicted.branches));by=repr)
-                downstream = solve(predicted.branches[label],remaining-1)
-                if isnothing(downstream.policy)
-                    uncertain |= downstream.status != "no_policy_in_scope"
+            push!(goals,index)
+        else
+            for action in sort!(collect(common_actions(model,selected));by=repr)
+                if work == max_work
+                    interrupted = true
                     break
                 end
-                branches[label] = downstream.policy
-                merge!(reads,downstream.policy.dependencies)
-            end
-            if length(branches) == length(predicted.branches) && !isempty(branches)
-                found = (status="policy",policy=PolicyNode{S,A,O}(copy(selected),action,branches,reads))
-                cache[key] = found
-                return found
+                work += 1
+                successor = observable_successors(model,selected,action)
+                if !successor.complete
+                    missing = true
+                    continue
+                end
+                children = Dict{O,Int}()
+                for label in sort!(collect(keys(successor.branches));by=repr)
+                    states = successor.branches[label]
+                    children[label] = get!(ids,states) do
+                        push!(beliefs,states)
+                        push!(edges,NamedTuple[])
+                        length(beliefs)
+                    end
+                end
+                push!(edges[index],(;action,children,dependencies=successor.dependencies))
             end
         end
-        result = (status=uncertain ? "incomplete" : "no_policy_in_scope",policy=nothing)
-        if !uncertain
-            cache[key] = result
-        end
-        return result
+        index += 1
     end
-    result = solve(Set{S}(belief),depth)
-    return merge(result,(;work=used[]))
+
+    nodes = Dict(i=>PolicyNode{S,A,O}(beliefs[i],nothing,Dict(),Dict()) for i in goals)
+    ranks = Dict(i=>0 for i in goals)
+    while !haskey(nodes,1)
+        discovered = Dict{Int,Tuple{Int,PolicyNode{S,A,O}}}()
+        for i in eachindex(beliefs)
+            haskey(nodes,i) && continue
+            available = filter(edge->!isempty(edge.children) &&
+                all(haskey(nodes,j) for j in values(edge.children)),edges[i])
+            isempty(available) && continue
+            edge = argmin(edge->(maximum(j->ranks[j],values(edge.children)),repr(edge.action)),available)
+            rank = 1 + maximum(j->ranks[j],values(edge.children))
+            branches = Dict(label=>nodes[j] for (label,j) in edge.children)
+            reads = Dict(ref=>model.versions[ref] for ref in edge.dependencies)
+            for node in values(branches)
+                merge!(reads,node.dependencies)
+            end
+            discovered[i] = (rank,PolicyNode{S,A,O}(beliefs[i],edge.action,branches,reads))
+        end
+        isempty(discovered) && break
+        for (i,(rank,node)) in discovered
+            ranks[i] = rank
+            nodes[i] = node
+        end
+    end
+
+    if haskey(nodes,1)
+        !isnothing(depth) && ranks[1] > depth &&
+            return (status="depth_limit",policy=nothing,work)
+        return (status=ranks[1] == 0 ? "achieved" : "policy",policy=nodes[1],work,rank=ranks[1])
+    end
+    status = interrupted ? "work_limit" : missing ? "incomplete" : "no_policy_in_scope"
+    return (;status,policy=nothing,work)
 end
 
 function revalidate_policy(model,node,current_belief)
@@ -146,7 +176,7 @@ function invalidate_dependents!(index::DependencyIndex,changed)
     return sort!(collect(seen))
 end
 
-function propose_condition_plan(item,config,command)
+function propose_condition_plan(item,command)
     target = item.follow
     support = item.chosen.model
     first,second = action_key(item.action),action_key(target.action)
@@ -160,9 +190,9 @@ function propose_condition_plan(item,config,command)
     model = PlanningModel(domain,available,forward,
         Dict(0=>Set(["condition_closed"]),1=>Set(["condition_observed"]),2=>Set(["bounded_effect"])),versions)
     projection = factor_query(Dict(0=>"condition_closed",1=>"condition_observed",2=>"bounded_effect"),
-        Dict(0=>false,1=>false,2=>true);max_work=config["max_work"])
+        Dict(0=>false,1=>false,2=>true);max_work=length(domain)^2)
     projection.sufficient || return nothing
-    planned = solve_policy(model,Set([0]),Set([2]);depth=config["depth"],max_work=config["max_work"])
+    planned = solve_policy(model,Set([0]),Set([2]))
     isnothing(planned.policy) && return nothing
     return (; command,target,model,policy=planned.policy)
 end

@@ -1,0 +1,28 @@
+schema_version = 1
+suite_id = "association_phase"
+artifact_root = "../../runs"
+prerequisite_suite = "phase2_policy"
+
+[[tasks]]
+id = "association_kernel"
+config = "association_kernel.toml"
+required = true
+depends_on = []
+
+[[tasks]]
+id = "association_recovery"
+config = "association_recovery.toml"
+required = true
+depends_on = []
+
+[[tasks]]
+id = "relation_control"
+config = "association_online.toml"
+required = true
+depends_on = ["association_kernel", "association_recovery"]
+
+[[tasks]]
+id = "relation_revision"
+config = "association_revision.toml"
+required = true
+depends_on = ["relation_control"]

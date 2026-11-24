@@ -1,0 +1,5 @@
+schema_version = 1
+kind = "association_revision"
+output_name = "association-revision"
+environment_config = "../bench_server.toml"
+judge_config = "../bench_scenarios.toml"

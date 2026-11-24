@@ -7,10 +7,12 @@ struct RelationPredicate <: MotionPredicate
     signature::Dict{String,Any}
     certificate::Dict{String,Any}
     certificate_sha::String
+    library::Vector{Dict{String,Any}}
+    macro_refs::Vector{String}
 end
 
 predicate_record(p::RelationPredicate) = Dict("kind"=>"relation_predicate","definition_ids"=>p.candidates,
-    "view"=>"color-support","certificate_sha256"=>p.certificate_sha)
+    "view"=>"color-support","certificate_sha256"=>p.certificate_sha,"search_macros"=>p.macro_refs)
 
 function observed_relation_context(frame,binding,event; slot=0)
     scope = RelationScope("visible-frame",event,"components-exact","color-support","before")
@@ -54,10 +56,10 @@ function relation_definition(program,signature)
     return Dict("stable_id"=>definition_id(data),"definition"=>data)
 end
 
-function relation_truth(program, signature, observed, connectivity)
+function relation_truth(program, signature, observed, connectivity; library=[])
     ref = observed.subjects[connectivity]
     isnothing(ref) && return (; verdict=unknown_truth, witness=nothing)
-    result = evaluate_relation(program,observed.context,signature;slots=["SceneBefore"])
+    result = evaluate_relation(program,observed.context,signature;slots=["SceneBefore"],library)
     verdict = relation_member(result,(ref,))
     witness = verdict == proven ? result.rows[(ref,)] : result.completion_ref
     return (; verdict,witness)
@@ -94,7 +96,8 @@ function construct_relation(examples)
         "candidates"=>[Dict("program"=>candidate.term,"entry"=>candidate.entry,
             "connectivity"=>candidate.connectivity,"pigment"=>candidate.pigment) for candidate in candidates])
     return RelationPredicate([candidate.entry["stable_id"] for candidate in candidates],
-        [candidate.term for candidate in candidates],signature,certificate,semantic_hash(certificate))
+        [candidate.term for candidate in candidates],signature,certificate,semantic_hash(certificate),
+        Dict{String,Any}[],String[])
 end
 
 function persist_relation_certificates!(store, models)
@@ -111,7 +114,7 @@ end
 function evaluate_predicate(predicate::RelationPredicate,frame,binding,delta,history)
     isnothing(binding) && return unknown_truth
     observed = observed_relation_context(frame,binding,"action-before")
-    truth = [relation_truth(program,predicate.signature,observed,record["connectivity"]).verdict
+    truth = [relation_truth(program,predicate.signature,observed,record["connectivity"];library=predicate.library).verdict
         for (program,record) in zip(predicate.programs,predicate.certificate["candidates"])]
     return all(==(first(truth)),truth) ? first(truth) : unknown_truth
 end

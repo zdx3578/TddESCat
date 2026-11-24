@@ -81,6 +81,27 @@ end
     @test "resource" ∉ index.invalid
 end
 
+@testset "Strong strategy reaches beyond the former short horizon" begin
+    finish = 24
+    states = Set(0:finish)
+    actions = Dict(i=>Set([1,2]) for i in 0:finish-1)
+    effects = Dict((i,action)=>scope([action == 1 ? i+1 : i])
+        for i in 0:finish-1 for action in (1,2))
+    observed = Dict(i=>Set([string(i)]) for i in 0:finish)
+    model = TC.PlanningModel(states,actions,effects,observed,Dict("rule"=>"v1"))
+    result = TC.solve_policy(model,Set([0]),Set([finish]))
+    @test result.status == "policy" && result.rank == finish
+    node = result.policy
+    for index in 1:finish
+        @test node.action == 1
+        node = node.branches[string(index)]
+    end
+    @test isnothing(node.action)
+    broken = TC.PlanningModel(states,actions,merge(effects,Dict((15,1)=>scope([16];complete=false))),
+        observed,model.versions)
+    @test TC.solve_policy(broken,Set([0]),Set([finish])).status == "incomplete"
+end
+
 @testset "Sufficient queries and bounded partition refinement" begin
     partition = Dict(0=>"same",1=>"same",2=>"open",3=>"uncertain")
     resource = Dict(0=>0,1=>1,2=>1)
