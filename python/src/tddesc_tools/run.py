@@ -74,7 +74,7 @@ def read_task(path):
     if kind in ("arc_offline", "arc_public25"):
         required.add("offline_bundle")
     if kind == "arc_public25":
-        required.update(("game_ids", "environment_config"))
+        required.update(("game_ids", "environment_config", "actions_per_game"))
     if kind in ("stitch", "stitch_reference"):
         required.add("experiment_config")
         paths.add("experiment_config")
@@ -103,6 +103,8 @@ def read_task(path):
             raise ValueError("Invalid offline_bundle")
         data["offline_bundle"] = (path.parent / data["offline_bundle"]).resolve()
     if kind == "arc_public25":
+        if type(data["actions_per_game"]) is not int or data["actions_per_game"] < 10:
+            raise ValueError("Public25 requires at least 10 concrete actions per game")
         ids = data["game_ids"]
         if (
             not isinstance(ids, list)
