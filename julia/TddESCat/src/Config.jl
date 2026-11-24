@@ -93,9 +93,9 @@ function load_run_config(path::AbstractString)
     learning = get(data, "learning", nothing)
     if !isnothing(learning)
         require_keys(learning, ("engine", "policy_file", "batch_confirmed_events");
-            optional=("prior_evidence","association","sequences"), at="learning")
-        all(get(learning,key,false) isa Bool for key in ("association","sequences")) ||
-            throw(ArgumentError("Invalid association or sequence learning option"))
+            optional=("prior_evidence","association","sequences","background_search"), at="learning")
+        all(get(learning,key,false) isa Bool for key in ("association","sequences","background_search")) ||
+            throw(ArgumentError("Invalid association, sequence, or background learning option"))
         check_values(learning, ("batch_confirmed_events",), positive_integer, "learning")
         learning["engine"] = config_path(dir, learning["engine"])
         learning["policy_file"] = config_path(dir, learning["policy_file"])

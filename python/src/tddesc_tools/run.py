@@ -39,11 +39,13 @@ KIND_IDS = {
     "association_kernel": ("association_kernel",),
     "association_online": ("A04", "A05", "A06"),
     "association_revision": ("A07",),
+    "association_background": ("background_learning",),
     "stitch_growth": ("stitch_growth",),
     "sequence_learning": (
         "sequence_discovery",
         "sequence_consumption",
         "sequence_withdrawal",
+        "sequence_resource",
     ),
 }
 MODULES = {
@@ -71,6 +73,7 @@ MODULES = {
     "association_kernel": "tests.bench.check_kernel",
     "association_online": "tests.bench.check_association",
     "association_revision": "tests.bench.check_association_revision",
+    "association_background": "tests.bench.check_association_background",
     "sequence_learning": "tests.bench.check_sequence_learning",
     "stitch_growth": "tests.bench.check_kernel",
 }
@@ -265,6 +268,7 @@ def run_task(root, config_path, task, run_dir, runtime):
         "association_recovery",
         "association_online",
         "association_revision",
+        "association_background",
         "sequence_learning",
     )
     offline_arc = kind in ("arc_offline", "arc_public25")
@@ -430,6 +434,7 @@ def run_task(root, config_path, task, run_dir, runtime):
         "association_kernel",
         "association_online",
         "association_revision",
+        "association_background",
         "sequence_learning",
         "stitch_growth",
     ):

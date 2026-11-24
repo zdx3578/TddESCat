@@ -16,6 +16,12 @@ required = true
 depends_on = []
 
 [[tasks]]
+id = "background_learning"
+config = "association_background.toml"
+required = true
+depends_on = ["association_recovery"]
+
+[[tasks]]
 id = "relation_control"
 config = "association_online.toml"
 required = true

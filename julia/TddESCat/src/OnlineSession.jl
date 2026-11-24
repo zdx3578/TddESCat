@@ -381,7 +381,7 @@ function wait_worker(job, public_dir)
     end
 end
 
-function online_learn!(knowledge, config, store, pairs, repo_root; existing_job=nothing)
+function prepare_effect_learning!(knowledge, config, store, pairs, repo_root; existing_job=nothing)
     isempty(pairs) && return nothing
     for (pre,post) in pairs
         register_evidence_obligation!(store,pre)
@@ -425,13 +425,20 @@ function online_learn!(knowledge, config, store, pairs, repo_root; existing_job=
             engine_identity=supervision["engine_identity"],input_scope_complete=corpus.complete,
             intent="effect", consumer="joint-mechanisms", obligation_refs=[row[2] for row in batch["inputs"]])
     end
-    status = wait_worker(job,store_path(store))
+    return (; job,batch,evidence,input,manifest,corpus,pairs)
+end
+
+function collect_effect_learning!(knowledge,config,store,prepared,status)
+    (;job,batch,evidence,input,manifest,corpus,pairs) = prepared
+    supervision = read_json(store_path(store,"supervision.json"))
     status["policy_sha256"] == manifest["config_file"]["sha256"] == supervision["policy_sha256"] ||
         error("Worker ran a different policy")
     if status["code"] ∉ (0,10) || !isdir(joinpath(job,"output"))
         learning_assessment!(job,batch,"worker_incomplete"; status)
         return nothing
     end
+    publication_dir = store_path(store,"publication")
+    current = read_published_stitch(publication_dir)
     checked = read_stitch_rounds(input,joinpath(job,"output"))
     checked.manifest["evidence_snapshot_id"] == evidence && checked.text == corpus.programs &&
         checked.origins == corpus.origins && checked.signature == corpus.signature ||
@@ -466,10 +473,29 @@ function online_learn!(knowledge, config, store, pairs, repo_root; existing_job=
     return digest
 end
 
-function finalize_learning!(knowledge, config, store, pairs, repo_root; frozen)
-    publication = frozen || isempty(pairs) ? nothing : online_learn!(knowledge,config,store,pairs,repo_root)
+function online_learn!(knowledge,config,store,pairs,repo_root; existing_job=nothing)
+    prepared = prepare_effect_learning!(knowledge,config,store,pairs,repo_root;existing_job)
+    isnothing(prepared) && return nothing
+    status = wait_worker(prepared.job,store_path(store))
+    return collect_effect_learning!(knowledge,config,store,prepared,status)
+end
+
+function finalize_learning!(knowledge, config, store, pairs, repo_root; frozen, inflight)
+    publications = String[]
+    if !isnothing(inflight)
+        frozen && error("A background job crossed the evaluation boundary")
+        status = wait_worker(inflight.job,store_path(store))
+        publication = collect_effect_learning!(knowledge,config,store,inflight,status)
+        isnothing(publication) || push!(publications,publication)
+    end
+    if !frozen
+        for batch in Iterators.partition(pairs,config.learning["batch_confirmed_events"])
+            publication = online_learn!(knowledge,config,store,batch,repo_root)
+            isnothing(publication) || push!(publications,publication)
+        end
+    end
     pending = summarize_learning!(store)
-    return (; publication,pending)
+    return (; publications,pending)
 end
 
 function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(), frozen=false)
@@ -483,6 +509,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     goal_pending = nothing
     program_cursor = nothing
     tried_program = false
+    inflight = nothing
+    background = !frozen && get(config.learning,"background_search",false)
     composing = !isnothing(config.planning) && haskey(config.planning,"goal")
     goal = composing ? bind_observed_goal(last(rec.observation.frames),config.planning["goal"]) : nothing
     limits = mechanism_limits(config)
@@ -493,6 +521,12 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     register_evidence_obligation!(rec.store,entry;frozen)
     ready_at = time_ns()
     while rec.sent_count < rec.limit && !rec.frozen
+        if !isnothing(inflight) && isfile(joinpath(inflight.job,"worker-status.json"))
+            status = read_json(joinpath(inflight.job,"worker-status.json"))
+            publication = collect_effect_learning!(knowledge,config,rec.store,inflight,status)
+            isnothing(publication) || push!(publications,publication)
+            inflight = nothing
+        end
         decision_started = time_ns()
         obs = rec.observation
         obs.state in ("WIN","GAME_OVER") && break
@@ -591,6 +625,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         isnothing(item.experiment) || (decision_record["experiment"] = item.experiment)
         isnothing(experiment) || (decision_record["experiment_obligation"] = experiment)
         isnothing(program_note) || (decision_record["program"] = program_note)
+        isnothing(inflight) || (decision_record["pending_learning_job"] = basename(inflight.job))
         if !isnothing(item.chosen)
             model = item.chosen.model
             decision_record["mechanism_version"] = active_id(model)
@@ -670,14 +705,22 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         frozen || push!(pairs,(entry,resulting))
         entry = resulting
         count += 1
-        if !frozen && length(pairs) == config.learning["batch_confirmed_events"]
-            digest = online_learn!(knowledge,config,rec.store,pairs,repo_root)
-            isnothing(digest) || push!(publications,digest)
-            empty!(pairs)
+        if !frozen && isnothing(inflight)
+            count_for_batch = config.learning["batch_confirmed_events"]
+            if length(pairs) >= count_for_batch
+                batch = pairs[1:count_for_batch]
+                deleteat!(pairs,1:count_for_batch)
+                if background
+                    inflight = prepare_effect_learning!(knowledge,config,rec.store,batch,repo_root)
+                else
+                    digest = online_learn!(knowledge,config,rec.store,batch,repo_root)
+                    isnothing(digest) || push!(publications,digest)
+                end
+            end
         end
     end
-    final = finalize_learning!(knowledge,config,rec.store,pairs,repo_root;frozen)
-    isnothing(final.publication) || push!(publications,final.publication)
+    final = finalize_learning!(knowledge,config,rec.store,pairs,repo_root;frozen,inflight)
+    append!(publications,final.publications)
     after_version = frozen ? frozen_knowledge_digest(knowledge) : nothing
     after_version == frozen_version || error("Frozen evaluation changed the mechanism")
     if frozen
