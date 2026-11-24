@@ -109,7 +109,12 @@ end
     abstracted = TC.finite_relation(Set(values for values in Base.values(merged)),Set(0:2),
         [(0,1,["a"]),(0,2,["b"])])
     @test TC.check_causal_square(concrete,abstracted,merged,Set([0])) == TC.disproven
-    @test TC.check_causal_square(concrete,abstracted,merged,Set([0,1])) == TC.proven
+    mismatch = TC.causal_square_witness(concrete,abstracted,merged,Set([0,1]))
+    @test mismatch.truth == TC.disproven
+    @test mismatch.witness.state == 0
+    @test mismatch.witness.low == Set([1]) && mismatch.witness.high == Set([1,2])
+    isolated = TC.finite_relation(Set(0:5),Set(0:5),[(0,2,["a"]),(1,3,["b"])])
+    @test TC.check_causal_square(concrete,isolated,Dict(i=>i for i in 0:5),Set([0,1])) == TC.proven
     incomplete = TC.finite_relation(Set(0:2),Set(0:2),[];complete=false)
     @test TC.check_causal_square(concrete,incomplete,merged,Set([0,1])) == TC.unknown_truth
 end

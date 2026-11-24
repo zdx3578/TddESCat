@@ -68,10 +68,17 @@ function refine_partition(model::PlanningModel{S,A,O}, partition, queries; max_w
     end
 end
 
-function check_causal_square(concrete::FiniteRelation, abstracted::FiniteRelation, partition, states)
-    concrete.complete && abstracted.complete || return unknown_truth
-    isempty(states) && return unknown_truth
-    low = Set(partition[state] for state in post_image(concrete,states))
-    high = post_image(abstracted, Set(partition[state] for state in states))
-    return low == high ? proven : disproven
+function causal_square_witness(concrete::FiniteRelation, abstracted::FiniteRelation, partition, states)
+    if !concrete.complete || !abstracted.complete || isempty(states)
+        return (truth=unknown_truth, witness=nothing)
+    end
+    for state in sort!(collect(states); by=repr)
+        low = Set(partition[result] for result in post_image(concrete, Set([state])))
+        high = post_image(abstracted, Set([partition[state]]))
+        low == high || return (truth=disproven, witness=(; state, low, high))
+    end
+    return (truth=proven, witness=nothing)
 end
+
+check_causal_square(concrete, abstracted, partition, states) =
+    causal_square_witness(concrete, abstracted, partition, states).truth
