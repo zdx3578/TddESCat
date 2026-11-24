@@ -16,6 +16,29 @@ end
 
 execute(name, texts, library; options...) = execute_stitch(signature, name, texts, library; options...)
 
+@testset "Nested reverse proof preserves its substitutions" begin
+    atom = TC.wire_const("Atom","c00")
+    g(term) = TC.wire_call("g",[term])
+    registry, _ = TC.registry_from(signature,[])
+    definitions = Dict()
+    for name in ("fn_1","fn_2")
+        registry[name] = Dict("inputs"=>["Atom"],"output"=>"Atom")
+        definitions[name] = Dict("arity"=>1,"parameter_sorts"=>["Atom"],
+            "body"=>g(TC.wire_parameter(0)))
+    end
+    start = g(g(g(atom)))
+    finish = TC.wire_call("fn_1",[g(TC.wire_call("fn_2",[atom]))])
+    step(name, path, term) = Dict("kind"=>"rule","premise_refs"=>[],
+        "rule_id"=>"def."*name,"substitution"=>[Dict("parameter"=>0,"term"=>term)],
+        "direction"=>"reverse","site_path"=>path)
+    proof = Dict("left_term"=>start,"right_term"=>finish,
+        "steps"=>[step("fn_1",Int[],g(g(atom))),step("fn_2",[0,0],atom)])
+    frozen = deepcopy(proof)
+    @test TC.replay_proof(proof,start,finish,definitions,registry,String[]) == finish
+    @test proof == frozen
+    @test TC.replay_proof(proof,start,finish,definitions,registry,String[]) == finish
+end
+
 @testset "Real typed E-Stitch and exact frozen-library reuse" begin
     empty = LibrarySnapshot()
     positive = execute("positive", batch(0), empty)

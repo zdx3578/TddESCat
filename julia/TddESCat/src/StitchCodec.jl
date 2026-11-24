@@ -195,7 +195,9 @@ function replay_proof(proof, input, output, library, registry, slots)
         terms = [item["term"] for item in args]
         [wire_sort(item, registry; slots) for item in terms] == definition["parameter_sorts"] ||
             error("Substitution sort differs")
-        call = wire_call(name, terms)
+        # A reverse step inserts this call into the mutable replay tree. Its
+        # argument occurrences must be independent of the frozen proof.
+        call = wire_call(name, deepcopy.(terms))
         body = instantiate_wire(definition["body"], terms)
         direction = step["direction"]
         before, after = direction == "forward" ? (call, body) :
