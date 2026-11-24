@@ -35,6 +35,7 @@ KIND_IDS = {
     "movement_composition": ("C01",),
     "resource_composition": ("C02",),
     "camera_composition": ("C03",),
+    "association_recovery": ("A01", "A02"),
 }
 MODULES = {
     "protocol": "tests.protocol.test_faults",
@@ -57,6 +58,7 @@ MODULES = {
     "movement_composition": "tests.bench.check_composition",
     "resource_composition": "tests.bench.check_composition",
     "camera_composition": "tests.bench.check_camera_composition",
+    "association_recovery": "tests.bench.check_association_recovery",
 }
 
 
@@ -219,6 +221,7 @@ def run_task(root, config_path, task, run_dir, runtime):
         "movement_composition",
         "resource_composition",
         "camera_composition",
+        "association_recovery",
     )
     offline_arc = kind in ("arc_offline", "arc_public25")
     isolated = official_local or offline_arc or kind in ("stitch", "stitch_reference")

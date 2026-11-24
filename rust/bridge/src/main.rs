@@ -96,6 +96,7 @@ struct JobProgress {
     input_sha: Option<String>,
     scope: Value,
     policy: Value,
+    search_options: Value,
 }
 
 struct Job {
@@ -173,6 +174,7 @@ impl Job {
         progress.input_sha = Some(self.input_sha.clone());
         progress.scope = self.manifest.scope_refs();
         progress.policy = serde_json::to_value(&self.config)?;
+        progress.search_options = engine::effective_search_options(&self.search_args);
         if self.original.is_empty() {
             return Ok("no_eligible_corpus");
         }
@@ -396,6 +398,7 @@ fn main() {
             })),
             "fixed_point": reason == "verified_compression_fixed_point",
             "scope_refs": progress.scope, "effective_policy": progress.policy,
+            "effective_search_options": progress.search_options,
             "effective_limits": {
                 "search_steps": null, "wall_ms": null, "max_relation_nodes": null,
                 "max_egraph_nodes": null, "max_arena_states": null, "proof_visits": null,

@@ -208,8 +208,13 @@ function resource_binding(rule, fragments)
     return Tuple(sort!(scope_key.(movers)))
 end
 
-function ranked_public_actions(knowledge, observation, history, attempts, max_action_coordinates; composing=false)
+function ranked_public_actions(knowledge, observation, history, attempts, max_action_coordinates;
+        composing=false, required_action=nothing)
     values = public_action_candidates(observation,max_action_coordinates)
+    if !isnothing(required_action) && required_action ∉ values.actions
+        required_action["id"] in observation.available_actions || error("Unavailable experiment action")
+        push!(values.actions,required_action)
+    end
     judged = []
     for action in values.actions
         supports = []
@@ -359,43 +364,71 @@ function wait_worker(job, public_dir)
     end
 end
 
-function online_learn!(knowledge, config, store, pairs, repo_root)
+function online_learn!(knowledge, config, store, pairs, repo_root; existing_job=nothing)
+    isempty(pairs) && return nothing
+    for (pre,post) in pairs
+        register_evidence_obligation!(store,pre)
+        register_evidence_obligation!(store,post)
+    end
+    batch = learning_batch(pairs)
+    evidence = batch["evidence_snapshot_id"]
+    job = if isnothing(existing_job)
+        knowledge.learning_jobs += 1
+        path = store_path(store,"learning","job-" * lpad(knowledge.learning_jobs,6,'0'))
+        mkpath(path)
+        atomic_json(joinpath(path,"batch.json"),batch)
+        path
+    else
+        read_json(joinpath(existing_job,"batch.json")) == batch || error("Recovered learning input differs")
+        existing_job
+    end
     learning = config.learning
     publication_dir = store_path(store,"publication")
     current = read_published_stitch(publication_dir)
     base = isnothing(current) ? LibrarySnapshot() : current.snapshot
     corpus = relation_corpus(pairs; previous_signature=isnothing(current) ? nothing : current.bundle["signature"])
-    refs = [[pre.event["event_id"],post.event["event_id"],post.event["response_blob"]] for (pre,post) in pairs]
-    evidence = "snapshot-" * content_hash(JSON.json(refs))
-    knowledge.learning_jobs += 1
-    job = store_path(store,"learning","job-" * lpad(knowledge.learning_jobs,6,'0'))
-    mkpath(job)
     atomic_json(joinpath(job,"observations.json"),Dict("scope_complete"=>corpus.complete,
         "events"=>public_effect_record.(corpus.observed),"bindings"=>corpus.bindings,
         "dispositions"=>corpus.dispositions, "scope"=>motion_guard_limits(config)))
     if isempty(corpus.programs)
-        atomic_json(joinpath(job,"assessment.json"),Dict("result"=>"no_eligible_terms",
-            "evidence_snapshot_id"=>evidence))
+        learning_assessment!(job,batch,"no_eligible_terms"; complete=true)
         return nothing
     end
     config_text = read(learning["policy_file"], String)
     supervision = read_json(store_path(store,"supervision.json"))
     content_hash(config_text) == supervision["policy_sha256"] || error("Session policy changed since launch")
-    manifest = freeze_stitch_job(joinpath(job,"input"),basename(job),evidence,base,corpus.signature,
-        corpus.programs,corpus.origins,corpus.slots;repo_root,config_text,
-        engine_identity=supervision["engine_identity"],input_scope_complete=corpus.complete)
+    input = joinpath(job,"input")
+    manifest_path = joinpath(input,"manifest.json")
+    manifest = if isfile(manifest_path)
+        read_json(manifest_path)
+    else
+        freeze_stitch_job(input,basename(job),evidence,base,corpus.signature,
+            corpus.programs,corpus.origins,corpus.slots;repo_root,config_text,
+            engine_identity=supervision["engine_identity"],input_scope_complete=corpus.complete)
+    end
     status = wait_worker(job,store_path(store))
-    status["policy_sha256"] == manifest["config_file"]["sha256"] || error("Worker ran a different policy")
+    status["policy_sha256"] == manifest["config_file"]["sha256"] == supervision["policy_sha256"] ||
+        error("Worker ran a different policy")
     if status["code"] ∉ (0,10) || !isdir(joinpath(job,"output"))
-        atomic_json(joinpath(job,"assessment.json"), Dict("result"=>"worker_incomplete","status"=>status))
+        learning_assessment!(job,batch,"worker_incomplete"; status)
         return nothing
     end
-    checked = read_stitch_rounds(joinpath(job,"input"),joinpath(job,"output"))
+    checked = read_stitch_rounds(input,joinpath(job,"output"))
+    checked.manifest["evidence_snapshot_id"] == evidence && checked.text == corpus.programs &&
+        checked.origins == corpus.origins && checked.signature == corpus.signature ||
+        error("Verified learning job does not agree with replayed evidence")
+    summary = checked.summary
+    termination_reason = isnothing(summary) ? nothing : summary["termination_reason"]
+    fixed_point = termination_reason == "verified_compression_fixed_point"
+    complete = termination_reason in ("verified_compression_fixed_point","input_scope_incomplete") &&
+        !isempty(checked.verified) && last(checked.verified)["round_outcome"] == "no_positive_gain"
     if isempty(checked.verified) || isempty(last(checked.verified)["calls"])
-        atomic_json(joinpath(job,"assessment.json"),Dict("result"=>"no_proved_definition_call","status"=>status))
+        learning_assessment!(job,batch,"no_proved_definition_call"; complete, status,
+            termination_reason, fixed_point)
         return nothing
     end
-    digest = publish_stitch!(publication_dir,checked;current_evidence=evidence)
+    digest = !isnothing(current) && current.bundle["input_sha256"] == checked.input_sha ?
+        current.publication : publish_stitch!(publication_dir,checked;current_evidence=evidence)
     published = read_published_stitch(publication_dir;publication=digest)
     knowledge.definition_depths = definition_depths(published.snapshot.entries)
     term_limit = isnothing(config.search) ? 7 : config.search["max_parameter_term_nodes"]
@@ -408,16 +441,23 @@ function online_learn!(knowledge, config, store, pairs, repo_root)
     knowledge.rules = sort!(collect(values(known));by=rule->rule.id)
     limits = motion_guard_limits(config)
     knowledge.active = [fit_joint_condition(rule,knowledge.trials,limits) for rule in knowledge.rules]
-    atomic_json(joinpath(job,"assessment.json"),Dict("result"=>"published","publication"=>digest,
-        "definitions"=>published.bundle["new_definition_ids"],"current_mechanisms"=>active_id.(knowledge.active),
-        "evidence_snapshot_id"=>evidence,"status"=>status))
+    learning_assessment!(job,batch,"published"; complete, status, termination_reason, fixed_point,
+        publication=digest, definitions=published.bundle["new_definition_ids"],
+        current_mechanisms=active_id.(knowledge.active))
     return digest
+end
+
+function finalize_learning!(knowledge, config, store, pairs, repo_root; frozen)
+    publication = frozen || isempty(pairs) ? nothing : online_learn!(knowledge,config,store,pairs,repo_root)
+    pending = summarize_learning!(store)
+    return (; publication,pending)
 end
 
 function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(), frozen=false)
     attempts = Dict{Tuple{Int,Int,Int},Int}()
     history = [0]
     pairs = []
+    experiments = ExperimentSchedule()
     publications = String[]
     count = 0
     continuation = nothing
@@ -428,6 +468,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     coordinates = isnothing(config.search) ? 4096 : config.search["max_action_coordinates"]
     consumed_depth = 0
     frozen_version = frozen ? frozen_knowledge_digest(knowledge) : nothing
+    frozen_publication = frozen ? read_published_stitch(store_path(rec.store,"publication")) : nothing
+    register_evidence_obligation!(rec.store,entry;frozen)
     ready_at = time_ns()
     while rec.sent_count < rec.limit && !rec.frozen
         decision_started = time_ns()
@@ -463,6 +505,19 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             end
             continuation = nothing
         end
+        experiment = if !frozen && !composing
+            select_experiment!(experiments,rec.store,decision.ranked,obs.available_actions,rec.before_ref)
+        end
+        if !isnothing(experiment) && experiment.action != item.action
+            choice = findfirst(row->row.action == experiment.action,decision.ranked)
+            if isnothing(choice)
+                decision = ranked_public_actions(knowledge,obs,history,attempts,coordinates;
+                    required_action=experiment.action)
+                choice = findfirst(row->row.action == experiment.action,decision.ranked)
+            end
+            item = decision.ranked[choice]
+            policy_note = nothing
+        end
         plan_reads = isnothing(goal_cursor) ? String[] : reduce(vcat,
             (recovery_reads(rec,model) for model in knowledge.active if haskey(goal_cursor.node.dependencies,model.rule.id));
             init=String[])
@@ -485,6 +540,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 "attempted"=>sum(key[1] == 6 for key in keys(attempts);init=0)))
         isnothing(policy_note) || (decision_record["policy"] = policy_note)
         isnothing(item.experiment) || (decision_record["experiment"] = item.experiment)
+        isnothing(experiment) || (decision_record["experiment_obligation"] = experiment)
         if !isnothing(item.chosen)
             model = item.chosen.model
             decision_record["mechanism_version"] = active_id(model)
@@ -502,6 +558,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         ready_at = time_ns()
         event = read_json(store_path(rec.store,"events",rec.before_ref * ".json"))
         resulting = (; event,observation=rec.observation)
+        register_evidence_obligation!(rec.store,resulting;frozen)
+        isnothing(experiment) || record_experiment_service!(experiments,rec.store,experiment,event)
         sample = motion_example(entry,resulting;history)
         effects = observed_effects(entry,resulting)
         assessment = isnothing(item.chosen) ? (actual=Dict(),assessments=Dict()) :
@@ -543,7 +601,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 "policy"=>policy_note))
         attempts[action_key(item.action)] = get(attempts,action_key(item.action),0) + 1
         push!(history,item.action["id"])
-        push!(pairs,(entry,resulting))
+        frozen || push!(pairs,(entry,resulting))
         entry = resulting
         count += 1
         if !frozen && length(pairs) == config.learning["batch_confirmed_events"]
@@ -552,11 +610,74 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             empty!(pairs)
         end
     end
+    final = finalize_learning!(knowledge,config,rec.store,pairs,repo_root;frozen)
+    isnothing(final.publication) || push!(publications,final.publication)
     after_version = frozen ? frozen_knowledge_digest(knowledge) : nothing
     after_version == frozen_version || error("Frozen evaluation changed the mechanism")
+    if frozen
+        current = read_published_stitch(store_path(rec.store,"publication"))
+        (isnothing(current) ? nothing : current.publication) ==
+            (isnothing(frozen_publication) ? nothing : frozen_publication.publication) ||
+            error("Frozen evaluation changed the publication")
+    end
     outcome = (; actions=count, publications, state=rec.observation.state, models=length(knowledge.active),
-        frozen_before=frozen_version, frozen_after=after_version, consumed_definition_depth=consumed_depth)
+        frozen_before=frozen_version, frozen_after=after_version, consumed_definition_depth=consumed_depth,
+        pending_learning_events=final.pending)
     composing || return outcome
     truth = isnothing(goal) ? unknown_truth : goal_truth(goal,last(rec.observation.frames))
     return merge(outcome,(goal=truth == proven ? "observed" : truth == disproven ? "not_reached" : "unknown",))
+end
+
+function recover_learning!(store, config, repo_root)
+    config.learning === nothing && error("The run does not have a learning policy")
+    session = read_json(store_path(store,"learning","session.json"))
+    sources = recover_run(store)
+    prior = prior_trials(config)
+    knowledge = OnlineKnowledge()
+    append!(knowledge.trials,prior.trials)
+    pairs = copy(prior.pairs)
+    previous = nothing
+    history = Int[]
+    for item in sources
+        register_evidence_obligation!(store,item; frozen=session["frozen"])
+        action = item.observation.action
+        if action["id"] == 0
+            empty!(history)
+        elseif !session["frozen"]
+            !isnothing(previous) && item.event["before_ref"] == previous.event["event_id"] ||
+                error("Recovered action lacks its observed preconditions")
+            push!(pairs,(previous,item))
+            push!(knowledge.trials,PublicTrial(motion_example(previous,item;history),action))
+        end
+        push!(history,action["id"])
+        previous = item
+    end
+    jobs = learning_jobs(store)
+    knowledge.learning_jobs = isempty(jobs) ? 0 : parse(Int,split(basename(last(jobs)),'-')[2])
+    if session["frozen"] && isfile(store_path(store,"learning","evaluation-boundary.json"))
+        return (; pending=summarize_learning!(store))
+    end
+    by_event = Dict(pair[2].event["event_id"]=>pair for pair in pairs)
+    attempted = Set{String}()
+    for job in jobs
+        batch_path = joinpath(job,"batch.json")
+        isfile(batch_path) && !isfile(joinpath(job,"assessment.json")) || continue
+        batch = read_json(batch_path)
+        input = joinpath(job,"input")
+        if isdir(input) && !isfile(joinpath(input,"manifest.json"))
+            learning_assessment!(job,batch,"input_interrupted")
+            continue
+        end
+        ids = [row[2] for row in batch["inputs"]]
+        online_learn!(knowledge,config,store,[by_event[id] for id in ids],repo_root; existing_job=job)
+        union!(attempted,ids)
+    end
+    dispositions = learning_dispositions(store)
+    outstanding = [pair for pair in pairs if let ref = pair[2].event["event_id"]
+        ref ∉ attempted && !get(get(dispositions,ref,Dict()),"complete",false)
+    end]
+    for group in Iterators.partition(outstanding,config.learning["batch_confirmed_events"])
+        online_learn!(knowledge,config,store,group,repo_root)
+    end
+    return (; pending=summarize_learning!(store))
 end

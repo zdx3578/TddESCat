@@ -19,6 +19,9 @@ function capture(config, public_dir; supervised=false, collect_only=false)
         knowledge = TddESCat.OnlineKnowledge()
         prepared = nothing
         frozen = collect_only || get(config.execution,"frozen_evaluation",false)
+        if !isnothing(config.learning)
+            TddESCat.atomic_json(TddESCat.store_path(store,"learning","session.json"),Dict("frozen"=>frozen))
+        end
         if !isempty(prior.trials)
             append!(knowledge.trials,prior.trials)
             prepared = TddESCat.online_learn!(knowledge,config,store,prior.pairs,ROOT)
@@ -39,6 +42,10 @@ function capture(config, public_dir; supervised=false, collect_only=false)
                 if isnothing(config.learning)
                     explore!(rec)
                 else
+                    if frozen
+                        TddESCat.atomic_json(TddESCat.store_path(store,"learning","evaluation-boundary.json"),
+                            Dict("publication"=>prepared,"knowledge_sha256"=>TddESCat.frozen_knowledge_digest(knowledge)))
+                    end
                     event = TddESCat.read_json(TddESCat.store_path(store, "events", rec.before_ref * ".json"))
                     learned = TddESCat.run_online!(rec, (event=event, observation=rec.observation), config, ROOT;
                         knowledge,frozen)
@@ -78,6 +85,15 @@ function explore!(rec)
 end
 
 function main(args)
+    if length(args) == 5 && first(args) == "--recover-learning" &&
+            args[2] == "--config" && args[4] == "--public-dir"
+        config = load_run_config(args[3])
+        result = with_run(last(args)) do store
+            TddESCat.recover_learning!(store,config,ROOT)
+        end
+        println(JSON.json(result))
+        return isempty(result.pending) ? 0 : 1
+    end
     if length(args) == 2 && first(args) == "--replay"
         isdir(last(args)) || throw(ArgumentError("Public run directory does not exist"))
         println(JSON.json(with_run(replay_run!, last(args))))

@@ -1,0 +1,5 @@
+schema_version = 1
+kind = "association_recovery"
+output_name = "association-recovery"
+environment_config = "../bench_server.toml"
+judge_config = "../bench_scenarios.toml"

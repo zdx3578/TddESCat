@@ -15,6 +15,7 @@ from pathlib import Path
 from time import monotonic, sleep
 from uuid import uuid4
 
+from .contracts import Contracts
 from .isolation import solver_sandbox
 from .run import julia_command, runtime_paths
 from .stitch import build_identity, run_worker
@@ -50,7 +51,7 @@ def atomic_json(path, payload):
             temporary.unlink(missing_ok=True)
 
 
-def public_settings(root, config, data):
+def public_settings(root, config, data, *, recovery=False):
     environment = data["environment"]
     paths = [config, *(root / name for name in BUILD_INPUTS)]
     if "learning" in data:
@@ -63,12 +64,12 @@ def public_settings(root, config, data):
         if not previous.is_dir():
             raise ValueError("Prior evidence directory is missing")
         paths.append(previous)
-    if environment.get("credentials_file"):
+    if not recovery and environment.get("credentials_file"):
         credential = (config.parent / environment["credentials_file"]).resolve()
         if not credential.is_file():
             raise FileNotFoundError("Configured public ARC credential file is missing")
         paths.append(credential)
-    if not re.fullmatch(
+    if not recovery and not re.fullmatch(
         r"http://(?:127\.0\.0\.1|\[::1\]):[0-9]+/?", environment["base_url"]
     ):
         paths.extend(
@@ -84,19 +85,21 @@ def public_settings(root, config, data):
     return tuple(paths)
 
 
-def solver_command(root, runtime, config, public, paths, *, command=None):
+def solver_command(
+    root, runtime, config, public, paths, *, command=None, recovery=False
+):
     script = root / "scripts/run.jl"
     if command is None:
         command = [
             "/usr/bin/time",
             "-v",
             "-o",
-            str(public / "solver-usage.txt"),
+            str(public / ("recovery-usage.txt" if recovery else "solver-usage.txt")),
             *julia_command(
                 root,
                 runtime,
                 script,
-                "--supervised",
+                "--recover-learning" if recovery else "--supervised",
                 "--config",
                 str(config),
                 "--public-dir",
@@ -104,7 +107,13 @@ def solver_command(root, runtime, config, public, paths, *, command=None):
             ),
         ]
     return solver_sandbox(
-        root, runtime, command, public, script=script, extra_read=paths
+        root,
+        runtime,
+        command,
+        public,
+        script=script,
+        extra_read=paths,
+        offline=recovery,
     )
 
 
@@ -121,9 +130,11 @@ def process_jobs(
 ):
     queue = public / "learning"
     for job in sorted(queue.glob("job-*")):
-        if not re.fullmatch(r"job-\d{6}", job.name) or job.name in serviced:
+        if not re.fullmatch(r"job-\d{6,}", job.name) or job.name in serviced:
             continue
         if not (job / "input/manifest.json").is_file():
+            continue
+        if (job / "worker-status.json").exists() or (job / "assessment.json").exists():
             continue
         serviced.add(job.name)
         if not (
@@ -137,15 +148,28 @@ def process_jobs(
         try:
             if sha256(binary.read_bytes()).hexdigest() != worker_sha:
                 raise RuntimeError("Learning executable changed during the session")
-            code = run_worker(
-                root,
-                job / "input",
-                job / "output",
-                binary,
-                hard_memory=hard_memory,
-                expected_policy=policy_sha,
-                solver_unit=unit,
-            )
+            output = job / "output"
+            if output.exists():
+                summary = json.loads((output / "learning-summary.json").read_bytes())
+                Contracts(root / "protocol").validate("learn_summary", summary)
+                if (
+                    summary["scope_refs"]["binary"] != worker_sha
+                    or summary["scope_refs"]["policy"] != policy_sha
+                ):
+                    raise ValueError(
+                        "Interrupted attempt has a different worker or policy"
+                    )
+                code = json.loads((output / "metrics.json").read_bytes())["exit_code"]
+            else:
+                code = run_worker(
+                    root,
+                    job / "input",
+                    output,
+                    binary,
+                    hard_memory=hard_memory,
+                    expected_policy=policy_sha,
+                    solver_unit=unit,
+                )
         except Exception as exc:
             failure = f"{type(exc).__name__}: {exc}"
         atomic_json(
@@ -162,14 +186,23 @@ def process_jobs(
 
 
 @contextmanager
-def supervisor_liveness(public, state):
-    with (public / "supervisor.lock").open("xb") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+def supervisor_liveness(public, state, *, recovery):
+    with (public / "supervisor.lock").open("ab" if recovery else "xb") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if recovery:
+            previous = json.loads((public / "supervision.json").read_bytes())
+            if any(
+                previous[key] != state[key]
+                for key in ("config_sha256", "engine_identity", "policy_sha256")
+            ):
+                raise ValueError(
+                    "Recovery must use the original run configuration and worker"
+                )
         atomic_json(public / "supervision.json", state)
         yield
 
 
-def supervise(root, config, public, *, expected_paths=None):
+def supervise(root, config, public, *, expected_paths=None, recovery=False):
     runtime = runtime_paths(root)
     data = tomllib.loads(config.read_text(encoding="utf-8"))
     if data["execution"]["memory_enforcement"] != "cgroup_v2":
@@ -181,7 +214,7 @@ def supervise(root, config, public, *, expected_paths=None):
         )
     try:
         paths = (
-            public_settings(root, config, data)
+            public_settings(root, config, data, recovery=recovery)
             if expected_paths is None
             else expected_paths
         )
@@ -205,7 +238,10 @@ def supervise(root, config, public, *, expected_paths=None):
     ):
         raise ValueError("Invalid hard memory cap")
     public.mkdir(parents=True, exist_ok=True)
-    if (public / "commands").exists() or (public / "supervision.json").exists():
+    if recovery:
+        if not (public / "learning/session.json").is_file():
+            raise ValueError("No recorded learning session to recover")
+    elif (public / "commands").exists() or (public / "supervision.json").exists():
         raise ValueError("A supervised session needs a fresh public directory")
     identity = build_identity(root, binary)
     worker_sha = identity["binary_sha256"]
@@ -237,12 +273,14 @@ def supervise(root, config, public, *, expected_paths=None):
         "-p",
         "TasksMax=128",
         "--",
-        *solver_command(root, runtime, config, public, paths),
+        *solver_command(root, runtime, config, public, paths, recovery=recovery),
     ]
     env = supervisor_environment()
     with (
-        supervisor_liveness(public, state),
-        (public / "solver.log").open("xb") as log,
+        supervisor_liveness(public, state, recovery=recovery),
+        (public / ("recovery.log" if recovery else "solver.log")).open(
+            "ab" if recovery else "xb"
+        ) as log,
         subprocess.Popen(
             command,
             start_new_session=True,
@@ -278,10 +316,15 @@ def supervise(root, config, public, *, expected_paths=None):
             finally:
                 signal.signal(signal.SIGTERM, handler)
         code = solver.wait()
-    state.update(
-        state="FINISHED" if code == 0 else "FAILED", code=code, jobs=sorted(serviced)
-    )
-    atomic_json(public / "supervision.json", state)
+        state.update(
+            state="FINISHED" if code == 0 else "FAILED",
+            code=code,
+            jobs=sorted(
+                path.parent.name
+                for path in public.glob("learning/job-*/worker-status.json")
+            ),
+        )
+        atomic_json(public / "supervision.json", state)
     return code
 
 
@@ -289,7 +332,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--public-dir", type=Path)
+    parser.add_argument("--recover-learning", action="store_true")
     args = parser.parse_args()
+    if args.recover_learning and args.public_dir is None:
+        parser.error("--recover-learning requires --public-dir")
     root = Path(__file__).resolve().parents[3]
     config = args.config.resolve()
     if args.public_dir is None:
@@ -303,7 +349,7 @@ def main():
     else:
         public = args.public_dir.resolve()
     print(public, flush=True)
-    return supervise(root, config, public)
+    return supervise(root, config, public, recovery=args.recover_learning)
 
 
 if __name__ == "__main__":

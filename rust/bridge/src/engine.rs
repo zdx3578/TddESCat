@@ -226,7 +226,7 @@ pub fn search_args(config: &Config) -> Result<Args> {
     use clap::Parser;
     let options = &config.search_options;
     let rows = options.decompose_min_rows.to_string();
-    let mut flags = vec![
+    let flags = [
         "egg-stitch",
         "--search",
         "best-first",
@@ -241,41 +241,91 @@ pub fn search_args(config: &Config) -> Result<Args> {
         "--decompose-min-rows",
         &rows,
     ];
-    for (enabled, on, off) in [
-        (options.opt_seen, "--opt-seen", "--no-opt-seen"),
-        (
-            options.opt_dedup_by_match,
-            "--opt-dedup-by-match",
-            "--no-opt-dedup-by-match",
-        ),
-        (
-            options.opt_dominance_reuse,
-            "--opt-dominance-reuse",
-            "--no-opt-dominance-reuse",
-        ),
-        (
-            options.opt_useless_frozen,
-            "--opt-useless-frozen",
-            "--no-opt-useless-frozen",
-        ),
-        (
-            options.opt_useless_inline,
-            "--opt-useless-inline",
-            "--no-opt-useless-inline",
-        ),
-    ] {
-        flags.push(if enabled { on } else { off });
-    }
-    if options.allow_useless_vars {
-        flags.push("--allow-useless-vars");
-    }
-    if options.no_zero_arity {
-        flags.push("--no-zero-arity");
-    }
     let mut args = Args::try_parse_from(flags)?;
+    args.opt_seen = options.opt_seen;
+    args.opt_dedup_by_match = options.opt_dedup_by_match;
+    args.opt_dominance_reuse = options.opt_dominance_reuse;
+    args.opt_useless_frozen = options.opt_useless_frozen;
+    args.opt_useless_inline = options.opt_useless_inline;
+    args.allow_useless_vars = options.allow_useless_vars;
+    args.no_zero_arity = options.no_zero_arity;
     args.max_arity = config.max_arity;
     args.normalize();
     Ok(args)
+}
+
+pub fn effective_search_options(args: &Args) -> serde_json::Value {
+    use clap::ValueEnum;
+    serde_json::json!({
+        "priority": args.priority.to_possible_value().unwrap().get_name(),
+        "freeze_rule": args.freeze_rule.resolve(true),
+        "var_order": args.var_order.to_possible_value().unwrap().get_name(),
+        "lower_bound": args.lower_bound.resolve(true),
+        "opt_seen": args.opt_seen,
+        "opt_dedup_by_match": args.opt_dedup_by_match,
+        "opt_dominance_reuse": args.opt_dominance_reuse,
+        "opt_useless_frozen": args.opt_useless_frozen,
+        "opt_useless_inline": args.opt_useless_inline,
+        "allow_useless_vars": args.allow_useless_vars,
+        "no_zero_arity": args.no_zero_arity,
+        "decompose_min_rows": args.decompose_min_rows,
+        "max_arity": args.max_arity,
+    })
+}
+
+#[cfg(test)]
+mod search_options_tests {
+    use super::*;
+
+    #[test]
+    fn all_boolean_combinations_reach_the_actual_args() {
+        let mut config = Config::load(include_bytes!("../../../config/stitch.toml")).unwrap();
+        let expected = serde_json::json!({
+            "priority": "cost", "freeze_rule": true, "var_order": "mean-nodes-per-class",
+            "lower_bound": true, "opt_seen": true, "opt_dedup_by_match": false,
+            "opt_dominance_reuse": false, "opt_useless_frozen": false,
+            "opt_useless_inline": false, "allow_useless_vars": false, "no_zero_arity": false,
+            "decompose_min_rows": 48, "max_arity": 1000
+        });
+        assert_eq!(
+            effective_search_options(&search_args(&config).unwrap()),
+            expected
+        );
+
+        for mask in 0u32..32 {
+            let flags = std::array::from_fn::<_, 5, _>(|bit| mask & (1 << bit) != 0);
+            let options = &mut config.search_options;
+            [
+                options.opt_seen,
+                options.opt_dedup_by_match,
+                options.opt_dominance_reuse,
+                options.opt_useless_frozen,
+                options.opt_useless_inline,
+            ] = flags;
+            options.allow_useless_vars = false;
+            let args = search_args(&config).unwrap();
+            assert_eq!(
+                [
+                    args.opt_seen,
+                    args.opt_dedup_by_match,
+                    args.opt_dominance_reuse,
+                    args.opt_useless_frozen,
+                    args.opt_useless_inline,
+                ],
+                flags
+            );
+
+            config.search_options.allow_useless_vars = true;
+            config.search_options.no_zero_arity = true;
+            let args = search_args(&config).unwrap();
+            assert!(args.allow_useless_vars && args.no_zero_arity);
+            assert_eq!(args.opt_seen, flags[0]);
+            assert_eq!(args.opt_dedup_by_match, flags[1]);
+            assert!(
+                !(args.opt_dominance_reuse || args.opt_useless_frozen || args.opt_useless_inline)
+            );
+        }
+    }
 }
 
 pub fn search(

@@ -77,6 +77,9 @@
         "null"
       ]
     },
+    "effective_search_options": {
+      "type": ["object", "null"]
+    },
     "effective_limits": {
       "type": "object",
       "properties": {
