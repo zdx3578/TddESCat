@@ -120,17 +120,8 @@ function load_run_config(path::AbstractString)
     end
     planning = get(data,"planning",nothing)
     if !isnothing(planning)
-        require_keys(planning,();optional=("goal","pattern_maze"),at="planning")
-        maze = get(planning,"pattern_maze",false)
-        maze isa Bool || throw(ArgumentError("Invalid planning.pattern_maze"))
-        if maze
-            isnothing(learning) && !haskey(planning,"goal") && env["competition_mode"] === false &&
-                get(env,"game_id",nothing) == "ls20-9607627b" && !haskey(env,"credentials_file") &&
-                occursin(r"^http://127\.0\.0\.1:[0-9]+\z",env["base_url"]) ||
-                throw(ArgumentError("Pattern maze requires the original ls20 on local offline HTTP"))
-        else
-            isnothing(learning) && throw(ArgumentError("Planning requires learned mechanisms"))
-        end
+        isnothing(learning) && throw(ArgumentError("Planning requires learned mechanisms"))
+        require_keys(planning,();optional=("goal",),at="planning")
         if haskey(planning,"goal")
             goal = require_keys(planning["goal"],("role_color","marker_color");
                 optional=("cue_color","marker_gap"),at="planning.goal")

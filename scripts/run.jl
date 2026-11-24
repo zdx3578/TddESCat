@@ -39,15 +39,10 @@ function capture(config, public_dir; supervised=false, collect_only=false)
             requested
         end
         learned = nothing
-        planner = nothing
         if open_scorecard!(rec)["completion"] == "confirmed"
             if reset!(rec, game_id)["completion"] == "confirmed"
                 if isnothing(config.learning)
-                    if !isnothing(config.planning) && get(config.planning,"pattern_maze",false)
-                        planner = TddESCat.run_pattern_maze!(rec)
-                    else
-                        explore!(rec)
-                    end
+                    explore!(rec)
                 else
                     if frozen
                         publication = TddESCat.read_published_stitch(TddESCat.store_path(store,"publication"))
@@ -73,7 +68,6 @@ function capture(config, public_dir; supervised=false, collect_only=false)
         end
         output = (recorded=length(events), requested_game_id=game_id, quarantined=rec.frozen, learned,
             prior_publication=prepared, sequence)
-        isnothing(planner) || (output = merge(output,(; planner)))
         TddESCat.atomic_json(TddESCat.store_path(store, "public-run.json"), output)
         return output
     end
@@ -144,8 +138,7 @@ function main(args)
     end
     result = capture(cfg, public_dir; supervised)
     println(JSON.json(result))
-    failed_plan = hasproperty(result,:planner) && result.planner.reason != "win"
-    return result.quarantined || result.recorded == 0 || failed_plan ? 1 : 0
+    return result.quarantined || result.recorded == 0 ? 1 : 0
 end
 
 if abspath(PROGRAM_FILE) == (@__FILE__)
