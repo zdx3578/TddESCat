@@ -121,7 +121,13 @@ function load_run_config(path::AbstractString)
     planning = get(data,"planning",nothing)
     if !isnothing(planning)
         isnothing(learning) && throw(ArgumentError("Planning requires learned mechanisms"))
-        require_keys(planning,();optional=("goal",),at="planning")
+        require_keys(planning,();optional=("goal","autonomous"),at="planning")
+        autonomous = get(planning,"autonomous",false)
+        autonomous isa Bool || throw(ArgumentError("Invalid planning.autonomous"))
+        if autonomous
+            !haskey(planning,"goal") && !haskey(learning,"prior_evidence") ||
+                throw(ArgumentError("Autonomous planning requires a cold start without a configured goal"))
+        end
         if haskey(planning,"goal")
             goal = require_keys(planning["goal"],("role_color","marker_color");
                 optional=("cue_color","marker_gap"),at="planning.goal")

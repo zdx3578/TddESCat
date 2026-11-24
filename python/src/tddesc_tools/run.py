@@ -29,6 +29,7 @@ KIND_IDS = {
     "stitch_reference": ("native_reference",),
     "real_public": ("public_learning_loop",),
     "arc_offline": ("public_learning_loop",),
+    "autonomous_offline": ("autonomous_public_win",),
     "planning": ("finite_policy",),
     "planning_public": ("public_revalidated_policy",),
     "planning_composition": ("guard_then_joint_push", "plan_withdrawal"),
@@ -65,6 +66,7 @@ MODULES = {
     "stitch_reference": "tests.bench.check_stitch_reference",
     "real_public": "tests.bench.check_real_public",
     "arc_offline": "tests.bench.check_real_public",
+    "autonomous_offline": "tests.bench.check_real_public",
     "arc_public25": "tests.bench.check_public25",
     "planning": "tests.bench.check_kernel",
     "planning_public": "tests.bench.check_core_learning",
@@ -122,7 +124,7 @@ def read_task(path):
     paths = {"agent_config", "environment_config", "judge_config"}
     kind = data.get("kind")
     required = common.copy()
-    if kind in ("arc_offline", "arc_public25"):
+    if kind in ("arc_offline", "autonomous_offline", "arc_public25"):
         required.add("offline_bundle")
     if kind == "arc_public25":
         required.update(("game_ids", "environment_config", "actions_per_game"))
@@ -149,7 +151,7 @@ def read_task(path):
         data[field] = (path.parent / value).resolve()
         if not data[field].is_file():
             raise ValueError(f"Missing {field}: {data[field]}")
-    if kind in ("arc_offline", "arc_public25"):
+    if kind in ("arc_offline", "autonomous_offline", "arc_public25"):
         if not isinstance(data["offline_bundle"], str) or not data["offline_bundle"]:
             raise ValueError("Invalid offline_bundle")
         data["offline_bundle"] = (path.parent / data["offline_bundle"]).resolve()
@@ -276,7 +278,7 @@ def run_task(root, config_path, task, run_dir, runtime):
         "association_background",
         "sequence_learning",
     )
-    offline_arc = kind in ("arc_offline", "arc_public25")
+    offline_arc = kind in ("arc_offline", "autonomous_offline", "arc_public25")
     isolated = (
         official_local
         or offline_arc
@@ -436,6 +438,7 @@ def run_task(root, config_path, task, run_dir, runtime):
     )
     if kind in (
         "arc_public25",
+        "autonomous_offline",
         "association_recovery",
         "association_kernel",
         "association_online",

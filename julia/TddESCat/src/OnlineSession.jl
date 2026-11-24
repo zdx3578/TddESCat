@@ -56,18 +56,23 @@ end
 
 public_components(frame) = sort!(color_components(frame).groups; by=shape->(length(shape),anchor(shape)))
 
+function evaluate_joint_trial(rule, trial)
+    trial.action["id"] == rule.action_id || return nothing
+    row = trial.sample
+    groups = public_components(row.before)
+    evaluation = evaluate_joint_rule(rule,row.before,groups,enclosure_pairs(groups),trial.action)
+    evaluation.truth == proven || return nothing
+    assessed = measure_joint((model=rule,fragments=evaluation.fragments),row.after)
+    verdict = "refuted" in values(assessed.assessments) ? disproven :
+        all(==("supported"),values(assessed.assessments)) ? proven : unknown_truth
+    return (;row,evaluation.fragments,verdict)
+end
+
 function fit_joint_condition(rule, trials, limits)
     chosen = []
     for trial in trials
-        trial.action["id"] == rule.action_id || continue
-        row = trial.sample
-        groups = public_components(row.before)
-        evaluation = evaluate_joint_rule(rule,row.before,groups,enclosure_pairs(groups),trial.action)
-        evaluation.truth == proven || continue
-        assessed = measure_joint((model=rule, fragments=evaluation.fragments),row.after)
-        verdict = "refuted" in values(assessed.assessments) ? disproven :
-            all(==("supported"), values(assessed.assessments)) ? proven : unknown_truth
-        push!(chosen, (; row, evaluation.fragments, verdict))
+        evaluated = evaluate_joint_trial(rule,trial)
+        isnothing(evaluated) || push!(chosen,evaluated)
     end
     rows = [item.row for item in chosen]
     ids = [row.event_id for row in rows]
@@ -106,6 +111,23 @@ function fit_joint_condition(rule, trials, limits)
     return ActiveMechanism(rule,updated,ids[broken],unknowns)
 end
 
+function update_joint_condition(current, rule, trial, trials, limits)
+    if !isnothing(current) && isempty(current.counterexamples) && isempty(current.condition.atoms) &&
+            current.condition.complete
+        evaluated = evaluate_joint_trial(rule,trial)
+        isnothing(evaluated) && return current
+        ref = trial.sample.event_id
+        if evaluated.verdict == unknown_truth
+            return ActiveMechanism(rule,current.condition,String[],[current.unknown;ref])
+        elseif evaluated.verdict == proven
+            support = [current.condition.support;ref]
+            condition = GuardSearch(MotionPredicate[],support,String[],String[],true,true,1)
+            return ActiveMechanism(rule,condition,String[],current.unknown)
+        end
+    end
+    return fit_joint_condition(rule,trials,limits)
+end
+
 function active_id(model::ActiveMechanism)
     return "mechanism-" * content_hash(JSON.json([model.rule.id,
         predicate_record.(model.condition.atoms),model.condition.feasible,model.condition.complete]))
@@ -127,7 +149,7 @@ function archive_trial!(knowledge, trial, limits)
     for rule in knowledge.rules
         current = get(old,rule.id,nothing)
         if isnothing(current) || rule.action_id == trial.action["id"]
-            current = fit_joint_condition(rule,knowledge.trials,limits)
+            current = update_joint_condition(current,rule,trial,knowledge.trials,limits)
         end
         push!(updated,current)
     end
@@ -520,6 +542,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     inflight = nothing
     background = !frozen && get(config.learning,"background_search",false)
     composing = !isnothing(config.planning) && haskey(config.planning,"goal")
+    spatial = !isnothing(config.planning) && get(config.planning,"autonomous",false) ? SpatialLearning() : nothing
+    visual = isnothing(spatial) ? nothing : VisualControl()
     goal = composing ? bind_observed_goal(last(rec.observation.frames),config.planning["goal"]) : nothing
     limits = mechanism_limits(config)
     coordinates = isnothing(config.search) ? 4096 : config.search["max_action_coordinates"]
@@ -538,6 +562,22 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         decision_started = time_ns()
         obs = rec.observation
         obs.state in ("WIN","GAME_OVER") && break
+        if !isnothing(visual) && !isnothing(visual.resource) &&
+                read_counter(last(obs.frames),visual.resource) == 0
+            evidence_size = length(Set((c.patch,c.transition.before,c.transition.after)
+                for c in visual.contacts)) + length(spatial.visits) + length(visual.scene.tiles)
+            evidence_size == visual.reset_budget && break
+            visual.reset_budget = evidence_size
+            reset = reset!(rec,obs.game_id)
+            reset["completion"] == "confirmed" && rec.observation.levels_completed == obs.levels_completed || break
+            event = read_json(store_path(rec.store,"events",rec.before_ref * ".json"))
+            entry = (;event,observation=rec.observation)
+            register_evidence_obligation!(rec.store,entry;frozen)
+            begin_visual_attempt!(visual)
+            history = [0]
+            ready_at = time_ns()
+            continue
+        end
         if composing && isnothing(goal)
             goal = bind_observed_goal(last(obs.frames),config.planning["goal"])
         end
@@ -596,7 +636,11 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 end
             end
         end
-        experiment = if !frozen && !composing && isnothing(program_cursor)
+        spatial_choice = if !isnothing(spatial) && isnothing(program_cursor)
+            planned = visual_plan(visual,spatial,obs,decision,rec.before_ref)
+            isnothing(planned) ? spatial_experiment(spatial,obs,decision) : planned
+        end
+        experiment = if !frozen && !composing && isnothing(program_cursor) && isnothing(spatial_choice)
             select_experiment!(experiments,rec.store,decision.ranked,obs.available_actions,rec.before_ref)
         end
         if !isnothing(experiment) && experiment.action != item.action
@@ -609,11 +653,36 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             item = decision.ranked[choice]
             policy_note = nothing
         end
+        if !isnothing(spatial_choice)
+            requested = first(row for row in decision.ranked if row.action == Dict("id"=>spatial_choice.id))
+            item = merge(requested,(reason=spatial_choice.reason,))
+            policy_note = nothing
+        end
         plan_reads = isnothing(goal_cursor) ? String[] : reduce(vcat,
             (recovery_reads(rec,model) for model in knowledge.active if haskey(goal_cursor.node.dependencies,model.rule.id));
             init=String[])
         isnothing(program_cursor) || append!(plan_reads,program_cursor.program.sources)
         prediction = predict_public(rec,item;plan_reads)
+        if !isnothing(spatial_choice)
+            reads = unique([rec.before_ref;spatial_choice.reads])
+            spatial_version = "spatial-" * content_hash(JSON.json(spatial_choice))
+            if isnothing(prediction)
+                prediction = (before_ref=rec.before_ref,payload=Dict{String,Any}(
+                    "model_version"=>spatial_version,
+                    "binding"=>[], "action"=>item.action,"guard_truth"=>"unknown",
+                    "query_scope"=>String[],"predicted_values"=>Dict{String,Any}(),
+                    "event_reads"=>reads,"enumeration_complete"=>false,
+                    "assumptions"=>[item.reason]))
+            else
+                prediction.payload["event_reads"] = unique([prediction.payload["event_reads"];reads])
+            end
+            prediction.payload["spatial_experiment"] = spatial_choice
+            prediction.payload["spatial_model_version"] = spatial_version
+            if !isnothing(get(spatial_choice,:expected,nothing))
+                prediction.payload["predicted_values"]["visual_signal"] = spatial_choice.expected
+                prediction.payload["query_scope"] = sort!(collect(keys(prediction.payload["predicted_values"])))
+            end
+        end
         id = command_id(rec.next_sequence)
         plan = composing || !isnothing(program_cursor) || isnothing(config.planning) || isnothing(item.follow) ? nothing :
             propose_condition_plan(item,id)
@@ -632,6 +701,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 "protocol_points"=>6 in obs.available_actions ? 4096 : 0,
                 "attempted"=>sum(key[1] == 6 for key in keys(attempts);init=0)))
         isnothing(policy_note) || (decision_record["policy"] = policy_note)
+        isnothing(spatial_choice) || (decision_record["spatial_experiment"] = spatial_choice)
         isnothing(item.experiment) || (decision_record["experiment"] = item.experiment)
         isnothing(experiment) || (decision_record["experiment_obligation"] = experiment)
         isnothing(program_note) || (decision_record["program"] = program_note)
@@ -664,6 +734,33 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         isnothing(experiment) || record_experiment_service!(experiments,rec.store,experiment,event)
         sample = motion_example(entry,resulting;history)
         effects = observed_effects(entry,resulting)
+        spatial_feedback = nothing
+        visual_feedback = nothing
+        if !isnothing(spatial)
+            if obs.levels_completed == resulting.observation.levels_completed
+                spatial_feedback = observe_spatial!(spatial,entry,resulting,effects)
+                observe_visual!(visual,spatial,entry,resulting,spatial_feedback,effects)
+                if !isnothing(visual.field) && !isnothing(get(something(spatial_choice,(;)),:expected,nothing))
+                    actual = visual_value(last(resulting.observation.frames),visual.field)
+                    if isnothing(spatial_feedback) || isnothing(actual)
+                        visual_feedback = (actual=actual,verdict="unknown")
+                    else
+                        agreement = spatial_feedback.after == spatial_choice.destination &&
+                            actual == spatial_choice.expected
+                        visual_feedback = (actual=actual,point=spatial_feedback.after,
+                            verdict=agreement ? "supported" : "refuted")
+                    end
+                end
+            else
+                begin_visual_level!(visual,spatial)
+                previous = spatial
+                spatial = SpatialLearning()
+                if !isnothing(locate_role(last(resulting.observation.frames),previous.role))
+                    spatial.role = copy(previous.role)
+                    spatial.role_reads = unique([previous.role_reads;effects.event_id])
+                end
+            end
+        end
         assessment = isnothing(item.chosen) ? (actual=Dict(),assessments=Dict()) :
             measure_joint((model=item.chosen.model.rule,fragments=item.chosen.fragments),sample.after)
         if !isnothing(program_cursor)
@@ -691,7 +788,17 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             end
             goal_pending = feedback.next
         end
-        old = frozen ? Dict() : archive_trial!(knowledge,PublicTrial(sample,item.action),limits)
+        new_scene = !isnothing(spatial) && obs.levels_completed != resulting.observation.levels_completed
+        old = if frozen
+            Dict()
+        elseif new_scene
+            previous = Dict(m.rule.id=>m for m in knowledge.active)
+            empty!(knowledge.trials)
+            knowledge.active = [fit_joint_condition(rule,knowledge.trials,limits) for rule in knowledge.rules]
+            previous
+        else
+            archive_trial!(knowledge,PublicTrial(sample,item.action),limits)
+        end
         frozen || persist_relation_certificates!(rec.store,knowledge.active)
         revisions = []
         for model in knowledge.active
@@ -710,7 +817,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 "expected"=>isnothing(item.chosen) ? Dict() : item.chosen.expected,
                 "actual"=>assessment.actual,"assessments"=>assessment.assessments,"revisions"=>revisions,
                 "evidence"=>public_effect_record(effects),"coverage"=>coverage_record(decision,item,effects,assessment),
-                "policy"=>policy_note,"program"=>program_note))
+                "policy"=>policy_note,"program"=>program_note,"spatial_feedback"=>spatial_feedback,
+                "visual_feedback"=>visual_feedback))
         attempts[action_key(item.action)] = get(attempts,action_key(item.action),0) + 1
         push!(history,item.action["id"])
         frozen || push!(pairs,(entry,resulting))
@@ -730,6 +838,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             end
         end
     end
+    if !isnothing(spatial) && !rec.frozen && !isnothing(rec.card_id)
+        close_scorecard!(rec)
+    end
     final = finalize_learning!(knowledge,config,rec.store,pairs,repo_root;frozen,inflight)
     append!(publications,final.publications)
     after_version = frozen ? frozen_knowledge_digest(knowledge) : nothing
@@ -741,6 +852,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             error("Frozen evaluation changed the publication")
     end
     outcome = (; actions=count, publications, state=rec.observation.state, models=length(knowledge.active),
+        levels_completed=rec.observation.levels_completed, win_levels=rec.observation.win_levels,
         frozen_before=frozen_version, frozen_after=after_version, consumed_definition_depth=consumed_depth,
         pending_learning_events=final.pending)
     composing || return outcome

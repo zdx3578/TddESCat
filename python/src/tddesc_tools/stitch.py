@@ -147,6 +147,7 @@ def run_worker(
         properties.extend(
             ["-p", f"BindsTo={solver_unit}", "-p", f"After={solver_unit}"]
         )
+    launcher = Path(__file__).with_name("worker_launch.sh")
     command = [
         controller,
         "--user",
@@ -160,8 +161,9 @@ def run_worker(
         "--",
         *sandbox(
             [
-                "/usr/bin/time",
-                "-v",
+                "/bin/sh",
+                str(launcher),
+                str(output),
                 str(binary),
                 "--manifest",
                 str(manifest_file),
@@ -169,7 +171,7 @@ def run_worker(
                 str(output),
                 *(["--test-fault", test_fault] if test_fault is not None else []),
             ],
-            read=(binary, job),
+            read=(binary, job, launcher),
             write=(output,),
             offline=True,
         ),
@@ -188,7 +190,27 @@ def run_worker(
                     if observed or worker.poll() is not None:
                         break
                     sleep(0.02)
-                exit_code = worker.wait()
+                exit_record = output / "worker-exit.txt"
+                while worker.poll() is None and not exit_record.is_file():
+                    sleep(0.02)
+                if exit_record.is_file():
+                    # The launcher writes this only after waiting on the actual
+                    # child. The systemd reporting client can remain blocked after
+                    # the child exits, even though its output is already durable.
+                    exit_code = int(exit_record.read_text(encoding="ascii").strip())
+                    try:
+                        worker.wait(timeout=0.3)
+                    except subprocess.TimeoutExpired:
+                        subprocess.run(
+                            ["systemctl", "--user", "stop", "--no-block", unit],
+                            check=False,
+                            env=environment,
+                            timeout=5,
+                        )
+                        worker.terminate()
+                        worker.wait(timeout=5)
+                else:
+                    exit_code = worker.wait()
             finally:
                 if worker.poll() is None:
                     subprocess.run(

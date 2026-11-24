@@ -55,7 +55,7 @@ function capture(config, public_dir; supervised=false, collect_only=false)
                         knowledge,frozen)
                 end
             end
-            rec.frozen || close_scorecard!(rec)
+            rec.frozen || isnothing(rec.card_id) || close_scorecard!(rec)
         end
         events = recover_run(store)
         sequence = if !frozen && !isnothing(config.learning) && get(config.learning,"sequences",false)

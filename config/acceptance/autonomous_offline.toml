@@ -1,0 +1,6 @@
+schema_version = 1
+kind = "autonomous_offline"
+output_name = "autonomous-offline-win"
+agent_config = "../autonomous_public.toml"
+environment_config = "../bench_server.toml"
+offline_bundle = "../../../arc3wm/offline_bundle/arc_agi3_public25_bundle"
