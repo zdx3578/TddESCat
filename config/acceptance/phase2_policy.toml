@@ -26,3 +26,9 @@ id = "resource_composition"
 config = "resource_composition.toml"
 required = true
 depends_on = ["movement_composition"]
+
+[[tasks]]
+id = "camera_composition"
+config = "camera_composition.toml"
+required = true
+depends_on = ["resource_composition"]

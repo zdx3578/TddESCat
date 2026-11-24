@@ -1,0 +1,6 @@
+schema_version = 1
+kind = "camera_composition"
+output_name = "camera-composition"
+timeout_seconds = 720
+environment_config = "../bench_server.toml"
+judge_config = "../bench_scenarios.toml"

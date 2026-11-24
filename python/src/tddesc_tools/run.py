@@ -33,6 +33,7 @@ KIND_IDS = {
     "planning_composition": ("guard_then_joint_push", "plan_withdrawal"),
     "movement_composition": ("C01",),
     "resource_composition": ("C02",),
+    "camera_composition": ("C03",),
 }
 MODULES = {
     "protocol": "tests.protocol.test_faults",
@@ -52,6 +53,7 @@ MODULES = {
     "planning_composition": "tests.bench.check_core_learning",
     "movement_composition": "tests.bench.check_composition",
     "resource_composition": "tests.bench.check_composition",
+    "camera_composition": "tests.bench.check_camera_composition",
 }
 
 
@@ -192,6 +194,7 @@ def run_task(root, config_path, task, run_dir, runtime):
         "planning_composition",
         "movement_composition",
         "resource_composition",
+        "camera_composition",
     )
     isolated = official_local or kind == "arc_offline"
     environment = (

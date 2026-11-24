@@ -21,7 +21,11 @@ def transition(scene: Scene, state: State, action: Command) -> State:
                 else state.previous_positions
             )
         return replace(
-            state, positions=positions, flagged=True, previous_positions=None
+            state,
+            positions=positions,
+            flagged=mode != "undo-with-token"
+            or (state.previous_positions is not None and state.resource == 0),
+            previous_positions=None,
         )
     if action == 5 and mode in ("latched", "flash", "flash-closed"):
         return replace(state, flagged=mode != "flash-closed")
@@ -60,7 +64,7 @@ def rigid_transition(scene, state, action):
         and scene.selection_color is not None
     ):
         _, sx, sy = action
-        left, top, width, height, zoom, px, py = screen_geometry(scene)
+        left, top, width, height, zoom, px, py = screen_geometry(scene, state)
         if not (px <= sx < px + width * zoom and py <= sy < py + height * zoom):
             return state
         target = (left + (sx - px) // zoom, top + (sy - py) // zoom)
@@ -182,10 +186,13 @@ def logical_colors(scene, state, *, signal=False):
 
 def screen_geometry(scene, state=None):
     left, top, width, height = scene.viewport
-    if state is not None and scene.dynamics == "tracking":
-        x = state.positions[0][0]
-        if x > 18:
-            left = min(x - 18, scene.logical_size[0] - width)
+    origin = scene.tracking_origin
+    if origin is None and scene.dynamics == "tracking":
+        origin = 18
+    if state is not None and origin is not None:
+        left = min(
+            max(0, state.positions[0][0] - origin), scene.logical_size[0] - width
+        )
     scale = 64 // max(width, height)
     return (
         left,
@@ -236,11 +243,14 @@ def available_actions(scene, state):
 def goal_reached(scene, state):
     if scene.goal is None:
         return False
-    x, y = state.positions[0]
+    role = scene.goal_role
+    if scene.goal_with_signal and (not state.flagged or state.selected != role):
+        return False
+    x, y = state.positions[role]
     target_x, target_y = scene.goal
     return any(
-        abs(x + dx - target_x) + abs(y + dy - target_y) == 1
-        for dx, dy, _ in scene.bodies[0]
+        0 < abs(x + dx - target_x) + abs(y + dy - target_y) <= scene.goal_distance
+        for dx, dy, _ in scene.bodies[role]
     )
 
 
@@ -264,7 +274,7 @@ def concrete_actions(scene, state):
     actions = [action for action in available_actions(scene, state) if action != 6]
     if scene.selection_color is None:
         return actions
-    left, top, _, _, zoom, px, py = screen_geometry(scene)
+    left, top, _, _, zoom, px, py = screen_geometry(scene, state)
     points = {(0, 0), (32, 32)}
     for x, y in state.positions:
         sx, sy = px + (x - left) * zoom, py + (y - top) * zoom

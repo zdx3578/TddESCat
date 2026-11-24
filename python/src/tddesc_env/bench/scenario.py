@@ -63,6 +63,10 @@ class Scene:
     dynamics: str = "static"
     signal: Cell | None = None
     goal: Point | None = None
+    goal_role: int = 0
+    goal_distance: int = 1
+    goal_with_signal: bool = False
+    tracking_origin: int | None = None
 
     @property
     def start_state(self):

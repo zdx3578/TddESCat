@@ -142,9 +142,12 @@ class ShapeGame(ARCBaseGame):
         self._update_camera()
 
     def _update_camera(self):
-        if self.scene.dynamics == "tracking":
+        origin = self.scene.tracking_origin
+        if origin is None and self.scene.dynamics == "tracking":
+            origin = 18
+        if origin is not None:
             maximum = self.scene.logical_size[0] - self.scene.viewport[2]
-            self.camera.x = min(maximum, max(0, self.positions[0][0] - 18))
+            self.camera.x = min(maximum, max(0, self.positions[0][0] - origin))
 
     def step(self):
         scene = self.scene
@@ -167,13 +170,16 @@ class ShapeGame(ARCBaseGame):
         if self.action.id == GameAction.RESET:
             self.restore(scene.start_state)
         elif action == 7:
+            had_history = self.previous_positions is not None
             if self.previous_positions is not None:
                 if mode == "undo-first":
                     self.positions[0] = self.previous_positions[0]
                 else:
                     self.positions = list(self.previous_positions)
             self.previous_positions = None
-            self.flagged = True
+            self.flagged = mode != "undo-with-token" or (
+                had_history and self.resource == 0
+            )
         elif action == 5 and mode == "decoy-switch":
             self.flagged = not self.flagged
         elif self.action.id == GameAction.ACTION5 and self.scene.switch:
@@ -206,11 +212,19 @@ class ShapeGame(ARCBaseGame):
                 self.positions[1] = min(x + 1, self.scene.logical_size[0] - 1), y
         self._update_camera()
         self._render()
-        if action != 0 and scene.goal is not None:
+        if (
+            action != 0
+            and scene.goal is not None
+            and (
+                not scene.goal_with_signal
+                or (self.flagged and self.selected == scene.goal_role)
+            )
+        ):
             x, y = scene.goal
+            role = scene.goal_role
             if any(
-                abs(u - x) + abs(v - y) == 1
-                for u, v in self._footprint(0, *self.positions[0])
+                0 < abs(u - x) + abs(v - y) <= scene.goal_distance
+                for u, v in self._footprint(role, *self.positions[role])
             ):
                 self.next_level()
         self.complete_action()

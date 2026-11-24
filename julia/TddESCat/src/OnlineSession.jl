@@ -222,7 +222,7 @@ function ranked_public_actions(knowledge, observation, history, attempts, limit;
             push!(reasons,selected.reason)
             rejected |= selected.truth == disproven
             selected.reason == "resource_precondition" && push!(blocked_parents,model.rule.id)
-            if composing && any(effect->effect.family == :count,model.rule.effects) &&
+            if composing && any(effect->effect.family == :count && only(effect.values) < 0,model.rule.effects) &&
                 selected.reason in ("resource_precondition","incomplete_effect_binding")
                 binding = resource_binding(model.rule,selected.fragments)
                 isnothing(binding) || push!(blocked_resources,binding)
@@ -254,7 +254,10 @@ function ranked_public_actions(knowledge, observation, history, attempts, limit;
                 if evaluated.conflict
                     agreed = false
                     reason = "competing_frame_projections"
-                elseif !isnothing(evaluated.choice)
+                elseif isnothing(evaluated.choice)
+                    agreed = false
+                    reason = "unproved_frame_projection"
+                else
                     chosen,projection = evaluated.choice,evaluated.frame
                 end
             else
@@ -383,7 +386,7 @@ function online_learn!(knowledge, config, store, pairs, repo_root)
     end
     work = TOML.parsefile(joinpath(repo_root,"config","stitch.toml"))
     work["seed"] = learning["seed"]
-    work["rounds"] = min(work["rounds"],available)
+    work["rounds"] = min(get(learning,"max_rounds",work["rounds"]),available)
     work["budget"]["wall_ms"] = min(work["budget"]["wall_ms"],learning["max_learning_seconds"]*1000)
     config_text = sprint(io->TOML.print(io,work;sorted=true))
     freeze_stitch_job(joinpath(job,"input"),basename(job),evidence,base,corpus.signature,
@@ -435,6 +438,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         decision_started = time_ns()
         obs = rec.observation
         obs.state in ("WIN","GAME_OVER") && break
+        if composing && isnothing(goal)
+            goal = bind_observed_goal(last(obs.frames),config.planning["goal"])
+        end
         !isnothing(goal) && goal_truth(goal,last(obs.frames)) == proven && break
         decision = ranked_public_actions(knowledge,obs,history,attempts,caps.max_match_witnesses;composing)
         isempty(decision.ranked) && break
@@ -445,6 +451,11 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             selection = choose_observed_goal_step(rec,knowledge,goal,config.planning,history,decision,
                 goal_pending,limits,caps.max_match_witnesses)
             item = isnothing(selection.item) ? item : selection.item
+            if isnothing(goal)
+                request = argmin(candidate->(get(attempts,action_key(candidate.action),0),
+                    action_key(candidate.action)),decision.ranked)
+                item = merge(request,(reason="observe_goal_binding",))
+            end
             goal_cursor = selection.cursor
             policy_note = selection.note
             goal_pending = nothing
@@ -508,6 +519,10 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         if !isnothing(goal_cursor)
             feedback = confirm_goal_step(goal_cursor,resulting.observation,assessment)
             policy_note["feedback"] = feedback.status
+            if !isnothing(feedback.invalidation)
+                feedback.invalidation["event_ref"] = sample.event_id
+                policy_note["invalidation"] = feedback.invalidation
+            end
             goal_pending = feedback.next
         end
         old = frozen ? Dict() : archive_trial!(knowledge,PublicTrial(sample,item.action),limits)

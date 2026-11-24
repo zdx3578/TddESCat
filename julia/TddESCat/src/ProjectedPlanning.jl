@@ -4,6 +4,8 @@ struct ObservedGoal
     role_color::UInt8
     role_geometry::Vector{Pixel}
     marker::MotionShape
+    cue_color::Union{Nothing,UInt8}
+    pixel_distance::Int
 end
 
 function bind_observed_goal(frame, config)
@@ -11,7 +13,11 @@ function bind_observed_goal(frame, config)
     roles = filter(s -> first(s)[3] == config["role_color"], groups)
     marks = filter(s -> first(s)[3] == config["marker_color"], groups)
     length(roles) == length(marks) == 1 || return nothing
-    return ObservedGoal(first(only(roles))[3], geometry(only(roles)), only(marks))
+    cue = get(config,"cue_color",nothing)
+    marker = only(marks)
+    distance = 1 + get(config,"marker_gap",0)*support_grid(marker).unit
+    return ObservedGoal(first(only(roles))[3],geometry(only(roles)),marker,
+        isnothing(cue) ? nothing : UInt8(cue),distance)
 end
 
 function goal_truth(goal::ObservedGoal, frame)
@@ -19,9 +25,10 @@ function goal_truth(goal::ObservedGoal, frame)
     goal.marker in groups || return unknown_truth
     roles = filter(s -> first(s)[3] == goal.role_color && geometry(s) == goal.role_geometry, groups)
     length(roles) == 1 || return unknown_truth
-    support = effect_points(only(roles))
-    adjacent = any((x+dx,y+dy) in support for (x,y,_) in goal.marker for (dx,dy) in FOUR_NEIGHBORS)
-    return adjacent ? proven : disproven
+    !isnothing(goal.cue_color) && goal.cue_color ∉ frame && return disproven
+    nearby = any(abs(x-u)+abs(y-v) <= goal.pixel_distance
+        for (x,y,_) in goal.marker for (u,v,_) in only(roles))
+    return nearby ? proven : disproven
 end
 
 function project_frame(choice, before)
@@ -95,6 +102,37 @@ struct GoalCursor
     node::PolicyNode{Int,ConcreteAction,String}
     root_command::String
     state::Int
+    index::DependencyIndex
+    definitions::Vector{String}
+end
+
+plan_ref(kind, root, state) = "$kind:$root:$state"
+
+function index_observed_policy(projection, node, root)
+    index = DependencyIndex()
+    state = 1
+    prior = nothing
+    while !isnothing(node.action)
+        binding = plan_ref("binding",root,state)
+        relation = plan_ref("relation",root,state)
+        condition = plan_ref("condition",root,state)
+        if !isnothing(prior)
+            track_reads!(index,binding,[prior])
+        end
+        edge = projection.edges[(state,node.action)]
+        track_reads!(index,relation,[binding,edge.rule])
+        track_reads!(index,condition,[relation])
+        prior = track_reads!(index,plan_ref("pending_action",root,state),[condition])
+        state = edge.target
+        node = only(values(node.branches))
+    end
+    return index
+end
+
+function goal_invalidation!(cursor::GoalCursor, kind)
+    origin = plan_ref(kind,cursor.root_command,cursor.state)
+    return Dict("origin"=>origin,"invalidated"=>invalidate_dependents!(cursor.index,[origin]),
+        "retained_definitions"=>cursor.definitions)
 end
 
 frame_key(frame) = content_hash(vec(frame))
@@ -172,14 +210,21 @@ function search_observed_goal(knowledge, obs, history, goal, limits, match_limit
     remaining = limits.work - projection.work
     remaining > 0 || return (cursor=nothing,projection,status="projection_work_limit",search_work=0)
     solved = solve_policy(projection.model,Set([1]),projection.goals;depth=limits.depth,max_work=remaining)
-    cursor = isnothing(solved.policy) || isnothing(solved.policy.action) ? nothing :
-        GoalCursor(projection,solved.policy,command,1)
+    cursor = nothing
+    if !isnothing(solved.policy) && !isnothing(solved.policy.action)
+        index = index_observed_policy(projection,solved.policy,command)
+        refs = Set(ref for model in knowledge.active for ref in model.rule.references
+            if haskey(solved.policy.dependencies,model.rule.id))
+        cursor = GoalCursor(projection,solved.policy,command,1,index,sort!(collect(refs)))
+    end
     return (; cursor, projection, solved.status, search_work=solved.work)
 end
 
 function live_goal_step(cursor::GoalCursor, knowledge, decision, obs)
     p = cursor.projection
     state = p.states[cursor.state]
+    plan_ref("pending_action",cursor.root_command,cursor.state) ∉ cursor.index.invalid ||
+        return (reason="invalidated_suffix",item=nothing)
     state.frame == last(obs.frames) && state.actions == sort(obs.available_actions) &&
         obs.levels_completed == p.level ||
         return (reason="public_observation_changed",item=nothing)
@@ -204,15 +249,21 @@ function confirm_goal_step(cursor::GoalCursor, obs, assessment)
     after = p.states[edge.target]
     if isempty(assessment.assessments) || !all(==("supported"),values(assessment.assessments)) ||
         last(obs.frames) != after.frame
-        return (status="withdrawn_after_feedback",next=nothing)
+        binding_conflict = any(startswith(query,"selection-") && result == "refuted"
+            for (query,result) in assessment.assessments)
+        return (status="withdrawn_after_feedback",next=nothing,
+            invalidation=goal_invalidation!(cursor,binding_conflict ? "binding" : "relation"))
     end
     if length(obs.frames) != 1 || obs.state == "GAME_OVER" || (obs.state == "WIN" && edge.target ∉ p.goals) ||
         (obs.state != "WIN" && (sort(obs.available_actions) != after.actions || obs.levels_completed != p.level))
-        return (status="withdrawn_public_transition",next=nothing)
+        return (status="withdrawn_public_transition",next=nothing,
+            invalidation=goal_invalidation!(cursor,"condition"))
     end
     live = continue_policy(p.model,cursor.node,frame_key(after.frame),Set([edge.target]))
-    live.status == "ready" || return (status=live.status,next=nothing)
-    return (status="supported",next=GoalCursor(p,live.policy,cursor.root_command,edge.target))
+    live.status == "ready" || return (status=live.status,next=nothing,
+        invalidation=live.status == "achieved" ? nothing : goal_invalidation!(cursor,"condition"))
+    return (status="supported",invalidation=nothing,
+        next=GoalCursor(p,live.policy,cursor.root_command,edge.target,cursor.index,cursor.definitions))
 end
 
 function projected_trace(cursor::GoalCursor)
@@ -240,7 +291,9 @@ function public_projection_record(result)
         "edges"=>[Dict("before"=>index,"action"=>action,"after"=>edge.target,
             "rule"=>edge.rule,"expected"=>edge.expected)
             for ((index,action),edge) in sort!(collect(p.edges);by=first)],
-        "steps"=>isnothing(result.cursor) ? [] : projected_trace(result.cursor))
+        "steps"=>isnothing(result.cursor) ? [] : projected_trace(result.cursor),
+        "readers"=>isnothing(result.cursor) ? Dict() :
+            Dict(key=>sort!(collect(value)) for (key,value) in result.cursor.index.readers))
 end
 
 function choose_observed_goal_step(rec, knowledge, goal, goal_config, history, decision, pending, limits, match_limit)
@@ -255,6 +308,7 @@ function choose_observed_goal_step(rec, knowledge, goal, goal_config, history, d
             return (item=merge(checked.item,(reason="revalidated_goal_policy",)),cursor=pending,note)
         end
         note["withdrawn_suffix"] = checked.reason
+        note["invalidation"] = goal_invalidation!(pending,"condition")
     end
     budget = (depth=min(goal_config["depth"],rec.limit-rec.sent_count),work=goal_config["max_work"],
         states=get(goal_config,"max_states",96),history=max(1,maximum(get(limits,:history_lengths,(1,)))))
@@ -262,7 +316,9 @@ function choose_observed_goal_step(rec, knowledge, goal, goal_config, history, d
     result = search_observed_goal(knowledge,rec.observation,history,goal,budget,match_limit,id)
     proof = public_projection_record(result)
     proof["before_ref"] = rec.before_ref
-    proof["goal"] = Dict("relation"=>"adjacent","role_color"=>goal.role_color,"marker"=>goal.marker)
+    proof["goal"] = Dict("relation"=>"distance_to_marker","role_color"=>goal.role_color,
+        "marker"=>goal.marker,"maximum_pixel_distance"=>goal.pixel_distance)
+    isnothing(goal.cue_color) || (proof["goal"]["cue_color"] = goal.cue_color)
     proof["budget"] = budget
     atomic_json(store_path(rec.store,"plans",id * ".json"),proof)
     note["status"] = result.status

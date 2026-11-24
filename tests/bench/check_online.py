@@ -26,6 +26,7 @@ def online_config(
     collection=False,
     planning=False,
     goal=None,
+    max_rounds=None,
     adapt=False,
 ):
     prior_setting = "" if prior is None else f'prior_evidence = "{prior}"'
@@ -39,7 +40,9 @@ learning_memory_bytes = 536870912"""
     frozen = "false" if prior is None or adapt else "true"
     plan = "\n[planning]\ndepth = 2\nmax_work = 20\n" if planning else ""
     if goal is not None:
-        role_color, marker_color = goal
+        role_color, marker_color, *cues = goal
+        cue = f"cue_color = {cues[0]}\n" if cues else ""
+        gap = f"marker_gap = {cues[1]}\n" if len(cues) > 1 else ""
         plan = f"""\n[planning]
 depth = 5
 max_work = 384
@@ -47,7 +50,10 @@ max_states = 64
 [planning.goal]
 role_color = {role_color}
 marker_color = {marker_color}
+{cue}
+{gap}
 """
+    rounds = "" if max_rounds is None else f"max_rounds = {max_rounds}"
     path.write_text(
         f'''schema_version = 1
 run_name = "supervised"
@@ -69,6 +75,7 @@ max_ast_nodes = 96
 max_input_slots = 12
 max_learning_seconds = 20
 max_new_definitions = 4
+{rounds}
 {prior_setting}
 [search]
 context_radii = [1, 2, 4]

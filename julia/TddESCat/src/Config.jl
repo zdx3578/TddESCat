@@ -81,10 +81,14 @@ function load_run_config(path::AbstractString)
     if !isnothing(learning)
         limits = ("batch_confirmed_events", "max_programs", "max_ast_nodes",
             "max_input_slots", "max_learning_seconds", "max_new_definitions")
-        require_keys(learning, ("engine", "language", "seed", limits...); optional=("prior_evidence",), at="learning")
+        require_keys(learning, ("engine", "language", "seed", limits...); optional=("prior_evidence","max_rounds"), at="learning")
         learning["language"] == "typed-op-children-db-v1" || throw(ArgumentError("Unsupported language"))
         strict_integer(learning["seed"]) && learning["seed"] == 1729 || throw(ArgumentError("Unsupported best-first seed"))
         check_values(learning, limits, positive_integer, "learning")
+        if haskey(learning,"max_rounds")
+            rounds = learning["max_rounds"]
+            positive_integer(rounds) && rounds <= 8 || throw(ArgumentError("Invalid learning.max_rounds"))
+        end
         learning["engine"] = config_path(dir, learning["engine"])
         haskey(learning,"prior_evidence") && (learning["prior_evidence"] = config_path(dir, learning["prior_evidence"]))
     end
@@ -111,11 +115,13 @@ function load_run_config(path::AbstractString)
         check_values(planning,("depth","max_work"),positive_integer,"planning")
         planning["depth"] <= 16 || throw(ArgumentError("Planning depth exceeds the finite profile"))
         if haskey(planning,"goal")
-            require_keys(planning["goal"],("role_color","marker_color");at="planning.goal")
-            check_values(planning["goal"],("role_color","marker_color"),
-                n -> strict_integer(n) && 0 <= n <= 15,"planning.goal")
-            goal = planning["goal"]
-            goal["role_color"] != goal["marker_color"] || throw(ArgumentError("Goal colors coincide"))
+            goal = require_keys(planning["goal"],("role_color","marker_color");
+                optional=("cue_color","marker_gap"),at="planning.goal")
+            colors = [key for key in keys(goal) if key != "marker_gap"]
+            check_values(goal,colors,n -> strict_integer(n) && 0 <= n <= 15,"planning.goal")
+            allunique(goal[key] for key in colors) || throw(ArgumentError("Goal colors coincide"))
+            gap = get(goal,"marker_gap",0)
+            strict_integer(gap) && 0 <= gap <= 3 || throw(ArgumentError("Invalid planning.goal.marker_gap"))
         end
         if haskey(planning,"max_states")
             limit = planning["max_states"]

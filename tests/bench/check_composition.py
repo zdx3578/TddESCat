@@ -75,14 +75,17 @@ def switch_circuit(table):
     return training, (scene, narrow, unknown), goal
 
 
-def collect_training(root, runtime, url, run, sessions):
+def collect_training(root, runtime, url, run, sessions, *, interventions=None):
     plans = []
     for index, (scene, budget) in enumerate(sessions, 1):
         episode = run / f"episode-{index:02d}"
         episode.mkdir(parents=True)
         config = episode / "agent.toml"
         online_config(config, root, url, scene, budget=budget, collection=True)
-        plans.append({"config": str(config), "public": str(episode)})
+        request = {"config": str(config), "public": str(episode)}
+        if interventions is not None:
+            request["actions"] = interventions[scene.public_id]
+        plans.append(request)
     train_list = run / "public-inputs.json"
     write_json(train_list, plans)
     result = solver_process(
