@@ -4,14 +4,13 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, File},
-    io::{Read, Write},
+    io::{self, BufWriter, Read, Write},
     path::{Component, Path},
 };
 
-pub const PROTOCOL: &str = "tddescat.learn.v1";
+pub const PROTOCOL: &str = "tddescat.learn.v2";
 pub const BUILD_SHA: &str = env!("TDDESC_BUILD_SHA256");
 pub const CODEC: &str = "typed-free-slots.v1";
-const MAX_DOCUMENT_BYTES: usize = 4 * 1024 * 1024;
 
 pub fn digest(data: &[u8]) -> String {
     format!("{:x}", Sha256::digest(data))
@@ -50,16 +49,22 @@ pub fn operator(value: &str) -> bool {
         && !value.starts_with("lib_")
 }
 
-pub fn read_limited(path: &Path, limit: usize) -> Result<Vec<u8>> {
-    let file = File::open(path)?;
+fn read_exact_file(path: &Path, expected: Option<usize>) -> Result<Vec<u8>> {
+    let mut file = File::open(path)?;
     let attrs = file.metadata()?;
+    ensure!(attrs.is_file(), "input is not a file: {path:?}");
+    let size = usize::try_from(attrs.len())?;
     ensure!(
-        attrs.is_file() && attrs.len() <= limit as u64,
-        "file size exceeds limit: {path:?}"
+        expected.is_none_or(|n| n == size),
+        "input length differs: {path:?}"
     );
-    let mut bytes = Vec::with_capacity(attrs.len() as usize);
-    file.take(limit as u64 + 1).read_to_end(&mut bytes)?;
-    ensure!(bytes.len() <= limit, "file changed size: {path:?}");
+    let mut bytes = Vec::new();
+    bytes.try_reserve_exact(size)?;
+    (&mut file).take(attrs.len()).read_to_end(&mut bytes)?;
+    ensure!(
+        bytes.len() == size && file.read(&mut [0])? == 0,
+        "file changed size: {path:?}"
+    );
     Ok(bytes)
 }
 
@@ -86,16 +91,12 @@ impl FileRef {
             "unsafe input path: {}",
             self.path
         );
-        ensure!(
-            self.bytes <= MAX_DOCUMENT_BYTES,
-            "input exceeds worker document limit"
-        );
         let absolute = root.join(relative).canonicalize()?;
         ensure!(
             absolute.starts_with(root),
             "input path escapes frozen work directory"
         );
-        let bytes = read_limited(&absolute, self.bytes)?;
+        let bytes = read_exact_file(&absolute, Some(self.bytes))?;
         ensure!(
             bytes.len() == self.bytes && digest(&bytes) == self.sha256,
             "input content mismatch: {}",
@@ -124,6 +125,7 @@ pub struct Manifest {
     pub rules_file: FileRef,
     pub config_file: FileRef,
     pub program_count: usize,
+    pub input_scope_complete: bool,
     pub slot_context: Vec<SlotSpec>,
     pub engine_pin: EnginePin,
 }
@@ -141,8 +143,21 @@ pub struct EnginePin {
 }
 
 impl Manifest {
+    pub fn scope_refs(&self) -> serde_json::Value {
+        serde_json::json!({
+            "signature": self.signature_file.sha256,
+            "programs": self.programs_file.sha256,
+            "origins": self.origins_file.sha256,
+            "base_library": self.initial_library_file.sha256,
+            "equations": self.rules_file.sha256,
+            "policy": self.config_file.sha256,
+            "binary": self.engine_pin.binary_sha256,
+            "build": self.engine_pin.build_sha256,
+        })
+    }
+
     pub fn load(path: &Path) -> Result<(Self, String)> {
-        let data = read_limited(path, MAX_DOCUMENT_BYTES)?;
+        let data = read_exact_file(path, None)?;
         let job: Manifest = serde_json::from_slice(&data)?;
         ensure!(
             job.protocol_version == PROTOCOL && job.codec_version == CODEC,
@@ -185,63 +200,80 @@ pub struct SlotSpec {
     pub role_constraints: Vec<serde_json::Value>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     schema_version: u32,
     language: String,
     search: String,
-    seed: u64,
-    pub rounds: usize,
-    pub max_steps: usize,
     pub max_arity: usize,
     sym_var_cost: u32,
-    pub budget: Budget,
+    pub search_options: SearchOptions,
+    pub processing: Processing,
+    pub termination: Termination,
+    pub progress: Progress,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Budget {
-    pub wall_ms: u64,
-    pub managed_bytes: usize,
-    pub max_egraph_nodes: usize,
-    pub max_live_states: usize,
-    pub max_relation_nodes: usize,
-    pub max_output_bytes: usize,
-    #[serde(default = "default_apply_chunk_rows")]
-    pub apply_chunk_rows: usize,
-    check_every_work_units: usize,
+pub struct SearchOptions {
+    pub priority: String,
+    pub freeze_rule: String,
+    pub var_order: String,
+    pub lower_bound: String,
+    pub opt_seen: bool,
+    pub opt_dedup_by_match: bool,
+    pub opt_dominance_reuse: bool,
+    pub opt_useless_frozen: bool,
+    pub opt_useless_inline: bool,
+    pub allow_useless_vars: bool,
+    pub no_zero_arity: bool,
+    pub decompose_min_rows: usize,
 }
 
-fn default_apply_chunk_rows() -> usize {
-    128
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Processing {
+    pub apply_chunk_rows: usize,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Termination {
+    learning: String,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Progress {
+    pub accepted_definition_checkpoints: Vec<usize>,
+    pub search_pop_checkpoints: Vec<usize>,
 }
 
 impl Config {
     pub fn load(data: &[u8]) -> Result<Self> {
         let c: Self = toml::from_str(std::str::from_utf8(data)?)?;
         ensure!(
-            c.schema_version == 1
+            c.schema_version == 2
                 && c.language == "typed-op-children-db-v1"
                 && c.search == "best-first"
                 && c.sym_var_cost == 1
-                && c.seed == 1729,
+                && c.termination.learning == "verified_compression_fixed_point",
             "unsupported search or cost profile"
         );
         ensure!(
-            (1..=16).contains(&c.rounds)
-                && (1..=8).contains(&c.max_arity)
-                && (1..=1_000_000).contains(&c.max_steps)
-                && (1..=600_000).contains(&c.budget.wall_ms)
-                && (1..=2_000_000).contains(&c.budget.max_egraph_nodes)
-                && (1..=1_000_000).contains(&c.budget.max_live_states)
-                && (1..=2_000_000).contains(&c.budget.max_relation_nodes)
-                && (1..=MAX_DOCUMENT_BYTES).contains(&c.budget.max_output_bytes)
-                && (1..=1_073_741_824).contains(&c.budget.managed_bytes)
-                && (1..=8192).contains(&c.budget.apply_chunk_rows)
-                && c.budget.check_every_work_units == 128,
-            "unsupported budget range"
+            c.processing.apply_chunk_rows > 0 && c.search_options.decompose_min_rows > 0,
+            "invalid processing granularity"
         );
+        for points in [
+            &c.progress.accepted_definition_checkpoints,
+            &c.progress.search_pop_checkpoints,
+        ] {
+            ensure!(
+                points.first().is_none_or(|n| *n > 0) && points.windows(2).all(|w| w[0] < w[1]),
+                "progress points must be distinct and increasing"
+            );
+        }
         Ok(c)
     }
 }
@@ -308,13 +340,34 @@ struct Checkpoint<'a> {
     search_expansions: usize,
 }
 
-pub fn commit(
+struct HashedWriter {
+    output: BufWriter<File>,
+    hash: Sha256,
+    bytes: usize,
+}
+
+impl Write for HashedWriter {
+    fn write(&mut self, data: &[u8]) -> io::Result<usize> {
+        crate::resources::check();
+        let count = self.output.write(data)?;
+        self.bytes = self.bytes.checked_add(count).expect("output size overflow");
+        self.hash.update(&data[..count]);
+        Ok(count)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.output.flush()
+    }
+}
+
+pub fn commit<T: Serialize>(
     output: &Path,
     round: usize,
     input: &str,
     parent: Option<&str>,
-    bytes: &[u8],
+    result: &T,
     expansions: usize,
+    before_manifest: impl FnOnce(),
 ) -> Result<String> {
     let name = format!("round-{round:06}");
     let temporary = output.join(format!("{name}.tmp"));
@@ -323,13 +376,24 @@ pub fn commit(
         bail!("immutable checkpoint already exists");
     }
     fs::create_dir(&temporary)?;
-    sync_file(&temporary.join("result.json"), bytes)?;
+    let span = crate::resources::phase(crate::resources::Phase::Serialize);
+    let mut writer = HashedWriter {
+        output: BufWriter::new(File::create_new(temporary.join("result.json"))?),
+        hash: Sha256::new(),
+        bytes: 0,
+    };
+    serde_json::to_writer(&mut writer, result)?;
+    writer.flush()?;
+    writer.output.get_ref().sync_all()?;
+    before_manifest();
+    drop(span);
+    let _span = crate::resources::phase(crate::resources::Phase::Commit);
     let checkpoint = serde_json::to_vec(&Checkpoint {
         round_index: round,
         input_sha256: input,
         parent_checkpoint_sha256: parent,
-        result_sha256: digest(bytes),
-        result_bytes: bytes.len(),
+        result_sha256: format!("{:x}", writer.hash.finalize()),
+        result_bytes: writer.bytes,
         search_expansions: expansions,
     })?;
     sync_file(&temporary.join("manifest.json"), &checkpoint)?;
@@ -343,5 +407,13 @@ fn sync_file(path: &Path, data: &[u8]) -> Result<()> {
     let mut file = File::create_new(path)?;
     file.write_all(data)?;
     file.sync_all()?;
+    Ok(())
+}
+
+pub fn atomic_json<T: Serialize>(output: &Path, name: &str, value: &T) -> Result<()> {
+    let temporary = output.join(format!("{name}.tmp"));
+    sync_file(&temporary, &serde_json::to_vec(value)?)?;
+    fs::rename(&temporary, output.join(name))?;
+    File::open(output)?.sync_all()?;
     Ok(())
 }

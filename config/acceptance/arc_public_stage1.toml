@@ -1,7 +1,6 @@
 schema_version = 1
 kind = "arc_offline"
 output_name = "arc-public-stage1"
-timeout_seconds = 1800
 agent_config = "../offline_public.toml"
 environment_config = "../bench_server.toml"
 offline_bundle = "../../../arc3wm/offline_bundle/arc_agi3_public25_bundle"

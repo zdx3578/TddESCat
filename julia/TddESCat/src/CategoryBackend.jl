@@ -59,15 +59,13 @@ function bounded_glue_matches(left, right, interface; distinct=Tuple{String,Stri
     return (; rows, complete=true, work)
 end
 
-function join_effect_roles(count, max_work)
+function join_effect_roles(count)
     count > 0 || throw(ArgumentError("An effect span must be nonempty"))
     graph = Catlab.Graph(1)
     event = 1
     interface = Catlab.Graph(1)
     roles = Tuple{Int,Int}[]
-    work = 0
     for _ in 1:count
-        work == max_work && return (; roles, event, complete=false, work)
         piece = Catlab.Graph(3)
         Catlab.add_edge!(piece, 1, 2)
         Catlab.add_edge!(piece, 1, 3)
@@ -82,11 +80,10 @@ function join_effect_roles(count, max_work)
         event == new_roles[:V](1) || error("The effect span lost the common event")
         roles = [(to_join[:V](old), to_join[:V](new)) for (old, new) in roles]
         push!(roles, (new_roles[:V](2), new_roles[:V](3)))
-        work += 1
     end
     length(unique([event; [role for pair in roles for role in pair]])) == Catlab.nv(graph) ||
         error("Unexpected role identification in effect span")
-    return (; roles, event, complete=true, work)
+    return (; roles, event)
 end
 
 function check_schema_map(map)

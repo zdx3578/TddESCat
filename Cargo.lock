@@ -640,6 +640,7 @@ dependencies = [
  "clap",
  "egg",
  "egg-stitch",
+ "libc",
  "serde",
  "serde_json",
  "sha2",

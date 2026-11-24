@@ -131,6 +131,15 @@ struct Node<F: LanguageFamily, O: StitchOp> {
 /// to completion. (No `dead_runs` cutoff: the search is systematic, so "no
 /// recent improvement" just means we're grinding through a less promising branch.)
 pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>, args: &crate::Args) -> BestFirstResult<F, O> {
+    best_first_with_progress(data, args, |_, _, _| {})
+}
+
+/// Observe heap pops, retained states and queued states without changing search order.
+pub fn best_first_with_progress<F: LanguageFamily, O: StitchOp>(
+    data: crate::shared::SharedData<F, O>,
+    args: &crate::Args,
+    mut observe: impl FnMut(usize, usize, usize),
+) -> BestFirstResult<F, O> {
     let (shared, cost_cache, original_size) = setup_search(data, args);
     println!("{} {}", "original size of egraph:".dimmed(), original_size.to_string().bold());
 
@@ -175,9 +184,17 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     }
 
     let mut best: Option<(usize, usize, CostSelection)> = None; // (cost, node_id, selection)
+    // The typed bridge accepts only strict improvements over this round's baseline.
+    // Its cost bound is useful before a first winner exists, including the final round.
+    let initial_bound = if shared.egraph.analysis.typed.is_some() && shared.follow.is_none() {
+        original_size
+    } else {
+        usize::MAX
+    };
     let mut best_found_at: Option<usize> = None;
     let mut best_history: Vec<BestHistoryEntry> = Vec::new();
     let mut num_expansions: usize = 0;
+    let mut heap_pops: usize = 0;
     let mut cost_calls: usize = 0;
     let mut cost_time: Duration = Duration::ZERO;
     let mut dominance_hits: usize = 0;
@@ -192,7 +209,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
     'search: loop {
         if let Some(typed) = &shared.egraph.analysis.typed {
             typed.check();
-            if nodes.len() >= typed.max_live_states && !heap.is_empty() {
+            if typed.max_live_states.is_some_and(|limit| nodes.len() >= limit) && !heap.is_empty() {
                 std::panic::panic_any(crate::lang::SearchBudgetStop("state_limit"));
             }
         }
@@ -212,11 +229,12 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
         let Some(Reverse((_prio, node_id))) = heap.pop() else {
             break;
         };
+        heap_pops = heap_pops.checked_add(1).expect("heap pop count overflow");
+        observe(heap_pops, nodes.len(), heap.len() + 1);
 
         // Re-check the cached lower bound: best may have improved since this node was pushed.
         if let Some(lb) = nodes[node_id].lower_bound
-            && let Some((c, _, _)) = best.as_ref()
-            && lower_bound_pruner.recheck_cached(lb, *c)
+            && lower_bound_pruner.recheck_cached(lb, best.as_ref().map_or(initial_bound, |(c, _, _)| *c))
         {
             continue;
         }
@@ -247,7 +265,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             SuccessorEnum::Dominant { child, .. } => vec![child],
             SuccessorEnum::All { actions, rank } => {
                 if let Some(typed) = &shared.egraph.analysis.typed
-                    && nodes.len().saturating_add(actions.len()) > typed.max_live_states
+                    && typed.max_live_states.is_some_and(|limit| nodes.len().saturating_add(actions.len()) > limit)
                 {
                     std::panic::panic_any(crate::lang::SearchBudgetStop("state_limit"));
                 }
@@ -292,7 +310,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             // Optimistic lower bound on this child's descendants — every match
             // collapses to one node. Skip the full cost call (and the descent)
             // when the bound already exceeds the current best.
-            let cost_to_beat = best.as_ref().map_or(usize::MAX, |(c, _, _)| *c);
+            let cost_to_beat = best.as_ref().map_or(initial_bound, |(c, _, _)| *c);
             let child_lower_bound = match lower_bound_pruner.try_prune(&shared.egraph, shared.root, &cost_cache, &mut scratch, &child_state, cost_to_beat) {
                 PruneResult::Pruned => continue,
                 PruneResult::Keep(lb) => Some(lb),

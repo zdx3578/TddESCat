@@ -2,6 +2,7 @@
 
 import json
 import sys
+from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 from time import monotonic
@@ -95,6 +96,43 @@ def captured_rows(episode, folder):
     ]
 
 
+def consumed_joint_definition(episode, publication, references, case):
+    bundle = load(episode, f"publication/{publication}.json")
+    library = {entry["stable_id"]: entry["definition"] for entry in bundle["library"]}
+
+    def operators(term, args=()):
+        if term["kind"] == "Param":
+            return args[term["index"]] if args else Counter()
+        if term["kind"] != "Call":
+            return Counter()
+        name = term["operator"]
+        children = [operators(child, args) for child in term["args"]]
+        if name in library:
+            return operators(library[name]["body"], children)
+        return Counter({name: 1}) + sum(children, Counter())
+
+    required = (
+        Counter({"pair": 1, "link": 2})
+        if case == "M04"
+        else Counter({"pair": 1, "link": 1, "count_shift": 1})
+    )
+    actual = []
+    for identifier in references:
+        definition = library[identifier]
+        body = operators(definition["body"])
+        if required <= body:
+            actual.append(
+                {
+                    "definition": identifier,
+                    "arity": definition["arity"],
+                    "depth": bundle["definition_depths"][identifier],
+                    "operators": dict(body),
+                }
+            )
+    assert actual, f"{case} used no definition covering the required joint structure"
+    return actual
+
+
 def verify_core(
     root, episode, scene, case, *, planning=False, joint_push=False, direction=1
 ):
@@ -125,6 +163,13 @@ def verify_core(
             reference.render(scene, actual)
         ]
     first = predicted[0]
+    joint_definitions = (
+        consumed_joint_definition(
+            episode, result["prior_publication"], first["definition_refs"], case
+        )
+        if case in ("M04", "M06")
+        else []
+    )
     if case == "M04":
         assert len(first["expected"]) == 2
         assert all(key.startswith("translation-") for key in first["expected"])
@@ -169,6 +214,8 @@ def verify_core(
         "publication": result["prior_publication"],
         "checked_predictions": len(predicted),
         "first": first["expected"],
+        "joint_definitions": joint_definitions,
+        "consumed_definition_depth": summary["consumed_definition_depth"],
         "probed_actions": [row["action"] for row in checkpoints],
         "wrong_confidence": sum(
             "refuted" in row["assessments"].values() for row in checkpoints
@@ -266,7 +313,7 @@ def main(config, run):
             training,
             str(train_list),
             script=sampler,
-            extra_read=(root / "scripts/run.jl",),
+            extra_read=(root / "scripts/run.jl", root / "config/stitch.toml"),
         )
         (run / "grade/training.log").write_text(results.stdout + results.stderr)
         assert results.returncode == 0, results.stderr

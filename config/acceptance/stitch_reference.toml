@@ -1,0 +1,4 @@
+schema_version = 1
+kind = "stitch_reference"
+output_name = "stitch-reference"
+experiment_config = "../experiments/estitch_open_v1.toml"

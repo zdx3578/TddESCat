@@ -1,6 +1,6 @@
 use std::{
     alloc::{GlobalAlloc, Layout, System},
-    sync::atomic::{AtomicU64, AtomicUsize, Ordering::Relaxed},
+    sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering::Relaxed},
     time::Instant,
 };
 
@@ -12,11 +12,14 @@ static ALLOCATOR: MeasuredAllocator = MeasuredAllocator;
 static LIVE: AtomicUsize = AtomicUsize::new(0);
 static PEAK: AtomicUsize = AtomicUsize::new(0);
 static ALLOCATED: AtomicU64 = AtomicU64::new(0);
-static LIMIT: AtomicUsize = AtomicUsize::new(usize::MAX);
+static CANCELLED: AtomicBool = AtomicBool::new(false);
+static PEAK_ROWS: AtomicUsize = AtomicUsize::new(0);
 static CURRENT: AtomicUsize = AtomicUsize::new(0);
-const NAMES: [&str; 8] = [
+static LAST: AtomicUsize = AtomicUsize::new(0);
+const NAMES: [&str; 9] = [
     "load",
     "graph",
+    "saturation",
     "search",
     "apply",
     "extract",
@@ -75,6 +78,7 @@ unsafe impl GlobalAlloc for MeasuredAllocator {
 pub enum Phase {
     Load,
     Graph,
+    Saturation,
     Search,
     Apply,
     Extract,
@@ -91,6 +95,7 @@ pub struct Span {
 
 pub fn phase(which: Phase) -> Span {
     let phase = which as usize;
+    LAST.store(phase, Relaxed);
     let previous = CURRENT.swap(phase + 1, Relaxed);
     STAGE_PEAK[phase].fetch_max(live(), Relaxed);
     Span {
@@ -107,8 +112,24 @@ impl Drop for Span {
     }
 }
 
-pub fn limit(bytes: usize) {
-    LIMIT.store(bytes, Relaxed);
+extern "C" fn cancel(_: libc::c_int) {
+    CANCELLED.store(true, Relaxed);
+}
+
+pub fn install_cancel_handler() {
+    // The handler only updates an atomic flag. Durable writes happen in normal code.
+    unsafe {
+        libc::signal(libc::SIGTERM, cancel as libc::sighandler_t);
+        libc::signal(libc::SIGINT, cancel as libc::sighandler_t);
+    }
+}
+
+pub fn last_phase() -> &'static str {
+    NAMES[LAST.load(Relaxed)]
+}
+
+pub fn observe_rows(rows: usize) {
+    PEAK_ROWS.fetch_max(rows, Relaxed);
 }
 
 pub fn live() -> usize {
@@ -116,8 +137,8 @@ pub fn live() -> usize {
 }
 
 pub fn check() {
-    if live() > LIMIT.load(Relaxed) {
-        std::panic::panic_any(egg_stitch::lang::SearchBudgetStop("managed_bytes"));
+    if CANCELLED.load(Relaxed) {
+        std::panic::panic_any(egg_stitch::lang::SearchBudgetStop("cancelled"));
     }
 }
 
@@ -137,8 +158,9 @@ pub fn report(exit_code: i32, stop_reason: Option<&str>, committed: usize) -> se
         .collect();
     serde_json::json!({
         "exit_code": exit_code, "stop_reason": stop_reason,
-        "complete_rounds": committed, "managed_byte_limit": LIMIT.load(Relaxed),
+        "complete_rounds": committed, "managed_byte_limit": serde_json::Value::Null,
         "peak_live_bytes": PEAK.load(Relaxed), "total_added_bytes": ALLOCATED.load(Relaxed),
+        "peak_observed_relation_rows": PEAK_ROWS.load(Relaxed),
         "phases": stages,
     })
 }

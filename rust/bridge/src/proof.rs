@@ -4,12 +4,8 @@ use crate::{
     protocol::OriginSites,
 };
 use anyhow::{Context, Result, ensure};
-use egg_stitch::lang::SearchBudgetStop;
 use serde::Serialize;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    time::Instant,
-};
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Serialize)]
 struct Argument {
@@ -45,21 +41,12 @@ pub struct CallSite {
     proof_ref: String,
 }
 
-struct Work {
-    deadline: Instant,
-    remaining: usize,
-}
+struct Work(usize);
 
 impl Work {
     fn use_node(&mut self) {
         crate::resources::check();
-        if Instant::now() >= self.deadline {
-            std::panic::panic_any(SearchBudgetStop("deadline"));
-        }
-        if self.remaining == 0 {
-            std::panic::panic_any(SearchBudgetStop("proof_limit"));
-        }
-        self.remaining -= 1;
+        self.0 = self.0.checked_add(1).expect("proof visits overflow");
     }
 }
 
@@ -141,9 +128,6 @@ impl Marked {
         work: &mut Work,
     ) -> Self {
         work.use_node();
-        if site.len() > 96 {
-            std::panic::panic_any(SearchBudgetStop("proof_limit"));
-        }
         self.children = self
             .children
             .into_iter()
@@ -278,13 +262,8 @@ pub fn verify(
     target: &[Term],
     origins: &[OriginSites],
     library: &Library,
-    limit: usize,
-    deadline: Instant,
-) -> Result<(Vec<Proof>, Vec<CallSite>)> {
-    let mut work = Work {
-        deadline,
-        remaining: limit,
-    };
+) -> Result<(Vec<Proof>, Vec<CallSite>, usize)> {
+    let mut work = Work(0);
     let mut proofs = Vec::new();
     let mut calls = Vec::new();
     for (index, ((left, right), sites)) in original.iter().zip(target).zip(origins).enumerate() {
@@ -345,5 +324,5 @@ pub fn verify(
         });
         ensure!(!missing_witness, "selected call has no occurrence witness");
     }
-    Ok((proofs, calls))
+    Ok((proofs, calls, work.0))
 }

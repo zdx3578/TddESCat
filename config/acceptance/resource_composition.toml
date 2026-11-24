@@ -1,6 +1,5 @@
 schema_version = 1
 kind = "resource_composition"
 output_name = "resource-composition"
-timeout_seconds = 660
 environment_config = "../bench_server.toml"
 judge_config = "../bench_scenarios.toml"

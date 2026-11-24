@@ -49,7 +49,5 @@ end
     @test length(corpus.slots) == 4
     @test all(length(row["catlab_role_vertices"]) == 2 for row in values(corpus.bindings))
     @test all(startswith(program, "(pair") for program in corpus.programs)
-    exhausted = TC.relation_corpus([first(captured["push-open"])]; max_input_slots=2)
-    @test !exhausted.complete
-    @test !isempty(only(exhausted.observed).residual)
+    @test isempty(first(corpus.observed).residual)
 end

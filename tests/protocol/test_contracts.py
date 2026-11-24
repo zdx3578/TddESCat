@@ -10,12 +10,12 @@ from tddesc_tools.contracts import Contracts
 class SchemaContracts(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.contracts = Contracts(Path("protocol/v1"))
+        cls.contracts = Contracts(Path("protocol"))
 
     def test_job_files_and_exact_versions(self):
         descriptor = {"path": "input/signature.json", "sha256": "1" * 64, "bytes": 128}
         job = {
-            "protocol_version": "tddescat.learn.v1",
+            "protocol_version": "tddescat.learn.v2",
             "codec_version": "typed-free-slots.v1",
             "job_id": "job-1",
             "evidence_snapshot_id": "snapshot-1",
@@ -32,6 +32,7 @@ class SchemaContracts(unittest.TestCase):
                 )
             },
             "program_count": 0,
+            "input_scope_complete": True,
             "slot_context": [],
             "engine_pin": {
                 "upstream_commit": "2" * 40,
@@ -40,10 +41,14 @@ class SchemaContracts(unittest.TestCase):
                 "rust_version": "1.90.0",
                 "build_sha256": "5" * 64,
                 "binary_sha256": "6" * 64,
-                "protocol_version": "tddescat.learn.v1",
+                "protocol_version": "tddescat.learn.v2",
             },
         }
         self.contracts.validate("learn_job", job)
+        with self.assertRaises(ValidationError):
+            self.contracts.validate(
+                "learn_job", {**job, "protocol_version": "tddescat.learn.v1"}
+            )
         for path in ("/tmp/config", "../config", "a/../config", "a/./config", "a//b"):
             with self.subTest(path=path), self.assertRaises(ValidationError):
                 modified = copy.deepcopy(job)

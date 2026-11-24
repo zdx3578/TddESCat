@@ -94,7 +94,7 @@ def collect_training(root, runtime, url, run, sessions, *, interventions=None):
         run,
         str(train_list),
         script=root / "tests/julia/collect_public.jl",
-        extra_read=(root / "scripts/run.jl",),
+        extra_read=(root / "scripts/run.jl", root / "config/stitch.toml"),
     )
     (run / "collect.log").write_text(result.stdout + result.stderr)
     assert result.returncode == 0, result.stderr

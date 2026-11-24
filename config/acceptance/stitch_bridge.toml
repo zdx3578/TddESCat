@@ -1,4 +1,4 @@
 schema_version = 1
 kind = "stitch"
 output_name = "stitch_bridge"
-timeout_seconds = 300
+experiment_config = "../experiments/estitch_open_v1.toml"

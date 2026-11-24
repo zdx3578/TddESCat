@@ -247,7 +247,6 @@ def main(config, run):
                 scene,
                 budget=2 if scene.variant == "unseen-target" else 6,
                 batch=8,
-                max_rounds=4,
                 prior=roster,
                 goal=goal,
                 adapt=index == 1,

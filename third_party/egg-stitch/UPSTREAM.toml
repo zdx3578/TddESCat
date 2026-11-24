@@ -10,4 +10,6 @@ local_changes = [
     "Bound the typed frontier and stream exact factor assignments during final application.",
     "Share immutable factor rows, check machine-width counts, and expose exact arbitrary-precision substitution counts.",
     "Rebuild the first-order e-graph between bounded application chunks and measure managed allocation through the bridge.",
+    "Make typed search limits optional and report heap pops and retained/queued states for the open learning policy.",
+    "Use the exact round baseline as the typed search cost-to-beat before a first winner exists.",
 ]

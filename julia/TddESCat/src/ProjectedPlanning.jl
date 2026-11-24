@@ -138,7 +138,7 @@ end
 frame_key(frame) = content_hash(vec(frame))
 state_key(state) = (frame_key(state.frame), Tuple(state.actions), Tuple(state.history))
 
-function project_goal_model(knowledge, obs, history, goal, limits, match_limit)
+function project_goal_model(knowledge, obs, history, goal, limits, max_action_coordinates)
     initial = ProjectedState(last(obs.frames),sort(obs.available_actions),copy(history))
     states = [initial]
     ids = Dict{Tuple{String,Tuple,Tuple},Int}(state_key(initial)=>1)
@@ -159,7 +159,7 @@ function project_goal_model(knowledge, obs, history, goal, limits, match_limit)
         elseif depths[index] < limits.depth && work < limits.work
             view = (frames=[state.frame],available_actions=state.actions)
             decision = ranked_public_actions(knowledge,view,state.history,Dict{ConcreteAction,Int}(),
-                match_limit; composing=true)
+                max_action_coordinates; composing=true)
             enabled[index] = Set(action_key(item.action) for item in decision.ranked)
             for item in decision.ranked
                 action = action_key(item.action)
@@ -204,9 +204,9 @@ function project_goal_model(knowledge, obs, history, goal, limits, match_limit)
     return GoalProjection(model,states,edges,goals,gaps,work,obs.levels_completed)
 end
 
-function search_observed_goal(knowledge, obs, history, goal, limits, match_limit, command)
+function search_observed_goal(knowledge, obs, history, goal, limits, max_action_coordinates, command)
     projection = project_goal_model(knowledge,obs,last(history,min(limits.history,length(history))),
-        goal,limits,match_limit)
+        goal,limits,max_action_coordinates)
     remaining = limits.work - projection.work
     remaining > 0 || return (cursor=nothing,projection,status="projection_work_limit",search_work=0)
     solved = solve_policy(projection.model,Set([1]),projection.goals;depth=limits.depth,max_work=remaining)
@@ -296,7 +296,7 @@ function public_projection_record(result)
             Dict(key=>sort!(collect(value)) for (key,value) in result.cursor.index.readers))
 end
 
-function choose_observed_goal_step(rec, knowledge, goal, goal_config, history, decision, pending, limits, match_limit)
+function choose_observed_goal_step(rec, knowledge, goal, goal_config, history, decision, pending, limits, max_action_coordinates)
     note = Dict{String,Any}("operation"=>"search_observed_goal","status"=>"unbound_observed_goal")
     isnothing(goal) && return (item=nothing,cursor=nothing,note)
     if !isnothing(pending)
@@ -313,7 +313,7 @@ function choose_observed_goal_step(rec, knowledge, goal, goal_config, history, d
     budget = (depth=min(goal_config["depth"],rec.limit-rec.sent_count),work=goal_config["max_work"],
         states=get(goal_config,"max_states",96),history=max(1,maximum(get(limits,:history_lengths,(1,)))))
     id = command_id(rec.next_sequence)
-    result = search_observed_goal(knowledge,rec.observation,history,goal,budget,match_limit,id)
+    result = search_observed_goal(knowledge,rec.observation,history,goal,budget,max_action_coordinates,id)
     proof = public_projection_record(result)
     proof["before_ref"] = rec.before_ref
     proof["goal"] = Dict("relation"=>"distance_to_marker","role_color"=>goal.role_color,

@@ -121,7 +121,6 @@ impl Registry {
             .collect::<Vec<_>>();
         ensure!(
             !sorts.is_empty()
-                && sorts.len() <= 128
                 && sorts.iter().all(|s| identifier(s))
                 && sorts.iter().collect::<BTreeSet<_>>().len() == sorts.len(),
             "invalid sorts"
@@ -136,14 +135,12 @@ impl Registry {
                 operator(&o.symbol)
                     && o.purity == "pure"
                     && o.binder_children.is_empty()
-                    && o.read_rule.iter().copied().eq(0..o.inputs.len())
-                    && o.inputs.len() <= 8,
+                    && o.read_rule.iter().copied().eq(0..o.inputs.len()),
                 "unsupported operator {}",
                 o.symbol
             );
             r.register(&o.symbol, &o.inputs, &o.output)?;
         }
-        ensure!(slots.len() <= 128, "too many free slots");
         for (i, slot) in slots.iter().enumerate() {
             ensure!(
                 slot.index == i
@@ -170,8 +167,8 @@ impl Registry {
         self.sorts
             .iter()
             .position(|n| n == name)
-            .map(|i| i as u32)
             .with_context(|| format!("unknown sort {name}"))
+            .and_then(|i| Ok(u32::try_from(i)?))
     }
 
     pub fn register(&mut self, name: &str, inputs: &[String], output: &str) -> Result<()> {
@@ -243,8 +240,7 @@ struct Syntax<'a> {
     children: Vec<Syntax<'a>>,
 }
 
-fn parse(text: &str) -> Result<Syntax<'_>> {
-    ensure!(text.len() <= 65_536, "expression text limit");
+fn tokenize(text: &str) -> Result<Vec<&str>> {
     let mut tokens = Vec::new();
     let mut start = None;
     for (i, x) in text.bytes().enumerate() {
@@ -266,36 +262,49 @@ fn parse(text: &str) -> Result<Syntax<'_>> {
     if let Some(s) = start {
         tokens.push(&text[s..]);
     }
-    ensure!(tokens.len() <= 4096, "expression token limit");
-    fn parse_node<'a>(
-        tokens: &mut std::iter::Peekable<impl Iterator<Item = &'a str>>,
-        depth: usize,
-    ) -> Result<Syntax<'a>> {
-        ensure!(depth <= 64, "expression depth limit");
-        let token = tokens.next().context("missing expression")?;
-        if token != "(" {
-            ensure!(token != ")", "unexpected closing parenthesis");
-            return Ok(Syntax {
+    Ok(tokens)
+}
+
+fn parse_tokens<'a>(tokens: &[&'a str]) -> Result<Syntax<'a>> {
+    let mut tokens = tokens.iter().copied();
+    let mut stack: Vec<Syntax<'a>> = Vec::new();
+    let mut root = None;
+    while let Some(token) = tokens.next() {
+        ensure!(root.is_none(), "trailing expression");
+        let node = match token {
+            "(" => {
+                let head = tokens.next().context("missing operator")?;
+                ensure!(!matches!(head, "(" | ")"), "invalid operator");
+                stack.push(Syntax {
+                    head,
+                    children: Vec::new(),
+                });
+                // Each call consumes two JSON container levels in a wire term.
+                // Reserve room for the enclosing library/proof records under serde_json's 128.
+                ensure!(
+                    2 * stack.len() + 8 < 128,
+                    "wire JSON body depth is unsupported"
+                );
+                continue;
+            }
+            ")" => stack.pop().context("unexpected closing parenthesis")?,
+            _ => Syntax {
                 head: token,
                 children: Vec::new(),
-            });
+            },
+        };
+        if let Some(parent) = stack.last_mut() {
+            parent.children.push(node);
+        } else {
+            root = Some(node);
         }
-        let head = tokens.next().context("missing operator")?;
-        ensure!(!matches!(head, "(" | ")"), "invalid operator");
-        let mut children = Vec::new();
-        while let Some(&token) = tokens.peek() {
-            if token == ")" {
-                tokens.next();
-                return Ok(Syntax { head, children });
-            }
-            children.push(parse_node(tokens, depth + 1)?);
-        }
-        bail!("unclosed expression")
     }
-    let mut tokens = tokens.into_iter().peekable();
-    let node = parse_node(&mut tokens, 0)?;
-    ensure!(tokens.next().is_none(), "trailing expression");
-    Ok(node)
+    ensure!(stack.is_empty(), "unclosed expression");
+    root.context("missing expression")
+}
+
+fn parse(text: &str) -> Result<Syntax<'_>> {
+    parse_tokens(&tokenize(text)?)
 }
 
 fn index(name: &str) -> Result<usize> {
@@ -367,15 +376,17 @@ pub fn program(text: &str, r: &Registry) -> Result<Term> {
 pub fn definitions(pattern: &str, lambda: &str, r: &Registry, sorts: &[String]) -> Result<Term> {
     let count = sorts.len();
     let body = decode(parse(pattern)?, r, Mode::Pattern)?;
-    let mut closed = parse(lambda)?;
+    let tokens = tokenize(lambda)?;
+    let mut closed = tokens.as_slice();
     for _ in 0..count {
-        ensure!(
-            closed.head == "lam" && closed.children.len() == 1,
-            "missing outer binder"
-        );
-        closed = closed.children.pop().unwrap();
+        closed = closed
+            .strip_prefix(&["(", "lam"])
+            .context("missing outer binder")?;
+        closed = closed
+            .strip_suffix(&[")"])
+            .context("unclosed outer binder")?;
     }
-    let decoded = decode(closed, r, Mode::Lambda(count))?;
+    let decoded = decode(parse_tokens(closed)?, r, Mode::Lambda(count))?;
     ensure!(
         body == decoded,
         "pattern and closed lambda parameter order differ"
@@ -441,7 +452,7 @@ impl Definition {
             .context("invalid temporary function name")?;
         index(name)?;
         ensure!(
-            self.arity == self.parameter_sorts.len() && self.arity <= 8,
+            self.arity == self.parameter_sorts.len(),
             "invalid definition arity"
         );
         let body = definitions(
@@ -482,6 +493,99 @@ impl Definition {
             matches!(body, Term::Call { .. } | Term::Const { .. }),
             "trivial variable-only definition"
         );
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn balanced(parts: &[String]) -> String {
+        if parts.len() == 1 {
+            return parts[0].clone();
+        }
+        let middle = parts.len() / 2;
+        format!(
+            "(combine {} {})",
+            balanced(&parts[..middle]),
+            balanced(&parts[middle..])
+        )
+    }
+
+    #[test]
+    fn wide_first_order_interfaces() -> Result<()> {
+        for width in [0, 1, 8, 9, 19, 64, 65, 1000] {
+            let slots = (0..width)
+                .map(|index| SlotSpec {
+                    index,
+                    sort: "Atom".into(),
+                    time_role: "timeless".into(),
+                    role_constraints: vec![],
+                })
+                .collect::<Vec<_>>();
+            let mut registry = Registry::new(
+                serde_json::from_str(
+                    r#"{
+                    "schema_version":1,"signature_id":"codec","sorts":[{"id":"Atom"}],
+                    "operators":[
+                        {"symbol":"a","inputs":[],"output":"Atom","purity":"pure","read_rule":[],"binder_children":[]},
+                        {"symbol":"wrap","inputs":["Atom"],"output":"Atom","purity":"pure","read_rule":[0],"binder_children":[]},
+                        {"symbol":"combine","inputs":["Atom","Atom"],"output":"Atom","purity":"pure","read_rule":[0,1],"binder_children":[]}
+                    ]
+                }"#,
+                )?,
+                &slots,
+            )?;
+            let sorts = vec!["Atom".to_owned(); width];
+            let pattern = if width == 0 {
+                "a".into()
+            } else if width == 1 {
+                "(wrap ?#0)".into()
+            } else {
+                balanced(&(0..width).map(|i| format!("?#{i}")).collect::<Vec<_>>())
+            };
+            let bound = if width == 0 {
+                "a".into()
+            } else if width == 1 {
+                "(wrap $0)".into()
+            } else {
+                balanced(
+                    &(0..width)
+                        .rev()
+                        .map(|i| format!("${i}"))
+                        .collect::<Vec<_>>(),
+                )
+            };
+            let lambda = format!("{}{bound}{}", "(lam ".repeat(width), ")".repeat(width));
+            let body = definitions(&pattern, &lambda, &registry, &sorts)?;
+            let d = Definition {
+                temporary_name: "fn_0".into(),
+                arity: width,
+                parameter_sorts: sorts.clone(),
+                result_sort: "Atom".into(),
+                parameter_reads: (0..width).collect(),
+                body_cost: body.cost().to_string(),
+                body,
+                pattern_text: pattern.clone(),
+                closed_lambda_text: lambda.clone(),
+                dependencies: vec![],
+            };
+            d.check(&registry)?;
+            let wire: Definition = serde_json::from_slice(&serde_json::to_vec(&d)?)?;
+            wire.check(&registry)?;
+            registry.register("fn_0", &sorts, "Atom")?;
+            let call = Term::call(
+                "fn_0",
+                (0..width).map(|index| Term::Slot { index }).collect(),
+            );
+            assert_eq!(program(&call.show("?#"), &registry)?, call);
+            assert!(definitions(&pattern, &format!("(lam {lambda})"), &registry, &sorts).is_err());
+            if width > 0 {
+                let invalid = lambda.replacen(&format!("${}", width - 1), &format!("${width}"), 1);
+                assert!(definitions(&pattern, &invalid, &registry, &sorts).is_err());
+            }
+        }
         Ok(())
     }
 }

@@ -37,6 +37,19 @@ function config_path(root, value)
     return normpath(joinpath(root, value))
 end
 
+function stitch_policy(text)
+    policy = require_keys(TOML.parse(text), ("schema_version", "language", "search", "max_arity",
+        "sym_var_cost", "search_options", "processing", "termination", "progress"); at="stitch")
+    policy["schema_version"] === 2 && policy["language"] == "typed-op-children-db-v1" &&
+        policy["search"] == "best-first" && policy["sym_var_cost"] === 1 &&
+        strict_integer(policy["max_arity"]) && 0 <= policy["max_arity"] ||
+        throw(ArgumentError("Unsupported E-Stitch policy"))
+    termination = require_keys(policy["termination"], ("learning",); at="stitch.termination")
+    termination["learning"] == "verified_compression_fixed_point" ||
+        throw(ArgumentError("Unsupported learning termination"))
+    return policy
+end
+
 function load_run_config(path::AbstractString)
     path = abspath(path)
     data = require_keys(TOML.parsefile(path), ("schema_version", "run_name", "run_root",
@@ -72,24 +85,19 @@ function load_run_config(path::AbstractString)
     get(exec, "frozen_evaluation", false) isa Bool || throw(ArgumentError("Invalid execution.frozen_evaluation"))
     isolation in ("cooperative", "cgroup_v2") || throw(ArgumentError("Invalid memory_enforcement"))
     for field in ("solver_memory_bytes", "learning_memory_bytes")
-        if isolation == "cgroup_v2" || haskey(exec, field)
+        if haskey(exec, field)
             positive_integer(get(exec, field, nothing)) || throw(ArgumentError("Invalid execution.$field"))
         end
     end
 
     learning = get(data, "learning", nothing)
     if !isnothing(learning)
-        limits = ("batch_confirmed_events", "max_programs", "max_ast_nodes",
-            "max_input_slots", "max_learning_seconds", "max_new_definitions")
-        require_keys(learning, ("engine", "language", "seed", limits...); optional=("prior_evidence","max_rounds"), at="learning")
-        learning["language"] == "typed-op-children-db-v1" || throw(ArgumentError("Unsupported language"))
-        strict_integer(learning["seed"]) && learning["seed"] == 1729 || throw(ArgumentError("Unsupported best-first seed"))
-        check_values(learning, limits, positive_integer, "learning")
-        if haskey(learning,"max_rounds")
-            rounds = learning["max_rounds"]
-            positive_integer(rounds) && rounds <= 8 || throw(ArgumentError("Invalid learning.max_rounds"))
-        end
+        require_keys(learning, ("engine", "policy_file", "batch_confirmed_events");
+            optional=("prior_evidence",), at="learning")
+        check_values(learning, ("batch_confirmed_events",), positive_integer, "learning")
         learning["engine"] = config_path(dir, learning["engine"])
+        learning["policy_file"] = config_path(dir, learning["policy_file"])
+        stitch_policy(read(learning["policy_file"], String))
         haskey(learning,"prior_evidence") && (learning["prior_evidence"] = config_path(dir, learning["prior_evidence"]))
     end
     if get(exec,"frozen_evaluation",false)
@@ -98,7 +106,7 @@ function load_run_config(path::AbstractString)
 
     search = get(data, "search", nothing)
     if !isnothing(search)
-        limits = ("max_guard_atoms", "max_parameter_term_nodes", "max_guard_candidates", "max_match_witnesses")
+        limits = ("max_guard_atoms", "max_parameter_term_nodes", "max_guard_candidates", "max_action_coordinates")
         require_keys(search, ("context_radii", "allow_full_frame_context", "history_lengths", limits...); at="search")
         check_values(search, limits, positive_integer, "search")
         check_values(search, ("allow_full_frame_context",), x -> x isa Bool, "search")

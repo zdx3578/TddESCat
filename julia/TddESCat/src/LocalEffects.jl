@@ -18,6 +18,7 @@ struct PublicEffects
     alternatives::Vector{String}
     public_delta::Dict{String,Any}
     complete::Bool
+    candidate_roles::Int
 end
 
 effect_points(shape) = Set((x, y) for (x,y,_) in shape)
@@ -106,7 +107,7 @@ function possible_scene_transform(effects)
     return false
 end
 
-function observed_effects(previous, current; max_support_pixels=192, max_effects=8, max_roles=128)
+function observed_effects(previous, current; max_support_pixels=192)
     sample = motion_example(previous, current)
     action = current.observation.action
     frame_before = length(previous.observation.frames) - 1
@@ -117,15 +118,12 @@ function observed_effects(previous, current; max_support_pixels=192, max_effects
     public_delta = observed_public_delta(previous,current)
     if size(before) != size(after)
         return PublicEffects(sample.event_id, sample.before_id, action, frame_before, frame_after,
-            effects, Pixel[], ["different_frame_domains"], public_delta, false)
+            effects, Pixel[], ["different_frame_domains"], public_delta, false, 0)
     end
     changed = Set((pixel.x, pixel.y) for pixel in frame_difference(before, after))
     before_groups = filter(shape -> length(shape) <= max_support_pixels, color_components(before).groups)
     after_groups = filter(shape -> length(shape) <= max_support_pixels, color_components(after).groups)
-    if length(before_groups) + length(after_groups) > max_roles
-        return PublicEffects(sample.event_id, sample.before_id, action, frame_before, frame_after,
-            effects, sort!(collect(changed)), ["role_enumeration_budget"], public_delta, false)
-    end
+    candidate_roles = length(before_groups) + length(after_groups)
     B, A = group_by_shape(before_groups), group_by_shape(after_groups)
     static_support = Set(Tuple(shape) for shape in intersect(before_groups, after_groups))
     for key in sort!(collect(intersect(keys(B), keys(A))))
@@ -145,7 +143,11 @@ function observed_effects(previous, current; max_support_pixels=192, max_effects
         end
     end
     seen_outline = Set{Pixel}()
-    for first in before_groups, second in after_groups
+    by_anchor = Dict{Pixel,Vector{MotionShape}}()
+    for shape in after_groups
+        push!(get!(Vector{MotionShape}, by_anchor, anchor(shape)), shape)
+    end
+    for first in before_groups, second in get(by_anchor, anchor(first), MotionShape[])
         length(first) == length(second) && anchor(first) == anchor(second) &&
             first[1][3] != second[1][3] && effect_points(first) == effect_points(second) || continue
         push!(effects, local_effect(:pigment, first, second, Int[first[1][3],second[1][3]], changed))
@@ -189,13 +191,10 @@ function observed_effects(previous, current; max_support_pixels=192, max_effects
     if possible_scene_transform(effects)
         push!(alternatives,"shared_scene_transform_or_joint_motion")
     end
-    if length(effects) > max_effects
-        resize!(effects, max_effects)
-        push!(alternatives, "effect_enumeration_budget")
-    end
     covered = Set(pixel for effect in effects for pixel in effect.changed)
     return PublicEffects(sample.event_id, sample.before_id, action, frame_before, frame_after,
-        effects, sort!(collect(setdiff(changed, covered))), unique(alternatives), public_delta, isempty(alternatives))
+        effects, sort!(collect(setdiff(changed, covered))), unique(alternatives), public_delta,
+        isempty(alternatives), candidate_roles)
 end
 
 function effect_record(effect::LocalEffect)
@@ -207,7 +206,8 @@ function public_effect_record(result::PublicEffects)
     return Dict("event_ref"=>result.event_id, "before_ref"=>result.before_id, "action"=>result.action,
         "frames"=>[result.frame_before,result.frame_after], "effects"=>effect_record.(result.effects),
         "residual"=>result.residual, "alternatives"=>result.alternatives,
-        "public_delta"=>result.public_delta,"complete"=>result.complete)
+        "public_delta"=>result.public_delta,"complete"=>result.complete,
+        "candidate_roles"=>result.candidate_roles)
 end
 
 function effect_program(effect, before, after)
@@ -222,50 +222,54 @@ function effect_program(effect, before, after)
     return Call("selection", before, after, Call("coord", ints...))
 end
 
-function relation_corpus(pairs; max_programs=256, max_ast_nodes=96, max_input_slots=12,
-                         max_match_witnesses=10_000)
+function compose_effects(terms, lo=firstindex(terms), hi=lastindex(terms))
+    lo == hi && return terms[lo]
+    middle = (lo + hi) ÷ 2
+    return Call("pair", compose_effects(terms, lo, middle), compose_effects(terms, middle + 1, hi))
+end
+
+function relation_corpus(pairs; previous_signature=nothing)
     programs = String[]
     origins = Dict{String,Any}[]
     bindings = Dict{String,Any}()
-    observed = PublicEffects[]
+    observed = [observed_effects(previous,current) for (previous,current) in pairs]
     compiled = []
-    complete = true
-    max_effects = div(max_input_slots, 2)
-    signature = typed_motion_signature(((v,0) for v in -64:64))
+    dispositions = Dict{String,String}()
+    values = Set(-64:64)
+    for output in observed, effect in output.effects, value in effect.values
+        if effect.family == :count
+            push!(values, value)
+        end
+    end
+    if !isnothing(previous_signature)
+        for op in previous_signature["operators"]
+            op["output"] == "Integer" && isempty(op["inputs"]) || continue
+            push!(values, parse(Int, op["symbol"][2:end]))
+        end
+    end
+    signature = typed_motion_signature(((v,0) for v in values))
     registry, _ = registry_from(signature, [])
     used_slots = 0
-    for (previous,current) in pairs
-        output = observed_effects(previous,current; max_effects, max_roles=min(max_match_witnesses,512))
-        push!(observed, output)
-        complete &= output.complete
-        isempty(output.effects) && continue
-        "shared_scene_transform_or_joint_motion" in output.alternatives && continue
-        if length(programs) == max_programs
-            complete = false
+    for output in observed
+        if isempty(output.effects)
+            dispositions[output.event_id] = isempty(output.alternatives) ? "no_supported_effect" : "unresolved"
             continue
         end
-        joined = join_effect_roles(length(output.effects), max_match_witnesses)
-        if !joined.complete
-            complete = false
+        if "shared_scene_transform_or_joint_motion" in output.alternatives
+            dispositions[output.event_id] = "ambiguous_scene_transform"
             continue
         end
+        joined = join_effect_roles(length(output.effects))
         vertices = [role for pair in joined.roles for role in pair]
         slots_by_role = Dict(v=>index - 1 for (index,v) in enumerate(vertices))
         effect_terms = ConceptTerm[effect_program(effect, Slot(slots_by_role[pre]), Slot(slots_by_role[post]))
             for (effect,(pre,post)) in zip(output.effects, joined.roles)]
-        if any(n -> abs(n) > 64, Iterators.flatten(effect.values for effect in output.effects))
-            complete = false
-            continue
-        end
-        term = reduce((a,b) -> Call("pair", a, b), effect_terms)
+        term = compose_effects(effect_terms)
         rendered = render_term(term)
         syntax = decode_program(rendered,registry)
-        if wire_cost(syntax) > max_ast_nodes
-            complete = false
-            continue
-        end
         index = length(programs)
         push!(programs, rendered)
+        dispositions[output.event_id] = output.complete ? "compiled" : "compiled_with_unresolved_interpretation"
         used_slots = max(used_slots,length(vertices))
         push!(compiled, (output=output, roles=[(slots_by_role[pre],slots_by_role[post]) for (pre,post) in joined.roles]))
         reference = "effects-" * output.event_id
@@ -280,5 +284,6 @@ function relation_corpus(pairs; max_programs=256, max_ast_nodes=96, max_input_sl
     end
     slots = [Dict("index"=>index - 1, "sort"=>isodd(index) ? "RoleBefore" : "RoleAfter",
         "time_role"=>isodd(index) ? "before" : "after", "role_constraints"=>[]) for index in 1:used_slots]
-    return (; signature, slots, programs, origins, bindings, observed, compiled, complete)
+    return (; signature, slots, programs, origins, bindings, observed, compiled, dispositions,
+        complete=all(output -> output.complete, observed))
 end

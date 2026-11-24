@@ -1,19 +1,5 @@
-using Test
-using TddESCat
-import JSON
+include("stitch_fixture.jl")
 
-const ROOT = normpath(joinpath(@__DIR__, "..", ".."))
-const RUN = abspath(ARGS[1])
-const PYTHON = joinpath(ROOT, ".venv", "bin", "python")
-const WORKER = joinpath(ROOT, "target", "release", "tddesc-stitch")
-const CONFIG = joinpath(ROOT, "config", "stitch.toml")
-const TC = TddESCat
-
-isempty(mkpath(RUN) |> readdir) || error("Use a fresh run directory")
-symbol(name, inputs, output="Atom") = Dict(
-    "symbol" => name, "inputs" => inputs, "output" => output, "purity" => "pure",
-    "read_rule" => collect(0:length(inputs)-1), "binder_children" => Int[],
-)
 constant(index) = "c" * lpad(index, 2, '0')
 signature = Dict(
     "schema_version" => 1, "signature_id" => "two-batches", "sorts" => [Dict("id" => "Atom"), Dict("id" => "Other")],
@@ -28,31 +14,7 @@ function batch(first)
     return ["(f (g $(constant(i))) (g $(constant(i+1))))" for i in first:2:first+30]
 end
 
-function frame_origins(signature, programs, library)
-    registry, _ = TC.registry_from(signature, library.entries)
-    records = []
-    for (index, text) in enumerate(programs)
-        TC.walk_wire(TC.decode_program(text, registry)) do _, path
-            push!(records, Dict(
-                "program_index" => index - 1, "expression_path" => path,
-                "occurrence_id" => "occ-" * join([index - 1; path], "."),
-                "event_ref" => "symbolic-$(index - 1)", "interpretation_ref" => "structure-d0",
-                "slot_bindings_ref" => "empty", "support_ref" => "synthetic",
-            ))
-        end
-    end
-    return records
-end
-
-function execute(name, texts, library; config=CONFIG, source_origins=nothing, hard_memory=536870912)
-    job = joinpath(RUN, name * "-input")
-    output = joinpath(RUN, name * "-output")
-    origins = isnothing(source_origins) ? frame_origins(signature, texts, library) : source_origins
-    freeze_stitch_job(job, name, "snapshot-" * name, library, signature, texts, origins, [];
-                      repo_root=ROOT, config_path=config)
-    command = `$PYTHON -m tddesc_tools.stitch --job $job --output $output --binary $WORKER --hard-memory $hard_memory`
-    return (; job, output, code=run(ignorestatus(command)).exitcode)
-end
+execute(name, texts, library; options...) = execute_stitch(signature, name, texts, library; options...)
 
 @testset "Real typed E-Stitch and exact frozen-library reuse" begin
     empty = LibrarySnapshot()
@@ -61,6 +23,7 @@ end
     @test isfile(joinpath(positive.output, "round-000001", "result.json"))
     result = read_stitch_rounds(positive.job, positive.output)
     @test length(result.verified) == 2
+    @test result.summary["fixed_point"]
     learned = result.verified[1]
     @test learned["cost"]["pre_rewrite_input"] == "81"
     @test learned["cost"]["final_total"] == "54"
@@ -128,24 +91,30 @@ end
     @test missing.code == 20 && isempty(filter(n->startswith(n,"round-"),readdir(missing.output)))
     invalid = execute("wrong-sort", ["(f (g other) c03)"], empty)
     @test invalid.code == 20 && isempty(filter(n->startswith(n,"round-"),readdir(invalid.output)))
-    cutoff = joinpath(RUN, "cutoff.toml")
-    write(cutoff, replace(read(CONFIG, String), "max_steps = 20000" => "max_steps = 1"))
-    stopped = execute("bounded", batch(0), empty; config=cutoff)
+    stopped = execute("before-commit", batch(0), empty; fault="before-first-commit")
     @test stopped.code == 22 && isempty(filter(n->startswith(n,"round-"),readdir(stopped.output)))
-    @test TC.read_json(joinpath(stopped.output,"metrics.json"))["stop_reason"] == "step_budget"
+    @test TC.read_json(joinpath(stopped.output,"learning-summary.json"))["termination_reason"] == "cancelled"
     mixed = execute("mixed-sort", [batch(0); "(extra other)"], empty)
     @test mixed.code == 0
     m = first(read_stitch_rounds(mixed.job, mixed.output).verified)
     @test m["cost"]["final_total"] == "56"
     @test learned["definitions"][1]["body_cost"] == "5"
-    saved_limit = joinpath(RUN, "saved-limit.toml")
-    write(saved_limit, replace(read(CONFIG, String), "max_steps = 20000" => "max_steps = 70"))
-    interrupted = execute("after-round", batch(0), empty; config=saved_limit)
+    interrupted = execute("after-round", batch(0), empty; fault="after-first-commit")
     @test interrupted.code == 10
-    mkpath(joinpath(interrupted.output, "round-000002.tmp"))
     prior = only(read_stitch_rounds(interrupted.job, interrupted.output).verified)
     @test prior["cost"]["final_total"] == "54"
     @test TC.read_json(joinpath(interrupted.output,"metrics.json"))["complete_rounds"] == 1
+    stopped_write = execute("during-write", batch(0), empty; fault="during-first-write")
+    @test stopped_write.code == 22
+    @test isfile(joinpath(stopped_write.output,"round-000001.tmp","result.json"))
+    @test isempty(read_stitch_rounds(stopped_write.job, stopped_write.output).verified)
+    @test TC.read_json(joinpath(stopped_write.output,"learning-summary.json"))["interrupted_phase"] == "serialize"
+    damaged = joinpath(RUN, "damaged-checkpoint")
+    cp(interrupted.output, damaged)
+    open(joinpath(damaged, "round-000001", "result.json"), "a") do io
+        write(io, " ")
+    end
+    @test_throws ErrorException read_stitch_rounds(interrupted.job, damaged)
     small_chunks = joinpath(RUN,"small-chunks.toml")
     write(small_chunks, replace(read(CONFIG,String),"apply_chunk_rows = 128"=>"apply_chunk_rows = 1"))
     chunked = execute("chunked",batch(0),empty;config=small_chunks)
@@ -155,14 +124,12 @@ end
         @test new[key] == learned[key]
     end
     measured = TC.read_json(joinpath(chunked.output,"metrics.json"))
-    @test measured["managed_byte_limit"] == 268435456
+    @test isnothing(measured["managed_byte_limit"])
     @test all(key -> measured["phases"][key]["peak_live_bytes"] > 0,
         ["load","graph","search","apply","extract","proof","serialize","commit"])
-    low = joinpath(RUN,"low-memory.toml")
-    write(low, replace(read(CONFIG,String),"managed_bytes = 268435456"=>"managed_bytes = 8192"))
-    memory = execute("managed-stop",batch(0),empty;config=low)
+    memory = execute("resource-stop",batch(0),empty;fault="resource-load")
     @test memory.code == 22
-    @test TC.read_json(joinpath(memory.output,"metrics.json"))["stop_reason"] == "managed_bytes"
+    @test TC.read_json(joinpath(memory.output,"learning-summary.json"))["termination_reason"] == "resource_failure"
     println(JSON.json(Dict("batch_one" => learned["cost"], "batch_two" => old["cost"],
                            "library_definition" => lib, "second_batch_calls" => length(old["calls"]))))
 end

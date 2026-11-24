@@ -4,13 +4,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const FILES: [&str; 7] = [
+const FILES: [&str; 8] = [
     "Cargo.toml",
     "Cargo.lock",
     "rust-toolchain.toml",
     "rust/bridge/Cargo.toml",
     "rust/bridge/build.rs",
     "third_party/egg-stitch/Cargo.toml",
+    "third_party/egg-stitch/UPSTREAM.toml",
     "third_party/egg/Cargo.toml",
 ];
 const TREES: [&str; 3] = [

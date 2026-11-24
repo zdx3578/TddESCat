@@ -1,14 +1,15 @@
-"""Supervise the public solver and its offline, bounded learning jobs."""
+"""Supervise the public solver and its offline learning jobs."""
 
 import argparse
+import fcntl
 import json
-import math
 import os
 import re
 import signal
 import subprocess
 import tempfile
 import tomllib
+from contextlib import contextmanager
 from hashlib import sha256
 from pathlib import Path
 from time import monotonic, sleep
@@ -22,7 +23,6 @@ BUILD_INPUTS = (
     "Cargo.lock",
     "rust-toolchain.toml",
     "third_party/egg-stitch/UPSTREAM.toml",
-    "config/stitch.toml",
 )
 SUPERVISOR_BLOCKED = 3
 
@@ -53,6 +53,11 @@ def atomic_json(path, payload):
 def public_settings(root, config, data):
     environment = data["environment"]
     paths = [config, *(root / name for name in BUILD_INPUTS)]
+    if "learning" in data:
+        policy = (config.parent / data["learning"]["policy_file"]).resolve()
+        if not policy.is_file():
+            raise FileNotFoundError("Configured learning policy is missing")
+        paths.append(policy)
     if (name := data.get("learning", {}).get("prior_evidence")) is not None:
         previous = (config.parent / name).resolve()
         if not previous.is_dir():
@@ -111,7 +116,9 @@ def supervisor_environment():
     }
 
 
-def process_jobs(root, public, binary, worker_sha, hard_memory, serviced):
+def process_jobs(
+    root, public, binary, worker_sha, policy_sha, hard_memory, unit, serviced
+):
     queue = public / "learning"
     for job in sorted(queue.glob("job-*")):
         if not re.fullmatch(r"job-\d{6}", job.name) or job.name in serviced:
@@ -131,10 +138,16 @@ def process_jobs(root, public, binary, worker_sha, hard_memory, serviced):
             if sha256(binary.read_bytes()).hexdigest() != worker_sha:
                 raise RuntimeError("Learning executable changed during the session")
             code = run_worker(
-                root, job / "input", job / "output", binary, hard_memory=hard_memory
+                root,
+                job / "input",
+                job / "output",
+                binary,
+                hard_memory=hard_memory,
+                expected_policy=policy_sha,
+                solver_unit=unit,
             )
-        except (RuntimeError, ValueError, OSError) as exc:
-            failure = type(exc).__name__
+        except Exception as exc:
+            failure = f"{type(exc).__name__}: {exc}"
         atomic_json(
             job / "worker-status.json",
             {
@@ -142,9 +155,18 @@ def process_jobs(root, public, binary, worker_sha, hard_memory, serviced):
                 "failure": failure,
                 "wall_seconds": monotonic() - start,
                 "binary_sha256": worker_sha,
+                "policy_sha256": policy_sha,
                 "hard_memory_bytes": hard_memory,
             },
         )
+
+
+@contextmanager
+def supervisor_liveness(public, state):
+    with (public / "supervisor.lock").open("xb") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        atomic_json(public / "supervision.json", state)
+        yield
 
 
 def supervise(root, config, public, *, expected_paths=None):
@@ -174,11 +196,12 @@ def supervise(root, config, public, *, expected_paths=None):
         raise RuntimeError("The learning solver requires cgroup v2")
     execution = data["execution"]
     solver_memory, hard_memory = (
-        execution["solver_memory_bytes"],
-        execution["learning_memory_bytes"],
+        execution.get("solver_memory_bytes"),
+        execution.get("learning_memory_bytes"),
     )
     if not all(
-        type(value) is int and value > 0 for value in (solver_memory, hard_memory)
+        value is None or (type(value) is int and value > 0)
+        for value in (solver_memory, hard_memory)
     ):
         raise ValueError("Invalid hard memory cap")
     public.mkdir(parents=True, exist_ok=True)
@@ -186,26 +209,20 @@ def supervise(root, config, public, *, expected_paths=None):
         raise ValueError("A supervised session needs a fresh public directory")
     identity = build_identity(root, binary)
     worker_sha = identity["binary_sha256"]
+    policy = (config.parent / data["learning"]["policy_file"]).resolve()
+    policy_sha = sha256(policy.read_bytes()).hexdigest()
     unit = f"tddesc-solver-{uuid4().hex}.scope"
-    max_learning = data["learning"]["max_learning_seconds"]
-    command_limit = execution["max_public_commands"]
-    timeout = math.ceil(
-        (data["environment"]["request_timeout_seconds"] + max_learning + 10)
-        * command_limit
-        + 90
-    )
-    atomic_json(
-        public / "supervision.json",
-        {
-            "state": "RUNNING",
-            "scope": unit,
-            "binary_sha256": worker_sha,
-            "engine_identity": identity,
-            "solver_memory_bytes": solver_memory,
-            "learning_memory_bytes": hard_memory,
-            "config_sha256": sha256(config.read_bytes()).hexdigest(),
-        },
-    )
+    state = {
+        "state": "RUNNING",
+        "scope": unit,
+        "binary_sha256": worker_sha,
+        "engine_identity": identity,
+        "solver_memory_bytes": solver_memory,
+        "learning_memory_bytes": hard_memory,
+        "config_sha256": sha256(config.read_bytes()).hexdigest(),
+        "policy_sha256": policy_sha,
+        "runtime_deadline": None,
+    }
     command = [
         "systemd-run",
         "--user",
@@ -214,12 +231,9 @@ def supervise(root, config, public, *, expected_paths=None):
         "--collect",
         "--unit",
         unit,
-        "-p",
-        f"MemoryMax={solver_memory}",
+        *(["-p", f"MemoryMax={solver_memory}"] if solver_memory is not None else []),
         "-p",
         "MemorySwapMax=0",
-        "-p",
-        f"RuntimeMaxSec={timeout}s",
         "-p",
         "TasksMax=128",
         "--",
@@ -227,6 +241,7 @@ def supervise(root, config, public, *, expected_paths=None):
     ]
     env = supervisor_environment()
     with (
+        supervisor_liveness(public, state),
         (public / "solver.log").open("xb") as log,
         subprocess.Popen(
             command,
@@ -240,7 +255,16 @@ def supervise(root, config, public, *, expected_paths=None):
         handler = signal.signal(signal.SIGTERM, interrupted)
         try:
             while solver.poll() is None:
-                process_jobs(root, public, binary, worker_sha, hard_memory, serviced)
+                process_jobs(
+                    root,
+                    public,
+                    binary,
+                    worker_sha,
+                    policy_sha,
+                    hard_memory,
+                    unit,
+                    serviced,
+                )
                 sleep(0.05)
         finally:
             try:
@@ -254,17 +278,9 @@ def supervise(root, config, public, *, expected_paths=None):
             finally:
                 signal.signal(signal.SIGTERM, handler)
         code = solver.wait()
-    state = {
-        "state": "FINISHED" if code == 0 else "FAILED",
-        "code": code,
-        "scope": unit,
-        "binary_sha256": worker_sha,
-        "engine_identity": identity,
-        "jobs": sorted(serviced),
-        "solver_memory_bytes": solver_memory,
-        "learning_memory_bytes": hard_memory,
-        "config_sha256": sha256(config.read_bytes()).hexdigest(),
-    }
+    state.update(
+        state="FINISHED" if code == 0 else "FAILED", code=code, jobs=sorted(serviced)
+    )
     atomic_json(public / "supervision.json", state)
     return code
 

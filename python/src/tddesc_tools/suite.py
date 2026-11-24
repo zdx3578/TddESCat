@@ -8,6 +8,63 @@ from hashlib import sha256
 
 from .contracts import Contracts
 from .run import read_task, run_task, worktree_digest, write_json
+from .stitch import LEARNING_PROTOCOL, build_identity
+
+
+def learning_source_digest(root):
+    runtime_paths = (
+        "config/acceptance",
+        "config/experiments",
+        "config/offline_public.toml",
+        "config/real_public.toml",
+        "config/toolchains.toml",
+        "julia/TddESCat/src",
+        "julia/TddESCat/Project.toml",
+        "julia/TddESCat/Manifest.toml",
+        "protocol",
+        "python/src",
+        "python/pyproject.toml",
+        "python/uv.lock",
+        "scripts",
+        "tests",
+    )
+    names = subprocess.check_output(
+        [
+            "git",
+            "ls-files",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "-z",
+            "--",
+            *runtime_paths,
+        ],
+        cwd=root,
+    )
+    digest = sha256()
+    for name in sorted(set(names.split(b"\0")) - {b""}):
+        path = root / name.decode()
+        if path.suffix in {".jl", ".py", ".toml", ".json", ".lock"} and path.is_file():
+            digest.update(name + b"\0")
+            digest.update(sha256(path.read_bytes()).digest())
+    return digest.hexdigest()
+
+
+def learning_build_identity(root, runtime):
+    return {
+        "source_sha256": learning_source_digest(root),
+        "worker": build_identity(root, root / "target/release/tddesc-stitch"),
+        "policy_sha256": sha256((root / "config/stitch.toml").read_bytes()).hexdigest(),
+        "protocol_version": LEARNING_PROTOCOL,
+        "toolchains": {
+            name: runtime[name]["version"]
+            for name in ("julia", "python", "rustc", "cargo")
+        },
+        "locks": {
+            name: sha256((root / name).read_bytes()).hexdigest()
+            for name in ("Cargo.lock", "python/uv.lock", "julia/TddESCat/Manifest.toml")
+        },
+    }
 
 
 def parse_suite(path):
@@ -64,7 +121,9 @@ def parse_suite(path):
     return definition, order
 
 
-def verified_prerequisite(contracts, suite_path, previous_path, identifier):
+def verified_prerequisite(
+    contracts, suite_path, previous_path, identifier, active_build
+):
     if previous_path is None or not previous_path.is_file():
         return False
     previous = json.loads(previous_path.read_bytes())
@@ -80,7 +139,9 @@ def verified_prerequisite(contracts, suite_path, previous_path, identifier):
         return False
     provenance = json.loads(provenance_path.read_bytes())
     if (
-        provenance.get("suite_config_sha256")
+        not active_build
+        or provenance.get("learning_build") != active_build
+        or provenance.get("suite_config_sha256")
         != sha256(definition_path.read_bytes()).hexdigest()
     ):
         return False
@@ -114,11 +175,17 @@ def run_suite(root, path, run, runtime, prerequisite=None):
     suite, ordered = parse_suite(path)
     contracts = Contracts(root / "protocol/v1")
     required_previous = suite.get("prerequisite_suite")
+    active_build = (
+        learning_build_identity(root, runtime)
+        if suite["suite_id"] == "phase1" or required_previous == "phase1"
+        else None
+    )
     upstream_pass = required_previous is None or verified_prerequisite(
-        contracts, path, prerequisite, required_previous
+        contracts, path, prerequisite, required_previous, active_build
     )
     origin = {
         "worktree_sha256": worktree_digest(root),
+        "learning_build": active_build,
         "suite_config_sha256": sha256(path.read_bytes()).hexdigest(),
         "prerequisite_sha256": None
         if prerequisite is None or not prerequisite.is_file()
@@ -133,8 +200,12 @@ def run_suite(root, path, run, runtime, prerequisite=None):
             dep for dep in entry["depends_on"] if ledger[dep]["status"] != "PASS"
         ]
         if not upstream_pass or missing:
-            source = required_previous if not upstream_pass else ",".join(missing)
-            result.update(status="BLOCKED", reason=f"requires_pass:{source}")
+            reason = (
+                f"requires_pass_with_matching_build:{required_previous}"
+                if not upstream_pass
+                else "requires_pass:" + ",".join(missing)
+            )
+            result.update(status="BLOCKED", reason=reason)
         else:
             child = run / "tasks" / identifier
             child.mkdir(parents=True)
@@ -170,6 +241,12 @@ def run_suite(root, path, run, runtime, prerequisite=None):
         ledger[identifier] = result
     mandatory = {ledger[x["id"]]["status"] for x in ordered if x["required"]}
     status = next((s for s in ("FAIL", "BLOCKED", "NOT_RUN") if s in mandatory), "PASS")
+    if (
+        active_build is not None
+        and learning_build_identity(root, runtime) != active_build
+    ):
+        origin["integrity_failure"] = "learning_build_changed_during_suite"
+        status = "FAIL"
     report = {
         "schema_version": 1,
         "run_id": run.name,

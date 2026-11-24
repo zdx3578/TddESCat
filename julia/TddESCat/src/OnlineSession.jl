@@ -15,9 +15,10 @@ mutable struct OnlineKnowledge
     active::Vector{ActiveMechanism}
     trials::Vector{PublicTrial}
     learning_jobs::Int
+    definition_depths::Dict{String,Int}
 end
 
-OnlineKnowledge() = OnlineKnowledge(JointMechanism[], ActiveMechanism[], PublicTrial[], 0)
+OnlineKnowledge() = OnlineKnowledge(JointMechanism[], ActiveMechanism[], PublicTrial[], 0, Dict{String,Int}())
 
 function prior_trials(config)
     directory = isnothing(config.learning) ? nothing : get(config.learning,"prior_evidence",nothing)
@@ -150,7 +151,7 @@ function candidate_evaluation(active, before, groups, enclosure, action, history
         truth == disproven ? "learned_condition_false" : "learned_condition_unknown")
 end
 
-function public_action_candidates(observation, max_witnesses)
+function public_action_candidates(observation, max_action_coordinates)
     frame = last(observation.frames)
     groups = small_components(frame)
     enclosure = enclosure_pairs(groups)
@@ -166,7 +167,7 @@ function public_action_candidates(observation, max_witnesses)
             position_offsets(s) ∉ hinted,length(s),anchor(s)))
         coordinates = unique((first(shape)[1],first(shape)[2]) for shape in visually_bound)
         isempty(coordinates) && (coordinates = Pixel[(0,0)])
-        for (x,y) in Iterators.take(coordinates,max_witnesses)
+        for (x,y) in Iterators.take(coordinates,max_action_coordinates)
             push!(actions,Dict("id"=>6,"x"=>x,"y"=>y))
             click_count += 1
         end
@@ -207,8 +208,8 @@ function resource_binding(rule, fragments)
     return Tuple(sort!(scope_key.(movers)))
 end
 
-function ranked_public_actions(knowledge, observation, history, attempts, limit; composing=false)
-    values = public_action_candidates(observation,limit)
+function ranked_public_actions(knowledge, observation, history, attempts, max_action_coordinates; composing=false)
+    values = public_action_candidates(observation,max_action_coordinates)
     judged = []
     for action in values.actions
         supports = []
@@ -270,7 +271,7 @@ function ranked_public_actions(knowledge, observation, history, attempts, limit;
         trial_count = get(attempts,action_key(action),0)
         experiment = nothing
         if isnothing(chosen) && length(supports) > 1
-            split = distinguish_predictions([choice.expected for choice in supports];max_work=limit)
+            split = distinguish_predictions([choice.expected for choice in supports])
             if split.separated > 0
                 experiment = Dict("mechanism_versions"=>[active_id(choice.model) for choice in supports],
                     "witnesses"=>split.witnesses,"complete"=>split.complete,"work"=>split.work)
@@ -345,32 +346,25 @@ function predict_public(rec, item; plan_reads=String[])
         "assumptions"=>[item.reason]))
 end
 
-function effective_limits(config)
-    learning = config.learning
-    search = config.search
-    return (; max_programs=learning["max_programs"],max_ast_nodes=learning["max_ast_nodes"],
-        max_input_slots=learning["max_input_slots"],max_match_witnesses=isnothing(search) ?
-        10_000 : search["max_match_witnesses"])
-end
-
-function wait_worker(job, seconds)
-    deadline = time_ns() + UInt64(round(seconds * 1e9)) + UInt64(8_000_000_000)
+function wait_worker(job, public_dir)
     path = joinpath(job,"worker-status.json")
-    while !isfile(path)
-        time_ns() >= deadline && error("Learning supervisor did not complete this job")
-        sleep(0.05)
+    return open(joinpath(public_dir, "supervisor.lock"), "r") do lock
+        while !isfile(path)
+            ccall(:flock, Cint, (Cint, Cint), fd(lock), 6) == 0 &&
+                error("Learning supervisor exited before reporting a worker result")
+            systemerror("Unable to check supervisor liveness", Base.Libc.errno() != Base.Libc.EAGAIN)
+            sleep(0.05)
+        end
+        read_json(path)
     end
-    return read_json(path)
 end
 
 function online_learn!(knowledge, config, store, pairs, repo_root)
     learning = config.learning
-    caps = effective_limits(config)
-    corpus = relation_corpus(pairs;caps...)
     publication_dir = store_path(store,"publication")
     current = read_published_stitch(publication_dir)
     base = isnothing(current) ? LibrarySnapshot() : current.snapshot
-    available = learning["max_new_definitions"] - length(base.entries)
+    corpus = relation_corpus(pairs; previous_signature=isnothing(current) ? nothing : current.bundle["signature"])
     refs = [[pre.event["event_id"],post.event["event_id"],post.event["response_blob"]] for (pre,post) in pairs]
     evidence = "snapshot-" * content_hash(JSON.json(refs))
     knowledge.learning_jobs += 1
@@ -378,21 +372,20 @@ function online_learn!(knowledge, config, store, pairs, repo_root)
     mkpath(job)
     atomic_json(joinpath(job,"observations.json"),Dict("scope_complete"=>corpus.complete,
         "events"=>public_effect_record.(corpus.observed),"bindings"=>corpus.bindings,
-        "limits"=>merge(caps,motion_guard_limits(config))))
-    if isempty(corpus.programs) || available <= 0
-        atomic_json(joinpath(job,"assessment.json"),Dict("result"=>"no_eligible_terms_or_definition_capacity",
+        "dispositions"=>corpus.dispositions, "scope"=>motion_guard_limits(config)))
+    if isempty(corpus.programs)
+        atomic_json(joinpath(job,"assessment.json"),Dict("result"=>"no_eligible_terms",
             "evidence_snapshot_id"=>evidence))
         return nothing
     end
-    work = TOML.parsefile(joinpath(repo_root,"config","stitch.toml"))
-    work["seed"] = learning["seed"]
-    work["rounds"] = min(get(learning,"max_rounds",work["rounds"]),available)
-    work["budget"]["wall_ms"] = min(work["budget"]["wall_ms"],learning["max_learning_seconds"]*1000)
-    config_text = sprint(io->TOML.print(io,work;sorted=true))
-    freeze_stitch_job(joinpath(job,"input"),basename(job),evidence,base,corpus.signature,
+    config_text = read(learning["policy_file"], String)
+    supervision = read_json(store_path(store,"supervision.json"))
+    content_hash(config_text) == supervision["policy_sha256"] || error("Session policy changed since launch")
+    manifest = freeze_stitch_job(joinpath(job,"input"),basename(job),evidence,base,corpus.signature,
         corpus.programs,corpus.origins,corpus.slots;repo_root,config_text,
-        engine_identity=read_json(store_path(store,"supervision.json"))["engine_identity"])
-    status = wait_worker(job,learning["max_learning_seconds"])
+        engine_identity=supervision["engine_identity"],input_scope_complete=corpus.complete)
+    status = wait_worker(job,store_path(store))
+    status["policy_sha256"] == manifest["config_file"]["sha256"] || error("Worker ran a different policy")
     if status["code"] ∉ (0,10) || !isdir(joinpath(job,"output"))
         atomic_json(joinpath(job,"assessment.json"), Dict("result"=>"worker_incomplete","status"=>status))
         return nothing
@@ -404,6 +397,7 @@ function online_learn!(knowledge, config, store, pairs, repo_root)
     end
     digest = publish_stitch!(publication_dir,checked;current_evidence=evidence)
     published = read_published_stitch(publication_dir;publication=digest)
+    knowledge.definition_depths = definition_depths(published.snapshot.entries)
     term_limit = isnothing(config.search) ? 7 : config.search["max_parameter_term_nodes"]
     incoming = read_joint_mechanisms(published,corpus,pairs; term_limit)
     composing = !isnothing(config.planning) && haskey(config.planning,"goal")
@@ -431,7 +425,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     composing = !isnothing(config.planning) && haskey(config.planning,"goal")
     goal = composing ? bind_observed_goal(last(rec.observation.frames),config.planning["goal"]) : nothing
     limits = motion_guard_limits(config)
-    caps = effective_limits(config)
+    coordinates = isnothing(config.search) ? 4096 : config.search["max_action_coordinates"]
+    consumed_depth = 0
     frozen_version = frozen ? frozen_knowledge_digest(knowledge) : nothing
     ready_at = time_ns()
     while rec.sent_count < rec.limit && !rec.frozen
@@ -442,14 +437,14 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             goal = bind_observed_goal(last(obs.frames),config.planning["goal"])
         end
         !isnothing(goal) && goal_truth(goal,last(obs.frames)) == proven && break
-        decision = ranked_public_actions(knowledge,obs,history,attempts,caps.max_match_witnesses;composing)
+        decision = ranked_public_actions(knowledge,obs,history,attempts,coordinates;composing)
         isempty(decision.ranked) && break
         item = first(decision.ranked)
         policy_note = nothing
         goal_cursor = nothing
         if composing
             selection = choose_observed_goal_step(rec,knowledge,goal,config.planning,history,decision,
-                goal_pending,limits,caps.max_match_witnesses)
+                goal_pending,limits,coordinates)
             item = isnothing(selection.item) ? item : selection.item
             if isnothing(goal)
                 request = argmin(candidate->(get(attempts,action_key(candidate.action),0),
@@ -501,12 +496,14 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         command = submit_action!(rec,item.action["id"];args...,prediction)
         elapsed = (time_ns() - start)/1e9
         command["completion"] == "confirmed" || break
+        referenced_definitions = get(decision_record,"definition_refs",String[])
+        decision_depth = maximum((knowledge.definition_depths[id] for id in referenced_definitions); init=0)
+        consumed_depth = max(consumed_depth,decision_depth)
         ready_at = time_ns()
         event = read_json(store_path(rec.store,"events",rec.before_ref * ".json"))
         resulting = (; event,observation=rec.observation)
         sample = motion_example(entry,resulting;history)
-        effects = observed_effects(entry,resulting;
-            max_effects=div(caps.max_input_slots,2),max_roles=min(512,caps.max_match_witnesses))
+        effects = observed_effects(entry,resulting)
         assessment = isnothing(item.chosen) ? (actual=Dict(),assessments=Dict()) :
             measure_joint((model=item.chosen.model.rule,fragments=item.chosen.fragments),sample.after)
         if !isnothing(plan)
@@ -538,7 +535,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         end
         atomic_json(store_path(rec.store,"checks",id * ".json"),
             Dict("event_ref"=>sample.event_id,"action"=>item.action,"round_trip_seconds"=>elapsed,
-                "definition_refs"=>get(decision_record,"definition_refs",String[]),
+                "definition_refs"=>referenced_definitions,"consumed_definition_depth"=>decision_depth,
                 "read_events"=>isnothing(prediction) ? [sample.before_id] : prediction.payload["event_reads"],
                 "expected"=>isnothing(item.chosen) ? Dict() : item.chosen.expected,
                 "actual"=>assessment.actual,"assessments"=>assessment.assessments,"revisions"=>revisions,
@@ -558,7 +555,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     after_version = frozen ? frozen_knowledge_digest(knowledge) : nothing
     after_version == frozen_version || error("Frozen evaluation changed the mechanism")
     outcome = (; actions=count, publications, state=rec.observation.state, models=length(knowledge.active),
-        frozen_before=frozen_version, frozen_after=after_version)
+        frozen_before=frozen_version, frozen_after=after_version, consumed_definition_depth=consumed_depth)
     composing || return outcome
     truth = isnothing(goal) ? unknown_truth : goal_truth(goal,last(rec.observation.frames))
     return merge(outcome,(goal=truth == proven ? "observed" : truth == disproven ? "not_reached" : "unknown",))

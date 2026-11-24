@@ -1,4 +1,4 @@
-const LEARN_PROTOCOL = "tddescat.learn.v1"
+const LEARN_PROTOCOL = "tddescat.learn.v2"
 const STITCH_CODEC = "typed-free-slots.v1"
 
 wire_parameter(index) = Dict("kind" => "Param", "index" => index)
@@ -20,34 +20,46 @@ function wire_text(term; parameter="?#")
     return isempty(args) ? term["operator"] : "(" * join([term["operator"]; wire_text.(args; parameter)], " ") * ")"
 end
 
-function encoded_syntax(text)
-    ncodeunits(text) <= 65_536 && occursin(r"^[A-Za-z0-9_.\-?$#() \t\r\n]+\z", text) ||
+function stitch_tokens(text)
+    occursin(r"^[A-Za-z0-9_.\-?$#() \t\r\n]+\z", text) ||
         error("Invalid encoded expression")
-    tokens = split(replace(text, "(" => " ( ", ")" => " ) "))
-    length(tokens) <= 4096 || error("Expression token limit")
+    return split(replace(text, "(" => " ( ", ")" => " ) "))
+end
+
+function parse_stitch_tokens(tokens)
+    stack = NamedTuple[]
+    root = nothing
     position = 1
-    function read_node(depth)
-        depth <= 64 && position <= length(tokens) || error("Incomplete encoded expression")
+    while position <= length(tokens)
+        isnothing(root) || error("Trailing encoded expression")
         token = tokens[position]
         position += 1
-        token == ")" && error("Unexpected closing parenthesis")
-        token == "(" || return (head=String(token), children=Any[])
-        position <= length(tokens) || error("Missing operator")
-        head = String(tokens[position])
-        head in ("(", ")") && error("Invalid operator")
-        position += 1
-        children = Any[]
-        while position <= length(tokens) && tokens[position] != ")"
-            push!(children, read_node(depth + 1))
+        if token == "("
+            position <= length(tokens) || error("Missing operator")
+            head = String(tokens[position])
+            head in ("(", ")") && error("Invalid operator")
+            position += 1
+            push!(stack, (head=head, children=Any[]))
+            2 * length(stack) + 8 < 128 || error("Wire JSON body depth is unsupported")
+            continue
         end
-        position <= length(tokens) || error("Unclosed expression")
-        position += 1
-        return (; head, children)
+        node = if token == ")"
+            isempty(stack) && error("Unexpected closing parenthesis")
+            pop!(stack)
+        else
+            (head=String(token), children=Any[])
+        end
+        if isempty(stack)
+            root = node
+        else
+            push!(last(stack).children, node)
+        end
     end
-    result = read_node(0)
-    position == length(tokens) + 1 || error("Trailing encoded expression")
-    return result
+    isempty(stack) && !isnothing(root) || error("Incomplete encoded expression")
+    return root
 end
+
+encoded_syntax(text) = parse_stitch_tokens(stitch_tokens(text))
 
 function wire_index(value)
     index = tryparse(Int, value)
@@ -108,12 +120,17 @@ decode_program(text, registry) = decode_node(encoded_syntax(text), registry, :pr
 function decode_definition(definition, registry)
     arity = definition["arity"]
     params = definition["parameter_sorts"]
-    strict_integer(arity) && 0 <= arity <= 8 && arity == length(params) || error("Invalid arity")
-    bound = encoded_syntax(definition["closed_lambda_text"])
+    strict_integer(arity) && 0 <= arity && arity == length(params) || error("Invalid arity")
+    tokens = stitch_tokens(definition["closed_lambda_text"])
+    start = 1
+    stop = length(tokens)
     for _ in 1:arity
-        bound.head == "lam" && length(bound.children) == 1 || error("Missing outer binder")
-        bound = only(bound.children)
+        start + 2 <= stop && tokens[start] == "(" && tokens[start + 1] == "lam" &&
+            tokens[stop] == ")" || error("Missing or unclosed outer binder")
+        start += 2
+        stop -= 1
     end
+    bound = parse_stitch_tokens(@view tokens[start:stop])
     from_pattern = decode_node(encoded_syntax(definition["pattern_text"]), registry, :pattern)
     from_lambda = decode_node(bound, registry, :lambda, arity)
     from_pattern == from_lambda == definition["body"] || error("Definition parameter order differs")
@@ -197,7 +214,7 @@ end
 
 site_contains(site, path) = length(site) <= length(path) && path[1:length(site)] == site
 
-function expand_sites!(positions, step, library; spread, max_positions)
+function expand_sites!(positions, step, library; spread)
     site = Tuple(step["site_path"])
     name = step["rule_id"][5:end]
     original = Dict(path => labels for (path, labels) in positions if site_contains(site, path))
@@ -208,7 +225,6 @@ function expand_sites!(positions, step, library; spread, max_positions)
     function add_labels(path, labels)
         isempty(labels) && return
         union!(get!(Set{Tuple}, positions, path), labels)
-        length(positions) <= max_positions || error("Source reconstruction exceeded the position budget")
     end
     walk_wire(library[name]["body"]) do node, relative
         destination = (site..., relative...)
@@ -234,7 +250,7 @@ function initial_sites(term, library; all_nodes)
     return positions
 end
 
-function replay_call_sources(proof, input, output, library, registry, slots; max_positions=131_072)
+function replay_call_sources(proof, input, output, library, registry, slots)
     replay_proof(proof, input, output, library, registry, slots)
     left = initial_sites(input, library; all_nodes=true)
     right = initial_sites(output, library; all_nodes=false)
@@ -244,10 +260,10 @@ function replay_call_sources(proof, input, output, library, registry, slots; max
     all(step -> step["direction"] == "reverse", @view steps[middle:end]) ||
         error("Definition proof does not have a shared expansion")
     for step in @view steps[1:middle-1]
-        expand_sites!(left, step, library; spread=true, max_positions)
+        expand_sites!(left, step, library; spread=true)
     end
     for i in length(steps):-1:middle
-        expand_sites!(right, steps[i], library; spread=false, max_positions)
+        expand_sites!(right, steps[i], library; spread=false)
     end
     sources = Dict{Tuple,Set{Tuple}}()
     for (path, labels) in left

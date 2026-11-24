@@ -1,5 +1,5 @@
-function distinguish_predictions(predictions; max_work)
-    positive_integer(max_work) || throw(ArgumentError("Invalid experiment budget"))
+function distinguish_predictions(predictions; max_work=nothing)
+    isnothing(max_work) || positive_integer(max_work) || throw(ArgumentError("Invalid experiment budget"))
     witnesses = []
     separated = 0
     work = 0

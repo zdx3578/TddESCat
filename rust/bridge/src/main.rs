@@ -5,18 +5,17 @@ mod protocol;
 mod resources;
 
 use anyhow::{Context, Result, ensure};
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use codec::{Definition, Registry, Term};
 use egg_stitch::lang::SearchBudgetStop;
-use protocol::{CODEC, Config, Manifest, Origin, PROTOCOL, commit};
+use protocol::{CODEC, Config, Manifest, Origin, PROTOCOL, atomic_json, commit};
 use serde::Serialize;
+use serde_json::{Value, json};
 use std::{
     collections::BTreeSet,
     fs,
-    io::{self, Write},
     panic::{AssertUnwindSafe, catch_unwind},
-    path::{Path, PathBuf},
-    time::{Duration, Instant},
+    path::PathBuf,
 };
 
 #[derive(Parser)]
@@ -25,6 +24,21 @@ struct Arguments {
     manifest: PathBuf,
     #[arg(long)]
     output: PathBuf,
+    #[arg(long, hide = true, value_enum)]
+    test_fault: Option<Fault>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum Fault {
+    BeforeFirstCommit,
+    AfterFirstCommit,
+    DuringFirstWrite,
+    ResourceLoad,
+}
+
+fn test_interrupt(phase: resources::Phase, reason: &'static str) -> ! {
+    let _span = resources::phase(phase);
+    std::panic::panic_any(SearchBudgetStop(reason));
 }
 
 #[derive(Serialize)]
@@ -53,35 +67,42 @@ struct LearningResult<'a> {
     input_sha256: &'a str,
     parent_checkpoint_sha256: Option<&'a str>,
     search_exhausted: bool,
+    saturation_complete: bool,
+    input_scope_complete: bool,
     match_support_exact: bool,
     apply_complete: bool,
     round_committed: bool,
-    stop_reason: &'static str,
+    round_outcome: &'static str,
+    round_metrics: RoundMetrics,
 }
 
-struct BoundedOutput {
-    data: Vec<u8>,
-    limit: usize,
+#[derive(Serialize)]
+struct RoundMetrics {
+    heap_pops: usize,
+    arena_peak: usize,
+    frontier_peak: usize,
+    egraph_nodes: usize,
+    egraph_classes: usize,
+    proof_visits: usize,
 }
 
-impl Write for BoundedOutput {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        if self.data.len().saturating_add(buf.len()) > self.limit {
-            std::panic::panic_any(SearchBudgetStop("output_budget"));
-        }
-        self.data.extend_from_slice(buf);
-        resources::check();
-        Ok(buf.len())
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
+#[derive(Default)]
+struct JobProgress {
+    searches: usize,
+    committed: usize,
+    accepted: usize,
+    heap_pops: usize,
+    last_checkpoint: Option<String>,
+    input_sha: Option<String>,
+    scope: Value,
+    policy: Value,
 }
 
 struct Job {
     manifest: Manifest,
     input_sha: String,
     config: Config,
+    search_args: egg_stitch::Args,
     registry: Registry,
     original: Vec<Term>,
     origins: Vec<protocol::OriginSites>,
@@ -99,7 +120,7 @@ impl Job {
         let root = parent.canonicalize()?;
         let (manifest, input_sha) = Manifest::load(&args.manifest)?;
         let config = Config::load(&manifest.config_file.read(&root)?)?;
-        resources::limit(config.budget.managed_bytes);
+        let search_args = engine::search_args(&config)?;
         resources::check();
         let mut registry =
             Registry::new(manifest.signature_file.json(&root)?, &manifest.slot_context)?;
@@ -112,7 +133,7 @@ impl Job {
             engine::import(&mut registry, manifest.initial_library_file.json(&root)?)?;
         let text: Vec<String> = manifest.programs_file.json(&root)?;
         ensure!(
-            !text.is_empty() && text.len() == manifest.program_count && text.len() <= 2048,
+            text.len() == manifest.program_count,
             "invalid program count"
         );
         let original = text
@@ -138,6 +159,7 @@ impl Job {
             manifest,
             input_sha,
             config,
+            search_args,
             registry,
             original,
             origins,
@@ -147,39 +169,45 @@ impl Job {
         })
     }
 
-    fn run(mut self, output: &Path, start: Instant, committed: &mut usize) -> Result<()> {
-        let deadline = start + Duration::from_millis(self.config.budget.wall_ms);
-        let mut steps_left = self.config.max_steps;
+    fn run(mut self, args: &Arguments, progress: &mut JobProgress) -> Result<&'static str> {
+        progress.input_sha = Some(self.input_sha.clone());
+        progress.scope = self.manifest.scope_refs();
+        progress.policy = serde_json::to_value(&self.config)?;
+        if self.original.is_empty() {
+            return Ok("no_eligible_corpus");
+        }
         let pre = engine::corpus_cost(&self.original);
         resources::check();
         let mut programs = self.original.clone();
-        let mut parent = None;
         let mut new_cost = 0u64;
         let mut definitions = Vec::new();
-        for round_index in 1..=self.config.rounds {
+        let mut previous_cost = pre
+            .checked_add(self.old_cost)
+            .context("initial cost overflow")?;
+        loop {
+            resources::check();
+            let round_index = progress
+                .searches
+                .checked_add(1)
+                .context("round count overflow")?;
+            progress.searches = round_index;
             let result = engine::search(
                 &self.config,
+                &self.search_args,
                 self.registry.clone(),
                 &programs,
                 &self.library,
                 &self.order,
-                deadline,
-                steps_left,
                 round_index,
             )?;
-            steps_left = steps_left
-                .checked_sub(result.expansions)
-                .context("invalid expansion counter")?;
-            if !result.exhausted && result.found.is_none() && result.programs == programs {
-                std::panic::panic_any(SearchBudgetStop("step_budget"));
+            progress.heap_pops = progress
+                .heap_pops
+                .checked_add(result.heap_pops)
+                .context("pop count overflow")?;
+            if !result.exhausted {
+                return Ok("search_incomplete");
             }
-            let stop_reason = if !result.exhausted {
-                "step_budget"
-            } else if result.found.is_none() {
-                "exhausted"
-            } else {
-                "requested_rounds"
-            };
+            let accepted = result.found.is_some();
             if let Some((name, def)) = result.found {
                 self.registry
                     .register(&name, &def.parameter_sorts, &def.result_sort)?;
@@ -192,14 +220,8 @@ impl Job {
             }
             programs = result.programs;
             let span = resources::phase(resources::Phase::Proof);
-            let (proofs, calls) = proof::verify(
-                &self.original,
-                &programs,
-                &self.origins,
-                &self.library,
-                self.config.budget.max_relation_nodes,
-                deadline,
-            )?;
+            let (proofs, calls, proof_visits) =
+                proof::verify(&self.original, &programs, &self.origins, &self.library)?;
             drop(span);
             resources::check();
             let corpus = engine::corpus_cost(&programs);
@@ -207,6 +229,10 @@ impl Job {
                 .checked_add(self.old_cost)
                 .and_then(|n| n.checked_add(new_cost))
                 .context("total cost overflow")?;
+            ensure!(
+                total < previous_cost || (!accepted && total == previous_cost),
+                "round did not improve the full structural cost"
+            );
             let ratio = pre
                 .checked_add(self.old_cost)
                 .context("input cost overflow")?;
@@ -220,7 +246,6 @@ impl Job {
                 ratio_numerator: ratio.to_string(),
                 ratio_denominator: total.to_string(),
             };
-            let span = resources::phase(resources::Phase::Serialize);
             let data = LearningResult {
                 protocol_version: PROTOCOL,
                 codec_version: CODEC,
@@ -232,41 +257,78 @@ impl Job {
                 proofs,
                 cost,
                 input_sha256: &self.input_sha,
-                parent_checkpoint_sha256: parent.as_deref(),
+                parent_checkpoint_sha256: progress.last_checkpoint.as_deref(),
                 search_exhausted: result.exhausted,
+                saturation_complete: true,
+                input_scope_complete: self.manifest.input_scope_complete,
                 match_support_exact: true,
                 apply_complete: true,
                 round_committed: true,
-                stop_reason,
+                round_outcome: if accepted {
+                    "definition_accepted"
+                } else {
+                    "no_positive_gain"
+                },
+                round_metrics: RoundMetrics {
+                    heap_pops: result.heap_pops,
+                    arena_peak: result.arena_peak,
+                    frontier_peak: result.frontier_peak,
+                    egraph_nodes: result.egraph_nodes,
+                    egraph_classes: result.egraph_classes,
+                    proof_visits,
+                },
             };
-            let mut bytes = BoundedOutput {
-                data: Vec::new(),
-                limit: self.config.budget.max_output_bytes,
-            };
-            serde_json::to_writer(&mut bytes, &data)?;
-            drop(span);
-            if Instant::now() >= deadline {
-                std::panic::panic_any(SearchBudgetStop("deadline"));
+            if round_index == 1 && args.test_fault == Some(Fault::BeforeFirstCommit) {
+                test_interrupt(resources::Phase::Commit, "cancelled");
             }
-            let span = resources::phase(resources::Phase::Commit);
-            parent = Some(commit(
-                output,
+            resources::check();
+            let checkpoint = commit(
+                &args.output,
                 round_index,
                 &self.input_sha,
-                parent.as_deref(),
-                &bytes.data,
+                progress.last_checkpoint.as_deref(),
+                &data,
                 result.expansions,
-            )?);
-            drop(span);
-            *committed = round_index;
-            if !result.exhausted {
-                std::panic::panic_any(SearchBudgetStop("step_budget"));
+                || {
+                    if round_index == 1 && args.test_fault == Some(Fault::DuringFirstWrite) {
+                        test_interrupt(resources::Phase::Serialize, "cancelled");
+                    }
+                    resources::check();
+                },
+            )?;
+            progress.last_checkpoint = Some(checkpoint);
+            progress.committed = round_index;
+            progress.accepted = definitions.len();
+            previous_cost = total;
+            if accepted
+                && self
+                    .config
+                    .progress
+                    .accepted_definition_checkpoints
+                    .binary_search(&progress.accepted)
+                    .is_ok()
+            {
+                atomic_json(
+                    &args.output,
+                    &format!("accepted-{:06}.json", progress.accepted),
+                    &json!({
+                        "accepted_definitions": progress.accepted, "round_index": round_index,
+                        "checkpoint_sha256": progress.last_checkpoint, "final_total": total.to_string(),
+                    }),
+                )?;
             }
-            if stop_reason == "exhausted" {
-                break;
+            if round_index == 1 && args.test_fault == Some(Fault::AfterFirstCommit) {
+                test_interrupt(resources::Phase::Commit, "cancelled");
+            }
+            resources::check();
+            if !accepted {
+                return Ok(if self.manifest.input_scope_complete {
+                    "verified_compression_fixed_point"
+                } else {
+                    "input_scope_incomplete"
+                });
             }
         }
-        Ok(())
     }
 }
 
@@ -280,56 +342,73 @@ fn main() {
         return;
     }
     let args = Arguments::parse();
-    let start = Instant::now();
+    resources::install_cancel_handler();
     let default_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic| {
         if !panic.payload().is::<SearchBudgetStop>() {
             default_hook(panic);
         }
     }));
-    let mut committed = 0;
-    let mut reason = None;
-    let result = catch_unwind(AssertUnwindSafe(|| -> Result<i32> {
+    let mut progress = JobProgress::default();
+    let result = catch_unwind(AssertUnwindSafe(|| -> Result<(&'static str, i32)> {
         let span = resources::phase(resources::Phase::Load);
+        if args.test_fault == Some(Fault::ResourceLoad) {
+            test_interrupt(resources::Phase::Load, "resource_failure");
+        }
         let job = match Job::load(&args) {
             Ok(job) => job,
             Err(error) => {
                 eprintln!("invalid_input: {error:#}");
-                reason = Some("invalid_input");
-                return Ok(20);
+                return Ok(("invalid_input", 20));
             }
         };
         drop(span);
-        job.run(&args.output, start, &mut committed)?;
-        Ok(0)
+        let reason = job.run(&args, &mut progress)?;
+        let code = match reason {
+            "verified_compression_fixed_point" | "no_eligible_corpus" => 0,
+            _ if progress.committed > 0 => 10,
+            _ => 22,
+        };
+        Ok((reason, code))
     }));
-    let code = match result {
-        Ok(Ok(code)) => code,
+    let (reason, code) = match result {
+        Ok(Ok(outcome)) => outcome,
         Ok(Err(error)) => {
-            reason = Some("invariant_violation");
             eprintln!("invariant_violation: {error:#}");
-            21
+            ("validation_failed", 21)
         }
         Err(payload) => match payload.downcast::<SearchBudgetStop>() {
             Ok(stop) => {
-                reason = Some(stop.0);
-                eprintln!("{}: {committed} committed rounds", stop.0);
-                if committed == 0 { 22 } else { 10 }
+                eprintln!("{}: {} committed rounds", stop.0, progress.committed);
+                (stop.0, if progress.committed == 0 { 22 } else { 10 })
             }
-            Err(_) => {
-                reason = Some("invariant_violation");
-                21
-            }
+            Err(_) => ("validation_failed", 21),
         },
     };
-    let profile = resources::report(code, reason, committed);
+    let profile = resources::report(code, Some(reason), progress.committed);
     if args.output.is_dir() {
-        let temporary = args.output.join("metrics.json.tmp");
-        let final_path = args.output.join("metrics.json");
-        if let Err(error) = fs::write(&temporary, profile.to_string())
-            .and_then(|()| fs::rename(&temporary, &final_path))
+        let summary = json!({
+            "protocol_version": PROTOCOL, "input_sha256": progress.input_sha,
+            "termination_reason": reason, "search_rounds": progress.searches,
+            "accepted_definitions": progress.accepted, "total_heap_pops": progress.heap_pops,
+            "last_checkpoint": progress.last_checkpoint.map(|sha| json!({
+                "round_index": progress.committed, "sha256": sha
+            })),
+            "fixed_point": reason == "verified_compression_fixed_point",
+            "scope_refs": progress.scope, "effective_policy": progress.policy,
+            "effective_limits": {
+                "search_steps": null, "wall_ms": null, "max_relation_nodes": null,
+                "max_egraph_nodes": null, "max_arena_states": null, "proof_visits": null,
+                "managed_bytes": null, "output_bytes": null, "rounds": null, "library_size": null
+            },
+            "interrupted_phase": if code == 0 || reason == "input_scope_incomplete" { None }
+                else { Some(resources::last_phase()) },
+        });
+        if let Err(error) = atomic_json(&args.output, "metrics.json", &profile)
+            .and_then(|_| atomic_json(&args.output, "learning-summary.json", &summary))
         {
-            eprintln!("Unable to save resource metrics: {error}");
+            eprintln!("Unable to save learning summary: {error}");
+            std::process::exit(21);
         }
     }
     std::process::exit(code);

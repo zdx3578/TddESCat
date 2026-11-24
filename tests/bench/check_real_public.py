@@ -72,6 +72,12 @@ def offline_capture(root, task, run):
         projection = re.sub(
             r"(?m)^engine\s*=.*$", f"engine = {json.dumps(str(engine))}", projection
         )
+        policy = (original.parent / values["learning"]["policy_file"]).resolve()
+        projection = re.sub(
+            r"(?m)^policy_file\s*=.*$",
+            f"policy_file = {json.dumps(str(policy))}",
+            projection,
+        )
         agent.write_text(projection, encoding="utf-8")
         paths = public_settings(root, agent, tomllib.loads(projection))
         probe = isolation_probe(

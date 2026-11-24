@@ -1,8 +1,9 @@
 function freeze_stitch_job(directory, job_id, snapshot_id, library::LibrarySnapshot,
                            signature, programs, origins, slots; repo_root, config_path=nothing,
-                           config_text=nothing, engine_identity=nothing)
+                           config_text=nothing, engine_identity=nothing, input_scope_complete=true)
     xor(isnothing(config_path), isnothing(config_text)) || error("Provide one worker configuration source")
     config = isnothing(config_text) ? read(config_path, String) : config_text
+    stitch_policy(config)
     mkpath(directory)
     isempty(readdir(directory)) || error("The frozen job directory must be fresh")
     upstream = TOML.parsefile(joinpath(repo_root, "third_party", "egg-stitch", "UPSTREAM.toml"))
@@ -23,6 +24,7 @@ function freeze_stitch_job(directory, job_id, snapshot_id, library::LibrarySnaps
         "job_id" => job_id, "evidence_snapshot_id" => snapshot_id, "library_base_version" => library.version,
         "protocol_version" => LEARN_PROTOCOL, "codec_version" => STITCH_CODEC,
         "program_count" => length(programs), "slot_context" => slots, "engine_pin" => engine,
+        "input_scope_complete" => input_scope_complete,
     )
     for (name, extension, data) in (
         ("signature", "json", JSON.json(signature)),
@@ -40,7 +42,7 @@ function freeze_stitch_job(directory, job_id, snapshot_id, library::LibrarySnaps
     return manifest
 end
 
-function stitch_input(job_dir, manifest, field)
+function stitch_blob(job_dir, manifest, field)
     descriptor = manifest[field * "_file"]
     path = descriptor["path"]
     basename(path) == path && valid_id(path) || error("Unsafe descriptor path")
@@ -49,8 +51,10 @@ function stitch_input(job_dir, manifest, field)
     data = read(file)
     length(data) == descriptor["bytes"] && content_hash(data) == descriptor["sha256"] ||
         error("Frozen job input changed")
-    return JSON.parse(String(data))
+    return data
 end
+
+stitch_input(job_dir, manifest, field) = JSON.parse(String(stitch_blob(job_dir, manifest, field)))
 
 function verify_stitch_calls(result, outputs, input_sites, proof_for, sources, definitions)
     positions = Dict{Tuple{Int,Tuple},Any}()
@@ -149,9 +153,15 @@ function read_stitch_rounds(job_dir, output_dir)
     entries = stitch_input(job_dir, manifest, "initial_library")
     text = stitch_input(job_dir, manifest, "programs")
     origins = stitch_input(job_dir, manifest, "origins")
-    paths = filter(name -> occursin(r"^round-[0-9]{6}\z", name), readdir(output_dir))
+    policy = stitch_policy(String(stitch_blob(job_dir, manifest, "config")))
+    paths = filter(name -> occursin(r"^round-[0-9]{6,}\z", name), readdir(output_dir))
+    sort!(paths; by=name -> parse(Int, name[7:end]))
     verified = []
     parent = nothing
+    known = []
+    previous = nothing
+    terminal = false
+    checkpoint_digests = String[]
     for (index, name) in enumerate(paths)
         name == "round-" * lpad(index, 6, '0') || error("Missing checkpoint")
         folder = joinpath(output_dir, name)
@@ -168,11 +178,55 @@ function read_stitch_rounds(job_dir, output_dir)
         end
         result["protocol_version"] == LEARN_PROTOCOL && result["codec_version"] == STITCH_CODEC &&
             result["job_id"] == manifest["job_id"] || error("Result job identity differs")
-        all(key -> result[key] === true, ("round_committed", "apply_complete", "match_support_exact")) ||
+        all(key -> result[key] === true, ("round_committed", "apply_complete", "match_support_exact",
+                "saturation_complete","search_exhausted")) ||
             error("Incomplete result")
+        result["input_scope_complete"] === manifest["input_scope_complete"] || error("Input scope differs")
+        terminal && error("Result follows a terminal round")
+        outcome = result["round_outcome"]
+        definitions = result["definitions"]
+        added = length(definitions) - length(known)
+        if outcome == "definition_accepted"
+            added == 1 && last(definitions)["arity"] <= policy["max_arity"] ||
+                error("Invalid newly accepted definition")
+        elseif outcome == "no_positive_gain"
+            added == 0 || error("Terminal round introduced a definition")
+            terminal = true
+        else
+            error("Invalid round outcome")
+        end
+        definitions[1:length(known)] == known || error("A prior definition changed")
         check_stitch_result(result, manifest, signature, entries, text, origins)
+        cost = decimal_cost(result["cost"]["final_total"])
+        baseline = isnothing(previous) ? decimal_cost(result["cost"]["ratio_numerator"]) : previous
+        (cost < baseline || (terminal && cost == baseline)) || error("Full round cost did not decrease")
         push!(verified, result)
         parent = content_hash(checkpoint_bytes)
+        push!(checkpoint_digests, parent)
+        previous, known = cost, definitions
     end
-    return (; manifest, signature, verified, input_sha, entries, text, origins)
+    summary_path = joinpath(output_dir, "learning-summary.json")
+    summary = isfile(summary_path) ? read_json(summary_path) : nothing
+    if !isnothing(summary)
+        summary["protocol_version"] == LEARN_PROTOCOL && summary["input_sha256"] == input_sha &&
+            summary["effective_policy"] == policy && all(isnothing, values(summary["effective_limits"])) ||
+            error("Learning summary does not match the frozen policy")
+        refs = summary["scope_refs"]
+        all(refs[key] == manifest[field * "_file"]["sha256"] for (key,field) in
+            (("signature","signature"),("programs","programs"),("origins","origins"),
+             ("base_library","initial_library"),("equations","rules"),("policy","config"))) ||
+            error("Learning summary does not match the frozen inputs")
+        all(refs[key] == manifest["engine_pin"][key * "_sha256"] for key in ("binary","build")) ||
+            error("Learning summary has a different worker identity")
+        summary["last_checkpoint"] == (isnothing(parent) ? nothing :
+            Dict("round_index"=>length(verified),"sha256"=>parent)) || error("Summary checkpoint differs")
+        summary["accepted_definitions"] == length(known) && summary["search_rounds"] >= length(verified) ||
+            error("Summary counts differ")
+        fixed = summary["termination_reason"] == "verified_compression_fixed_point"
+        summary["fixed_point"] === fixed && (!fixed || (terminal && manifest["input_scope_complete"] &&
+            summary["search_rounds"] == length(verified) && isnothing(summary["interrupted_phase"]))) ||
+            error("Unproved fixed point")
+    end
+    return (; manifest, signature, verified, input_sha, entries, text, origins, summary,
+        checkpoint_digests, policy)
 end

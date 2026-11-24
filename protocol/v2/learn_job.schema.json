@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.tddescat.org/v1/learn_job.schema.json",
+  "$id": "https://schemas.tddescat.org/v2/learn_job.schema.json",
   "type": "object",
   "properties": {
     "protocol_version": {
-      "const": "tddescat.learn.v1"
+      "const": "tddescat.learn.v2"
     },
     "codec_version": {
       "const": "typed-free-slots.v1"
@@ -22,22 +22,22 @@
       "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
     },
     "signature_file": {
-      "$ref": "common.schema.json#/$defs/file"
+      "$ref": "../v1/common.schema.json#/$defs/file"
     },
     "programs_file": {
-      "$ref": "common.schema.json#/$defs/file"
+      "$ref": "../v1/common.schema.json#/$defs/file"
     },
     "origins_file": {
-      "$ref": "common.schema.json#/$defs/file"
+      "$ref": "../v1/common.schema.json#/$defs/file"
     },
     "initial_library_file": {
-      "$ref": "common.schema.json#/$defs/file"
+      "$ref": "../v1/common.schema.json#/$defs/file"
     },
     "rules_file": {
-      "$ref": "common.schema.json#/$defs/file"
+      "$ref": "../v1/common.schema.json#/$defs/file"
     },
     "config_file": {
-      "$ref": "common.schema.json#/$defs/file"
+      "$ref": "../v1/common.schema.json#/$defs/file"
     },
     "program_count": {
       "type": "integer",
@@ -46,7 +46,7 @@
     "slot_context": {
       "type": "array",
       "items": {
-        "$ref": "typed_terms.schema.json#/$defs/slot"
+        "$ref": "../v1/typed_terms.schema.json#/$defs/slot"
       }
     },
     "engine_pin": {
@@ -69,7 +69,7 @@
           "minLength": 1
         },
         "protocol_version": {
-          "const": "tddescat.learn.v1"
+          "const": "tddescat.learn.v2"
         },
         "build_sha256": {
           "type": "string",
@@ -90,6 +90,9 @@
         "binary_sha256"
       ],
       "additionalProperties": false
+    },
+    "input_scope_complete": {
+      "type": "boolean"
     }
   },
   "required": [
@@ -106,7 +109,8 @@
     "config_file",
     "program_count",
     "slot_context",
-    "engine_pin"
+    "engine_pin",
+    "input_scope_complete"
   ],
   "additionalProperties": false
 }

@@ -1,18 +1,34 @@
-schema_version = 1
+# 正式学习策略，冻结任务使用本文件的原文与摘要。
+schema_version = 2
 language = "typed-op-children-db-v1"
 search = "best-first"
-seed = 1729
-rounds = 2
-max_steps = 20000
-max_arity = 2
+max_arity = 1000
 sym_var_cost = 1
 
-[budget]
-wall_ms = 60000
-managed_bytes = 268435456
-max_egraph_nodes = 65536
-max_live_states = 4096
-max_relation_nodes = 131072
-max_output_bytes = 4194304
-check_every_work_units = 128
+[search_options]
+priority = "cost"
+freeze_rule = "on"
+var_order = "mean-nodes-per-class"
+lower_bound = "on"
+opt_seen = true
+opt_dedup_by_match = false
+opt_dominance_reuse = false
+opt_useless_frozen = false
+opt_useless_inline = false
+allow_useless_vars = false
+no_zero_arity = false
+decompose_min_rows = 48
+
+[processing]
 apply_chunk_rows = 128
+
+[termination]
+learning = "verified_compression_fixed_point"
+
+[progress]
+accepted_definition_checkpoints = [1, 2, 4, 8, 20, 50, 100]
+search_pop_checkpoints = [20000, 100000, 1000000, 10000000]
+
+# 未设置轮数、步数、时间、匹配行数、托管内存、输出字节等学习截断。
+# 未设置须贯通为 None / nothing，不回填旧值，不使用最大整数作为哨兵。
+# progress 只是保存观察结果；processing 只是处理粒度，两者均不终止学习。

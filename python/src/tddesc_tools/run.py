@@ -26,6 +26,7 @@ KIND_IDS = {
     "movement_boundaries": ("M03", "M07", "M09", "M10", "M11", "M12", "M13", "M14"),
     "semantic": ("semantic_kernel",),
     "stitch": ("stitch_bridge",),
+    "stitch_reference": ("native_reference",),
     "real_public": ("public_learning_loop",),
     "arc_offline": ("public_learning_loop",),
     "planning": ("finite_policy",),
@@ -46,6 +47,7 @@ MODULES = {
     "movement_boundaries": "tests.bench.check_boundaries",
     "semantic": "tests.bench.check_kernel",
     "stitch": "tests.bench.check_kernel",
+    "stitch_reference": "tests.bench.check_stitch_reference",
     "real_public": "tests.bench.check_real_public",
     "arc_offline": "tests.bench.check_real_public",
     "arc_public25": "tests.bench.check_public25",
@@ -65,7 +67,7 @@ def now():
 def read_task(path):
     path = path.resolve()
     data = tomllib.loads(path.read_text(encoding="utf-8"))
-    common = {"schema_version", "kind", "output_name", "timeout_seconds"}
+    common = {"schema_version", "kind", "output_name"}
     paths = {"agent_config", "environment_config", "judge_config"}
     kind = data.get("kind")
     required = common.copy()
@@ -73,7 +75,12 @@ def read_task(path):
         required.add("offline_bundle")
     if kind == "arc_public25":
         required.update(("game_ids", "environment_config"))
-    if not required <= data.keys() or data.keys() - required - paths:
+    if kind in ("stitch", "stitch_reference"):
+        required.add("experiment_config")
+        paths.add("experiment_config")
+    if not required <= data.keys() or data.keys() - required - paths - {
+        "timeout_seconds"
+    }:
         raise ValueError(f"Invalid acceptance configuration keys: {path}")
     if type(data["schema_version"]) is not int or data["schema_version"] != 1:
         raise ValueError("Unsupported acceptance configuration version")
@@ -81,8 +88,9 @@ def read_task(path):
         r"[A-Za-z0-9][A-Za-z0-9_.-]*", data["output_name"]
     ):
         raise ValueError("Invalid output_name")
-    if type(data["timeout_seconds"]) is not int or data["timeout_seconds"] <= 0:
-        raise ValueError("Invalid timeout_seconds")
+    if "timeout_seconds" in data:
+        if type(data["timeout_seconds"]) is not int or data["timeout_seconds"] <= 0:
+            raise ValueError("Invalid timeout_seconds")
     for field in data.keys() & paths:
         value = data[field]
         if not isinstance(value, str) or not value:
@@ -211,7 +219,7 @@ def run_task(root, config_path, task, run_dir, runtime):
         "camera_composition",
     )
     offline_arc = kind in ("arc_offline", "arc_public25")
-    isolated = official_local or offline_arc
+    isolated = official_local or offline_arc or kind in ("stitch", "stitch_reference")
     environment = (
         "official_offline_http"
         if offline_arc
@@ -270,7 +278,7 @@ def run_task(root, config_path, task, run_dir, runtime):
             start_new_session=True,
         ) as proc:
             try:
-                exit_code = proc.wait(task["timeout_seconds"])
+                exit_code = proc.wait(task.get("timeout_seconds"))
             except subprocess.TimeoutExpired:
                 os.killpg(proc.pid, signal.SIGTERM)
                 try:

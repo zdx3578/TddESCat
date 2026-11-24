@@ -23,7 +23,7 @@ class Contracts:
     def __init__(self, schema_dir: Path):
         self.schemas = {
             path.name.removesuffix(".schema.json"): json.loads(path.read_bytes())
-            for path in sorted(schema_dir.glob("*.schema.json"))
+            for path in sorted(schema_dir.rglob("*.schema.json"))
         }
         if not self.schemas:
             raise ValueError(f"No schemas at {schema_dir}")
@@ -46,7 +46,7 @@ class Contracts:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--schemas", type=Path, default=Path("protocol/v1"))
+    parser.add_argument("--schemas", type=Path, default=Path("protocol"))
     parser.add_argument("--document", nargs=2, metavar=("SCHEMA", "JSON"))
     args = parser.parse_args()
     contracts = Contracts(args.schemas)

@@ -5,6 +5,15 @@ end
 
 LibrarySnapshot() = LibrarySnapshot("library-empty", Dict{String,Any}[])
 
+function definition_depths(entries)
+    depths = Dict{String,Int}()
+    for entry in entries
+        dependencies = entry["definition"]["dependencies"]
+        depths[entry["stable_id"]] = 1 + maximum((depths[id] for id in dependencies); init=0)
+    end
+    return depths
+end
+
 function definition_id(definition)
     signature = [definition["parameter_sorts"], definition["result_sort"], wire_text(definition["body"])]
     return "lib_" * content_hash(JSON.json(signature))
@@ -112,13 +121,28 @@ function publication_from(base, checkpoint, result; current_version, current_evi
     # it separately from the costs recomputed by the Julia consumer.
     cost = Dict(k=>v for (k,v) in result["cost"] if k != "post_rewrite_baseline")
     cost["engine_reported_post_rewrite_baseline"] = result["cost"]["post_rewrite_baseline"]
+    depths = definition_depths(accepted.snapshot.entries)
+    new_ids = [entry["stable_id"] for entry in accepted.snapshot.entries[length(base.entries)+1:end]]
+    prefixes = [
+        Dict("accepted_definitions"=>count, "round_index"=>count,
+            "checkpoint_sha256"=>checkpoint.checkpoint_digests[count],
+            "final_total"=>checkpoint.verified[count]["cost"]["final_total"],
+            "stable_definitions"=>new_ids[1:count],
+            "library_dependency_depth"=>maximum((depths[entry["stable_id"]]
+                for entry in accepted.snapshot.entries[1:length(base.entries)+count]); init=0))
+        for count in checkpoint.policy["progress"]["accepted_definition_checkpoints"]
+        if count <= length(new_ids)
+    ]
     return Dict(
-        "schema_version"=>1, "input_sha256"=>checkpoint.input_sha, "round_index"=>result["round_index"],
+        "schema_version"=>1, "protocol_version"=>LEARN_PROTOCOL,
+        "input_sha256"=>checkpoint.input_sha, "round_index"=>result["round_index"],
         "engine_pin"=>checkpoint.manifest["engine_pin"],
+        "policy_sha256"=>checkpoint.manifest["config_file"]["sha256"],
         "library_version"=>accepted.snapshot.version, "base_version"=>base.version,
         "evidence_snapshot_id"=>current_evidence, "signature"=>checkpoint.signature,
         "slot_context"=>checkpoint.manifest["slot_context"], "library"=>accepted.snapshot.entries,
         "initial_library_count"=>length(base.entries), "new_definition_ids"=>sort!(unique!(collect(values(names)))),
+        "definition_depths"=>depths, "verified_prefixes"=>prefixes,
         "source_programs"=>checkpoint.text, "origins"=>checkpoint.origins,
         "rewritten_programs"=>programs, "calls"=>calls, "proofs"=>[rename_proof(proof, names) for proof in result["proofs"]],
         "cost"=>cost)
@@ -141,7 +165,8 @@ function read_published_stitch(directory; publication=nothing)
 end
 
 function verify_published_stitch(bundle)
-    bundle["schema_version"] == 1 || error("Unknown publication schema")
+    bundle["schema_version"] == 1 && bundle["protocol_version"] == LEARN_PROTOCOL ||
+        error("Unknown publication schema or learning protocol")
     slots = String[slot["sort"] for slot in bundle["slot_context"]]
     signature, entries, texts = bundle["signature"], bundle["library"], bundle["source_programs"]
     older = bundle["initial_library_count"]
@@ -151,6 +176,7 @@ function verify_published_stitch(bundle)
         wire_sort(decode_program(text, old_registry), old_registry; slots)
     end
     (; original, rewritten) = check_stitch_semantics(bundle, signature, entries, texts, bundle["origins"], slots)
+    definition_depths(entries) == bundle["definition_depths"] || error("Published dependency depths differ")
     input_cost = 1 + sum(wire_cost, original; init=0)
     corpus_cost = 1 + sum(wire_cost, rewritten; init=0)
     old_cost = sum(entry -> wire_cost(entry["definition"]["body"]), entries[1:older]; init=0)

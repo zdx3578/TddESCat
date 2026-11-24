@@ -9,13 +9,10 @@ use anyhow::{Context, Result, ensure};
 use egg::{Applier, EGraph, FromOp, Id, Pattern, PatternAst, Rewrite, Subst, Symbol, Var};
 use egg_stitch::{
     Args, best_first, cost, io,
-    lang::{
-        Op, OpChildren, OpChildrenLanguage, OpDB, SearchBudgetStop, StitchAnalysis, TypedSearch,
-        Weights,
-    },
+    lang::{Op, OpChildren, OpChildrenLanguage, OpDB, StitchAnalysis, TypedSearch, Weights},
     shared::SharedData,
 };
-use std::{collections::BTreeMap, sync::Arc, time::Instant};
+use std::{collections::BTreeMap, sync::Arc};
 
 type Operator = OpDB<Op>;
 type Language = OpChildrenLanguage<Operator>;
@@ -153,11 +150,11 @@ fn assert_expense(graph: &Graph) {
 
 fn saturate(graph: &mut Graph, rules: &[Rule]) {
     let limits = Arc::clone(graph.analysis.typed.as_ref().unwrap());
-    for _ in 0..32 {
+    loop {
         let mut changes = false;
         for rule in rules {
             limits.check();
-            let matches = rule.search_with_limit(graph, limits.max_relation_nodes + 1);
+            let matches = rule.search(graph);
             let count = matches.iter().map(|m| m.substs.len()).sum();
             limits.check_rows(count);
             changes |= !rule.apply(graph, &matches).is_empty();
@@ -168,7 +165,6 @@ fn saturate(graph: &mut Graph, rules: &[Rule]) {
             return;
         }
     }
-    std::panic::panic_any(SearchBudgetStop("step_budget"));
 }
 
 fn make_graph(
@@ -177,16 +173,16 @@ fn make_graph(
     terms: &[Term],
     library: &Library,
     order: &[String],
-    deadline: Instant,
 ) -> Result<Data> {
     let limits = Arc::new(TypedSearch {
         ports: r.ports.clone(),
-        deadline,
-        max_egraph_nodes: c.budget.max_egraph_nodes,
-        max_live_states: c.budget.max_live_states,
-        max_relation_nodes: c.budget.max_relation_nodes,
-        apply_chunk_rows: c.budget.apply_chunk_rows,
+        deadline: None,
+        max_egraph_nodes: None,
+        max_live_states: None,
+        max_relation_nodes: None,
+        apply_chunk_rows: c.processing.apply_chunk_rows,
         check_managed: resources::check,
+        observe_rows: resources::observe_rows,
     });
     let mut graph = Graph::new(StitchAnalysis {
         weights: Weights::default(),
@@ -201,6 +197,7 @@ fn make_graph(
         .collect::<Result<Vec<_>>>()?;
     let root = graph.add(Language::from_op("programs", checked)?);
     graph.rebuild();
+    let _span = resources::phase(Phase::Saturation);
     saturate(&mut graph, &refinements(r, library, order)?);
     Ok(SharedData::new(graph, root))
 }
@@ -211,6 +208,11 @@ pub struct Round {
     pub found: Option<(String, Definition)>,
     pub exhausted: bool,
     pub expansions: usize,
+    pub heap_pops: usize,
+    pub arena_peak: usize,
+    pub frontier_peak: usize,
+    pub egraph_nodes: usize,
+    pub egraph_classes: usize,
 }
 
 pub fn corpus_cost(terms: &[Term]) -> u64 {
@@ -220,36 +222,93 @@ pub fn corpus_cost(terms: &[Term]) -> u64 {
         .expect("corpus cost overflow")
 }
 
-#[allow(clippy::too_many_arguments)]
+pub fn search_args(config: &Config) -> Result<Args> {
+    use clap::Parser;
+    let options = &config.search_options;
+    let rows = options.decompose_min_rows.to_string();
+    let mut flags = vec![
+        "egg-stitch",
+        "--search",
+        "best-first",
+        "--priority",
+        &options.priority,
+        "--freeze-rule",
+        &options.freeze_rule,
+        "--var-order",
+        &options.var_order,
+        "--lower-bound",
+        &options.lower_bound,
+        "--decompose-min-rows",
+        &rows,
+    ];
+    for (enabled, on, off) in [
+        (options.opt_seen, "--opt-seen", "--no-opt-seen"),
+        (
+            options.opt_dedup_by_match,
+            "--opt-dedup-by-match",
+            "--no-opt-dedup-by-match",
+        ),
+        (
+            options.opt_dominance_reuse,
+            "--opt-dominance-reuse",
+            "--no-opt-dominance-reuse",
+        ),
+        (
+            options.opt_useless_frozen,
+            "--opt-useless-frozen",
+            "--no-opt-useless-frozen",
+        ),
+        (
+            options.opt_useless_inline,
+            "--opt-useless-inline",
+            "--no-opt-useless-inline",
+        ),
+    ] {
+        flags.push(if enabled { on } else { off });
+    }
+    if options.allow_useless_vars {
+        flags.push("--allow-useless-vars");
+    }
+    if options.no_zero_arity {
+        flags.push("--no-zero-arity");
+    }
+    let mut args = Args::try_parse_from(flags)?;
+    args.max_arity = config.max_arity;
+    args.normalize();
+    Ok(args)
+}
+
 pub fn search(
     config: &Config,
+    args: &Args,
     mut registry: Registry,
     input: &[Term],
     library: &Library,
     order: &[String],
-    deadline: Instant,
-    step_limit: usize,
     round: usize,
 ) -> Result<Round> {
-    use clap::Parser;
-    let mut args = Args::try_parse_from([
-        "egg-stitch",
-        "--search",
-        "best-first",
-        "--opt-seen",
-        "--no-opt-dedup-by-match",
-        "--no-opt-dominance-reuse",
-        "--no-opt-useless-frozen",
-        "--no-opt-useless-inline",
-    ])?;
-    args.max_arity = config.max_arity;
-    args.num_steps = Some(step_limit);
-    args.normalize();
     let graph_phase = resources::phase(Phase::Graph);
-    let data = make_graph(config, &registry, input, library, order, deadline)?;
+    let data = make_graph(config, &registry, input, library, order)?;
+    let egraph_nodes = data.egraph.total_size();
+    let egraph_classes = data.egraph.number_of_classes();
     drop(graph_phase);
     let search_phase = resources::phase(Phase::Search);
-    let result = best_first::best_first(data, &args);
+    let mut heap_pops = 0;
+    let mut arena_peak = 0;
+    let mut frontier_peak = 0;
+    let result = best_first::best_first_with_progress(data, args, |pops, arena, frontier| {
+        heap_pops = pops;
+        arena_peak = arena_peak.max(arena);
+        frontier_peak = frontier_peak.max(frontier);
+        if config
+            .progress
+            .search_pop_checkpoints
+            .binary_search(&pops)
+            .is_ok()
+        {
+            println!("progress round={round} heap_pops={pops} arena={arena} frontier={frontier}");
+        }
+    });
     drop(search_phase);
     let mut data = result.data;
     let mut found = None;
@@ -323,5 +382,10 @@ pub fn search(
         found,
         exhausted: result.heap_size_at_end == 0,
         expansions: result.num_expansions,
+        heap_pops,
+        arena_peak,
+        frontier_peak,
+        egraph_nodes,
+        egraph_classes,
     })
 }

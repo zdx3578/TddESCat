@@ -26,16 +26,13 @@ def online_config(
     collection=False,
     planning=False,
     goal=None,
-    max_rounds=None,
     adapt=False,
 ):
     prior_setting = "" if prior is None else f'prior_evidence = "{prior}"'
     execution = (
         'memory_enforcement = "cooperative"'
         if collection
-        else """memory_enforcement = "cgroup_v2"
-solver_memory_bytes = 2147483648
-learning_memory_bytes = 536870912"""
+        else 'memory_enforcement = "cgroup_v2"'
     )
     frozen = "false" if prior is None or adapt else "true"
     plan = "\n[planning]\ndepth = 2\nmax_work = 20\n" if planning else ""
@@ -53,7 +50,6 @@ marker_color = {marker_color}
 {cue}
 {gap}
 """
-    rounds = "" if max_rounds is None else f"max_rounds = {max_rounds}"
     path.write_text(
         f'''schema_version = 1
 run_name = "supervised"
@@ -67,15 +63,8 @@ connect_timeout_seconds = 2.0
 request_timeout_seconds = 5.0
 [learning]
 engine = "{root / "target/release/tddesc-stitch"}"
-language = "typed-op-children-db-v1"
-seed = 1729
+policy_file = "{root / "config/stitch.toml"}"
 batch_confirmed_events = {batch}
-max_programs = 64
-max_ast_nodes = 96
-max_input_slots = 12
-max_learning_seconds = 20
-max_new_definitions = 4
-{rounds}
 {prior_setting}
 [search]
 context_radii = [1, 2, 4]
@@ -84,7 +73,7 @@ history_lengths = [0, 1, 2, 4]
 max_guard_atoms = 2
 max_parameter_term_nodes = 7
 max_guard_candidates = 2048
-max_match_witnesses = 512
+max_action_coordinates = 512
 [execution]
 max_public_commands = {budget}
 one_inflight_per_guid = true

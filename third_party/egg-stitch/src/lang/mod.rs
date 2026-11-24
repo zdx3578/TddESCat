@@ -106,12 +106,13 @@ pub struct PortTypes {
 #[derive(Clone, Debug)]
 pub struct TypedSearch {
     pub ports: BTreeMap<String, PortTypes>,
-    pub deadline: Instant,
-    pub max_egraph_nodes: usize,
-    pub max_live_states: usize,
-    pub max_relation_nodes: usize,
+    pub deadline: Option<Instant>,
+    pub max_egraph_nodes: Option<usize>,
+    pub max_live_states: Option<usize>,
+    pub max_relation_nodes: Option<usize>,
     pub apply_chunk_rows: usize,
     pub check_managed: fn(),
+    pub observe_rows: fn(usize),
 }
 
 #[derive(Clone, Debug)]
@@ -120,21 +121,22 @@ pub struct SearchBudgetStop(pub &'static str);
 impl TypedSearch {
     pub fn check(&self) {
         (self.check_managed)();
-        if Instant::now() >= self.deadline {
+        if self.deadline.is_some_and(|deadline| Instant::now() >= deadline) {
             std::panic::panic_any(SearchBudgetStop("deadline"));
         }
     }
 
     pub fn check_rows(&self, nodes: usize) {
         self.check();
-        if nodes > self.max_relation_nodes {
+        (self.observe_rows)(nodes);
+        if self.max_relation_nodes.is_some_and(|limit| nodes > limit) {
             std::panic::panic_any(SearchBudgetStop("relation_limit"));
         }
     }
 
     pub fn check_graph(&self, nodes: usize) {
         self.check();
-        if nodes > self.max_egraph_nodes {
+        if self.max_egraph_nodes.is_some_and(|limit| nodes > limit) {
             std::panic::panic_any(SearchBudgetStop("egraph_limit"));
         }
     }

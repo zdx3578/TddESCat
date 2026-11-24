@@ -12,14 +12,8 @@ request_timeout_seconds = 10
 
 [learning]
 engine = "../target/release/tddesc-stitch"
-language = "typed-op-children-db-v1"
-seed = 1729
+policy_file = "stitch.toml"
 batch_confirmed_events = 8
-max_programs = 128
-max_ast_nodes = 96
-max_input_slots = 12
-max_learning_seconds = 30
-max_new_definitions = 8
 
 [search]
 context_radii = [1, 2, 4]
@@ -28,7 +22,7 @@ history_lengths = [0, 1, 2, 4]
 max_guard_atoms = 3
 max_parameter_term_nodes = 7
 max_guard_candidates = 2048
-max_match_witnesses = 512
+max_action_coordinates = 512
 
 [execution]
 max_public_commands = 36
@@ -36,5 +30,3 @@ one_inflight_per_guid = true
 post_retry = false
 redirect = false
 memory_enforcement = "cgroup_v2"
-solver_memory_bytes = 2147483648
-learning_memory_bytes = 536870912

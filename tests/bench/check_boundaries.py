@@ -145,7 +145,7 @@ def main(config, run):
             public,
             str(roster),
             script=root / "tests/julia/collect_public.jl",
-            extra_read=(root / "scripts/run.jl",),
+            extra_read=(root / "scripts/run.jl", root / "config/stitch.toml"),
         )
         (run / "grade/solver.log").write_text(proc.stdout + proc.stderr)
         assert proc.returncode == 0, proc.stderr

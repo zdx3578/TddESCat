@@ -1,6 +1,5 @@
 schema_version = 1
 kind = "online"
 output_name = "learn-smoke"
-timeout_seconds = 360
 environment_config = "../bench_server.toml"
 judge_config = "../bench_scenarios.toml"

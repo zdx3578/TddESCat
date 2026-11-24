@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.tddescat.org/v1/learn_result.schema.json",
+  "$id": "https://schemas.tddescat.org/v2/learn_result.schema.json",
   "type": "object",
   "properties": {
     "protocol_version": {
-      "const": "tddescat.learn.v1"
+      "const": "tddescat.learn.v2"
     },
     "codec_version": {
       "const": "typed-free-slots.v1"
@@ -20,7 +20,7 @@
     "definitions": {
       "type": "array",
       "items": {
-        "$ref": "definition.schema.json"
+        "$ref": "../v1/definition.schema.json"
       }
     },
     "rewritten_programs": {
@@ -53,7 +53,7 @@
           "argument_terms": {
             "type": "array",
             "items": {
-              "$ref": "typed_terms.schema.json#/$defs/program_term"
+              "$ref": "../v1/typed_terms.schema.json#/$defs/program_term"
             }
           },
           "source_occurrences": {
@@ -90,10 +90,10 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
           },
           "left_term": {
-            "$ref": "typed_terms.schema.json#/$defs/program_term"
+            "$ref": "../v1/typed_terms.schema.json#/$defs/program_term"
           },
           "right_term": {
-            "$ref": "typed_terms.schema.json#/$defs/program_term"
+            "$ref": "../v1/typed_terms.schema.json#/$defs/program_term"
           },
           "steps": {
             "type": "array",
@@ -132,7 +132,7 @@
                             "minimum": 0
                           },
                           "term": {
-                            "$ref": "typed_terms.schema.json#/$defs/program_term"
+                            "$ref": "../v1/typed_terms.schema.json#/$defs/program_term"
                           }
                         },
                         "required": [
@@ -281,18 +281,55 @@
     "round_committed": {
       "type": "boolean"
     },
-    "stop_reason": {
+    "input_scope_complete": {
+      "type": "boolean"
+    },
+    "saturation_complete": {
+      "const": true
+    },
+    "round_outcome": {
       "enum": [
-        "exhausted",
-        "requested_rounds",
-        "step_budget",
-        "deadline",
-        "managed_bytes",
-        "hard_memory_limit",
-        "output_budget",
-        "invalid_input",
-        "invariant_violation"
+        "definition_accepted",
+        "no_positive_gain"
       ]
+    },
+    "round_metrics": {
+      "type": "object",
+      "properties": {
+        "heap_pops": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "arena_peak": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "frontier_peak": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "egraph_nodes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "egraph_classes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "proof_visits": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "heap_pops",
+        "arena_peak",
+        "frontier_peak",
+        "egraph_nodes",
+        "egraph_classes",
+        "proof_visits"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [
@@ -311,7 +348,10 @@
     "match_support_exact",
     "apply_complete",
     "round_committed",
-    "stop_reason"
+    "input_scope_complete",
+    "saturation_complete",
+    "round_outcome",
+    "round_metrics"
   ],
   "additionalProperties": false
 }
