@@ -48,6 +48,7 @@ MODULES = {
     "stitch": "tests.bench.check_kernel",
     "real_public": "tests.bench.check_real_public",
     "arc_offline": "tests.bench.check_real_public",
+    "arc_public25": "tests.bench.check_public25",
     "planning": "tests.bench.check_kernel",
     "planning_public": "tests.bench.check_core_learning",
     "planning_composition": "tests.bench.check_core_learning",
@@ -66,12 +67,13 @@ def read_task(path):
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     common = {"schema_version", "kind", "output_name", "timeout_seconds"}
     paths = {"agent_config", "environment_config", "judge_config"}
-    optional = {"offline_bundle"} if data.get("kind") == "arc_offline" else set()
-    if (
-        not common <= data.keys()
-        or data.keys() - common - paths - optional
-        or optional - data.keys()
-    ):
+    kind = data.get("kind")
+    required = common.copy()
+    if kind in ("arc_offline", "arc_public25"):
+        required.add("offline_bundle")
+    if kind == "arc_public25":
+        required.update(("game_ids", "environment_config"))
+    if not required <= data.keys() or data.keys() - required - paths:
         raise ValueError(f"Invalid acceptance configuration keys: {path}")
     if type(data["schema_version"]) is not int or data["schema_version"] != 1:
         raise ValueError("Unsupported acceptance configuration version")
@@ -88,10 +90,22 @@ def read_task(path):
         data[field] = (path.parent / value).resolve()
         if not data[field].is_file():
             raise ValueError(f"Missing {field}: {data[field]}")
-    if optional:
+    if kind in ("arc_offline", "arc_public25"):
         if not isinstance(data["offline_bundle"], str) or not data["offline_bundle"]:
             raise ValueError("Invalid offline_bundle")
         data["offline_bundle"] = (path.parent / data["offline_bundle"]).resolve()
+    if kind == "arc_public25":
+        ids = data["game_ids"]
+        if (
+            not isinstance(ids, list)
+            or len(ids) != 25
+            or not all(
+                isinstance(item, str) and re.fullmatch(r"[a-z0-9]{4}-[a-f0-9]{8}", item)
+                for item in ids
+            )
+            or len({item[:4] for item in ids}) != 25
+        ):
+            raise ValueError("Expected 25 distinct versioned public game IDs")
     return data
 
 
@@ -180,8 +194,8 @@ def worktree_digest(root):
 def run_task(root, config_path, task, run_dir, runtime):
     from .isolation import private_network
 
-    expected = KIND_IDS[task["kind"]]
     kind = task["kind"]
+    expected = task["game_ids"] if kind == "arc_public25" else KIND_IDS[kind]
     official_local = kind in (
         "fixture",
         "evidence",
@@ -196,10 +210,11 @@ def run_task(root, config_path, task, run_dir, runtime):
         "resource_composition",
         "camera_composition",
     )
-    isolated = official_local or kind == "arc_offline"
+    offline_arc = kind in ("arc_offline", "arc_public25")
+    isolated = official_local or offline_arc
     environment = (
         "official_offline_http"
-        if kind == "arc_offline"
+        if offline_arc
         else "synthetic_official_http"
         if official_local
         else "protocol_stub"
@@ -330,9 +345,11 @@ def run_task(root, config_path, task, run_dir, runtime):
         "run_id": run_dir.name,
         "suite_id": task["output_name"],
         "status": "PASS" if passed else "BLOCKED" if blocked else "FAIL",
-        "evidence_scope": {"fixture": "environment", "protocol": "protocol"}.get(
-            kind, "evidence"
-        ),
+        "evidence_scope": {
+            "arc_public25": "environment",
+            "fixture": "environment",
+            "protocol": "protocol",
+        }.get(kind, "evidence"),
         "tasks": verdicts,
     }
     contracts.validate("acceptance", acceptance)
@@ -362,7 +379,7 @@ def main():
     header = tomllib.loads(config_path.read_text(encoding="utf-8"))
     suite = "tasks" in header
     task = read_task(config_path) if not suite else None
-    if not suite and task["kind"] not in KIND_IDS:
+    if not suite and task["kind"] not in MODULES:
         parser.error(f"Unsupported task kind: {task['kind']}")
     runtime = runtime_paths(root)
     name = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
