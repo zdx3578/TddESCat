@@ -1,0 +1,2125 @@
+{
+  "retention": {
+    "projection-r04-compact-search-r01": {
+      "comparisons": [
+        {
+          "old_pin": {
+            "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+            "build_sha256": "b4d791d8d11e9a69a0df1b37d75872a06dd2d3de379a75cc0fdc4b5960672486",
+            "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+            "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+            "rust_version": "1.90.0",
+            "binary_sha256": "7875508f65b90d21fa142b5d554277889a083b8351a21d9c75b657dd06a02272",
+            "protocol_version": "tddescat.learn.v3"
+          },
+          "new_pin": {
+            "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+            "build_sha256": "8ba0ff9ae9d590547ca6fb627bbce55556f2279f0127f0dee9c2ef92034ba306",
+            "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+            "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+            "rust_version": "1.90.0",
+            "binary_sha256": "0c97bcd19fb26a2c91dd35a5b323f6b39cb46cc7196d4bc474c314bd80f1414e",
+            "protocol_version": "tddescat.learn.v3"
+          },
+          "job": "job-000064",
+          "exit": 0,
+          "resource": {
+            "policy_sha256": "ba1da488e6cc355c50844ed244e71da8820673a34f4cbd48a18a663f1f14a903",
+            "schema_version": 2,
+            "explicit_memory_bytes": 6442450944,
+            "observed_cgroup_memory_bytes": 6442450944,
+            "cgroup_observed": true,
+            "cgroup_memory": {
+              "events": {
+                "low": 0,
+                "high": 0,
+                "max": 0,
+                "oom": 0,
+                "oom_kill": 0,
+                "oom_group_kill": 0
+              },
+              "peak_bytes": 3282120704
+            },
+            "cgroup_sample_after_exit_record": true,
+            "process_exit_code": 0,
+            "termination_reason": "worker_exit",
+            "host_memory_bytes": 67341971456,
+            "runtime_deadline": null,
+            "unit": "tddesc-stitch-f01439ad9d74455d8d11ef8d026e6968.service"
+          }
+        },
+        {
+          "old_pin": {
+            "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+            "build_sha256": "b4d791d8d11e9a69a0df1b37d75872a06dd2d3de379a75cc0fdc4b5960672486",
+            "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+            "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+            "rust_version": "1.90.0",
+            "binary_sha256": "7875508f65b90d21fa142b5d554277889a083b8351a21d9c75b657dd06a02272",
+            "protocol_version": "tddescat.learn.v3"
+          },
+          "new_pin": {
+            "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+            "build_sha256": "8ba0ff9ae9d590547ca6fb627bbce55556f2279f0127f0dee9c2ef92034ba306",
+            "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+            "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+            "rust_version": "1.90.0",
+            "binary_sha256": "0c97bcd19fb26a2c91dd35a5b323f6b39cb46cc7196d4bc474c314bd80f1414e",
+            "protocol_version": "tddescat.learn.v3"
+          },
+          "job": "job-000066",
+          "exit": 0,
+          "resource": {
+            "policy_sha256": "ba1da488e6cc355c50844ed244e71da8820673a34f4cbd48a18a663f1f14a903",
+            "schema_version": 2,
+            "explicit_memory_bytes": 6442450944,
+            "observed_cgroup_memory_bytes": 6442450944,
+            "cgroup_observed": true,
+            "cgroup_memory": {
+              "events": {
+                "low": 0,
+                "high": 0,
+                "max": 0,
+                "oom": 0,
+                "oom_kill": 0,
+                "oom_group_kill": 0
+              },
+              "peak_bytes": 3276341248
+            },
+            "cgroup_sample_after_exit_record": true,
+            "process_exit_code": 0,
+            "termination_reason": "worker_exit",
+            "host_memory_bytes": 67341971456,
+            "runtime_deadline": null,
+            "unit": "tddesc-stitch-280e7fc93228457ea205af5473ed1caa.service"
+          }
+        },
+        {
+          "old_pin": {
+            "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+            "build_sha256": "b4d791d8d11e9a69a0df1b37d75872a06dd2d3de379a75cc0fdc4b5960672486",
+            "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+            "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+            "rust_version": "1.90.0",
+            "binary_sha256": "7875508f65b90d21fa142b5d554277889a083b8351a21d9c75b657dd06a02272",
+            "protocol_version": "tddescat.learn.v3"
+          },
+          "new_pin": {
+            "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+            "build_sha256": "8ba0ff9ae9d590547ca6fb627bbce55556f2279f0127f0dee9c2ef92034ba306",
+            "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+            "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+            "rust_version": "1.90.0",
+            "binary_sha256": "0c97bcd19fb26a2c91dd35a5b323f6b39cb46cc7196d4bc474c314bd80f1414e",
+            "protocol_version": "tddescat.learn.v3"
+          },
+          "job": "job-000071",
+          "exit": 0,
+          "resource": {
+            "policy_sha256": "ba1da488e6cc355c50844ed244e71da8820673a34f4cbd48a18a663f1f14a903",
+            "schema_version": 2,
+            "explicit_memory_bytes": 6442450944,
+            "observed_cgroup_memory_bytes": 6442450944,
+            "cgroup_observed": true,
+            "cgroup_memory": {
+              "events": {
+                "low": 0,
+                "high": 0,
+                "max": 0,
+                "oom": 0,
+                "oom_kill": 0,
+                "oom_group_kill": 0
+              },
+              "peak_bytes": 3282321408
+            },
+            "cgroup_sample_after_exit_record": true,
+            "process_exit_code": 0,
+            "termination_reason": "worker_exit",
+            "host_memory_bytes": 67341971456,
+            "runtime_deadline": null,
+            "unit": "tddesc-stitch-d94b2eaac21b4cfe82ec36ccf080f28d.service"
+          }
+        },
+        {
+          "old_pin": {
+            "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+            "build_sha256": "b4d791d8d11e9a69a0df1b37d75872a06dd2d3de379a75cc0fdc4b5960672486",
+            "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+            "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+            "rust_version": "1.90.0",
+            "binary_sha256": "7875508f65b90d21fa142b5d554277889a083b8351a21d9c75b657dd06a02272",
+            "protocol_version": "tddescat.learn.v3"
+          },
+          "new_pin": {
+            "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+            "build_sha256": "8ba0ff9ae9d590547ca6fb627bbce55556f2279f0127f0dee9c2ef92034ba306",
+            "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+            "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+            "rust_version": "1.90.0",
+            "binary_sha256": "0c97bcd19fb26a2c91dd35a5b323f6b39cb46cc7196d4bc474c314bd80f1414e",
+            "protocol_version": "tddescat.learn.v3"
+          },
+          "job": "job-000124",
+          "exit": 23,
+          "resource": {
+            "policy_sha256": "ba1da488e6cc355c50844ed244e71da8820673a34f4cbd48a18a663f1f14a903",
+            "schema_version": 2,
+            "explicit_memory_bytes": 6442450944,
+            "observed_cgroup_memory_bytes": 6442450944,
+            "cgroup_observed": true,
+            "cgroup_memory": {
+              "events": {
+                "low": 0,
+                "high": 0,
+                "max": 36,
+                "oom": 1,
+                "oom_kill": 1,
+                "oom_group_kill": 0
+              },
+              "peak_bytes": 6442450944
+            },
+            "cgroup_sample_after_exit_record": true,
+            "process_exit_code": 137,
+            "termination_reason": "cgroup_oom_kill",
+            "host_memory_bytes": 67341971456,
+            "runtime_deadline": null,
+            "unit": "tddesc-stitch-1cb110f3f91445809a27e85f2a8b4495.service"
+          }
+        },
+        {
+          "old_pin": {
+            "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+            "build_sha256": "b4d791d8d11e9a69a0df1b37d75872a06dd2d3de379a75cc0fdc4b5960672486",
+            "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+            "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+            "rust_version": "1.90.0",
+            "binary_sha256": "7875508f65b90d21fa142b5d554277889a083b8351a21d9c75b657dd06a02272",
+            "protocol_version": "tddescat.learn.v3"
+          },
+          "new_pin": {
+            "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+            "build_sha256": "8ba0ff9ae9d590547ca6fb627bbce55556f2279f0127f0dee9c2ef92034ba306",
+            "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+            "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+            "rust_version": "1.90.0",
+            "binary_sha256": "0c97bcd19fb26a2c91dd35a5b323f6b39cb46cc7196d4bc474c314bd80f1414e",
+            "protocol_version": "tddescat.learn.v3"
+          },
+          "job": "job-000126",
+          "exit": 23,
+          "resource": {
+            "policy_sha256": "ba1da488e6cc355c50844ed244e71da8820673a34f4cbd48a18a663f1f14a903",
+            "schema_version": 2,
+            "explicit_memory_bytes": 6442450944,
+            "observed_cgroup_memory_bytes": 6442450944,
+            "cgroup_observed": true,
+            "cgroup_memory": {
+              "events": {
+                "low": 0,
+                "high": 0,
+                "max": 36,
+                "oom": 1,
+                "oom_kill": 1,
+                "oom_group_kill": 0
+              },
+              "peak_bytes": 6442450944
+            },
+            "cgroup_sample_after_exit_record": true,
+            "process_exit_code": 137,
+            "termination_reason": "cgroup_oom_kill",
+            "host_memory_bytes": 67341971456,
+            "runtime_deadline": null,
+            "unit": "tddesc-stitch-2183bffec77946c98126368a3a672a01.service"
+          }
+        },
+        {
+          "old_pin": {
+            "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+            "build_sha256": "b4d791d8d11e9a69a0df1b37d75872a06dd2d3de379a75cc0fdc4b5960672486",
+            "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+            "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+            "rust_version": "1.90.0",
+            "binary_sha256": "7875508f65b90d21fa142b5d554277889a083b8351a21d9c75b657dd06a02272",
+            "protocol_version": "tddescat.learn.v3"
+          },
+          "new_pin": {
+            "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+            "build_sha256": "8ba0ff9ae9d590547ca6fb627bbce55556f2279f0127f0dee9c2ef92034ba306",
+            "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+            "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+            "rust_version": "1.90.0",
+            "binary_sha256": "0c97bcd19fb26a2c91dd35a5b323f6b39cb46cc7196d4bc474c314bd80f1414e",
+            "protocol_version": "tddescat.learn.v3"
+          },
+          "job": "job-000173",
+          "exit": 0,
+          "resource": {
+            "policy_sha256": "ba1da488e6cc355c50844ed244e71da8820673a34f4cbd48a18a663f1f14a903",
+            "schema_version": 2,
+            "explicit_memory_bytes": 6442450944,
+            "observed_cgroup_memory_bytes": 6442450944,
+            "cgroup_observed": true,
+            "cgroup_memory": {
+              "events": {
+                "low": 0,
+                "high": 0,
+                "max": 0,
+                "oom": 0,
+                "oom_kill": 0,
+                "oom_group_kill": 0
+              },
+              "peak_bytes": 2826240
+            },
+            "cgroup_sample_after_exit_record": true,
+            "process_exit_code": 0,
+            "termination_reason": "worker_exit",
+            "host_memory_bytes": 67341971456,
+            "runtime_deadline": null,
+            "unit": "tddesc-stitch-71d7245c67da4be2ae2e411feead3d37.service"
+          }
+        }
+      ],
+      "verified": [
+        {
+          "rounds": 2,
+          "cost": {
+            "output_programs": "3",
+            "engine_reported_post_rewrite_baseline": "3",
+            "pre_rewrite_input": "47",
+            "ratio_numerator": "47",
+            "new_definitions": "23",
+            "ratio_denominator": "26",
+            "initial_library": "0",
+            "final_total": "26"
+          },
+          "job": "job-000064",
+          "publication": "1112e82fa2c2ce238bb847e5da541085f1c70c92c8c0f991c8555281dbda781d",
+          "programs": [
+            {
+              "length": 2,
+              "depth": 1,
+              "definition": "lib_4a2697e57af28a6efe8883f38cc764b9b89ce5c6c907cd960c449e043894acd3"
+            }
+          ],
+          "total_heap_pops": 3382438
+        },
+        {
+          "rounds": 2,
+          "cost": {
+            "output_programs": "3",
+            "engine_reported_post_rewrite_baseline": "3",
+            "pre_rewrite_input": "47",
+            "ratio_numerator": "47",
+            "new_definitions": "23",
+            "ratio_denominator": "26",
+            "initial_library": "0",
+            "final_total": "26"
+          },
+          "job": "job-000066",
+          "publication": "4c63109d287d89486d6b1f2f5680918503b8e1f6c440a5929d39f6faec87c847",
+          "programs": [
+            {
+              "length": 2,
+              "depth": 1,
+              "definition": "lib_50965723829f7ab5a1256a633b7ada31939f25e457d64a7b6d859bc7f37fb4f3"
+            }
+          ],
+          "total_heap_pops": 4753071
+        },
+        {
+          "rounds": 2,
+          "cost": {
+            "output_programs": "3",
+            "engine_reported_post_rewrite_baseline": "3",
+            "pre_rewrite_input": "47",
+            "ratio_numerator": "47",
+            "new_definitions": "23",
+            "ratio_denominator": "26",
+            "initial_library": "0",
+            "final_total": "26"
+          },
+          "job": "job-000071",
+          "publication": "16a21865ebb03a6661a9f0339693ec995bb7ee341e47be10adc51f9f757eaafa",
+          "programs": [
+            {
+              "length": 2,
+              "depth": 1,
+              "definition": "lib_a39c1b923f131a534d58efab8a62d6e051a385db4d655a8b2f3002a1281fe786"
+            }
+          ],
+          "total_heap_pops": 3382438
+        },
+        {
+          "rounds": 2,
+          "cost": {
+            "output_programs": "7",
+            "engine_reported_post_rewrite_baseline": "7",
+            "pre_rewrite_input": "235",
+            "ratio_numerator": "499",
+            "new_definitions": "3",
+            "ratio_denominator": "274",
+            "initial_library": "264",
+            "final_total": "274"
+          },
+          "job": "job-000173",
+          "publication": "911ea2cab72b8cc186cfbd0fef18927dece7e7f7edc0bf3c225a811011aea4d0",
+          "programs": [
+            {
+              "length": 5,
+              "depth": 4,
+              "definition": "lib_65fa4cc4788120dc22053ef25c429254adcaa844f68932db83dae51342ec8986"
+            }
+          ],
+          "total_heap_pops": 11
+        }
+      ]
+    },
+    "projection-r04-compact-search-r02": {
+      "comparisons": [
+        {
+          "old_pin": {
+            "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+            "build_sha256": "b4d791d8d11e9a69a0df1b37d75872a06dd2d3de379a75cc0fdc4b5960672486",
+            "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+            "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+            "rust_version": "1.90.0",
+            "binary_sha256": "7875508f65b90d21fa142b5d554277889a083b8351a21d9c75b657dd06a02272",
+            "protocol_version": "tddescat.learn.v3"
+          },
+          "new_pin": {
+            "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+            "build_sha256": "661036ba76c94ae23b4bc9117ddf6a5fd8624f91fa48b9e2167c50030e836912",
+            "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+            "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+            "rust_version": "1.90.0",
+            "binary_sha256": "d60bd5a0072f7792f59883db72cfb57f9015280b7993e5b6bdf2cbc3ef1e64ba",
+            "protocol_version": "tddescat.learn.v3"
+          },
+          "job": "job-000064",
+          "exit": 0,
+          "resource": {
+            "policy_sha256": "ba1da488e6cc355c50844ed244e71da8820673a34f4cbd48a18a663f1f14a903",
+            "schema_version": 2,
+            "explicit_memory_bytes": 6442450944,
+            "observed_cgroup_memory_bytes": 6442450944,
+            "cgroup_observed": true,
+            "cgroup_memory": {
+              "events": {
+                "low": 0,
+                "high": 0,
+                "max": 0,
+                "oom": 0,
+                "oom_kill": 0,
+                "oom_group_kill": 0
+              },
+              "peak_bytes": 3282276352
+            },
+            "cgroup_sample_after_exit_record": true,
+            "process_exit_code": 0,
+            "termination_reason": "worker_exit",
+            "host_memory_bytes": 67341971456,
+            "runtime_deadline": null,
+            "unit": "tddesc-stitch-555a695f84e94e28bb33eaa050f6b69f.service"
+          }
+        },
+        {
+          "old_pin": {
+            "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+            "build_sha256": "b4d791d8d11e9a69a0df1b37d75872a06dd2d3de379a75cc0fdc4b5960672486",
+            "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+            "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+            "rust_version": "1.90.0",
+            "binary_sha256": "7875508f65b90d21fa142b5d554277889a083b8351a21d9c75b657dd06a02272",
+            "protocol_version": "tddescat.learn.v3"
+          },
+          "new_pin": {
+            "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+            "build_sha256": "661036ba76c94ae23b4bc9117ddf6a5fd8624f91fa48b9e2167c50030e836912",
+            "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+            "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+            "rust_version": "1.90.0",
+            "binary_sha256": "d60bd5a0072f7792f59883db72cfb57f9015280b7993e5b6bdf2cbc3ef1e64ba",
+            "protocol_version": "tddescat.learn.v3"
+          },
+          "job": "job-000124",
+          "exit": 0,
+          "resource": {
+            "policy_sha256": "ba1da488e6cc355c50844ed244e71da8820673a34f4cbd48a18a663f1f14a903",
+            "schema_version": 2,
+            "explicit_memory_bytes": 12884901888,
+            "observed_cgroup_memory_bytes": 12884901888,
+            "cgroup_observed": true,
+            "cgroup_memory": {
+              "events": {
+                "low": 0,
+                "high": 0,
+                "max": 0,
+                "oom": 0,
+                "oom_kill": 0,
+                "oom_group_kill": 0
+              },
+              "peak_bytes": 8712507392
+            },
+            "cgroup_sample_after_exit_record": true,
+            "process_exit_code": 0,
+            "termination_reason": "worker_exit",
+            "host_memory_bytes": 67341971456,
+            "runtime_deadline": null,
+            "unit": "tddesc-stitch-346384de73f24c239e497cf181407565.service"
+          }
+        },
+        {
+          "old_pin": {
+            "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+            "build_sha256": "b4d791d8d11e9a69a0df1b37d75872a06dd2d3de379a75cc0fdc4b5960672486",
+            "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+            "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+            "rust_version": "1.90.0",
+            "binary_sha256": "7875508f65b90d21fa142b5d554277889a083b8351a21d9c75b657dd06a02272",
+            "protocol_version": "tddescat.learn.v3"
+          },
+          "new_pin": {
+            "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+            "build_sha256": "661036ba76c94ae23b4bc9117ddf6a5fd8624f91fa48b9e2167c50030e836912",
+            "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+            "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+            "rust_version": "1.90.0",
+            "binary_sha256": "d60bd5a0072f7792f59883db72cfb57f9015280b7993e5b6bdf2cbc3ef1e64ba",
+            "protocol_version": "tddescat.learn.v3"
+          },
+          "job": "job-000126",
+          "exit": 23,
+          "resource": {
+            "policy_sha256": "ba1da488e6cc355c50844ed244e71da8820673a34f4cbd48a18a663f1f14a903",
+            "schema_version": 2,
+            "explicit_memory_bytes": 12884901888,
+            "observed_cgroup_memory_bytes": 12884901888,
+            "cgroup_observed": true,
+            "cgroup_memory": {
+              "events": {
+                "low": 0,
+                "high": 0,
+                "max": 36,
+                "oom": 1,
+                "oom_kill": 1,
+                "oom_group_kill": 0
+              },
+              "peak_bytes": 12884901888
+            },
+            "cgroup_sample_after_exit_record": false,
+            "process_exit_code": 1,
+            "termination_reason": "cgroup_oom_kill",
+            "host_memory_bytes": 67341971456,
+            "runtime_deadline": null,
+            "unit": "tddesc-stitch-ae45b83600534bac9d1098d971e7229e.service"
+          }
+        },
+        {
+          "old_pin": {
+            "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+            "build_sha256": "b4d791d8d11e9a69a0df1b37d75872a06dd2d3de379a75cc0fdc4b5960672486",
+            "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+            "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+            "rust_version": "1.90.0",
+            "binary_sha256": "7875508f65b90d21fa142b5d554277889a083b8351a21d9c75b657dd06a02272",
+            "protocol_version": "tddescat.learn.v3"
+          },
+          "new_pin": {
+            "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+            "build_sha256": "661036ba76c94ae23b4bc9117ddf6a5fd8624f91fa48b9e2167c50030e836912",
+            "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+            "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+            "rust_version": "1.90.0",
+            "binary_sha256": "d60bd5a0072f7792f59883db72cfb57f9015280b7993e5b6bdf2cbc3ef1e64ba",
+            "protocol_version": "tddescat.learn.v3"
+          },
+          "job": "job-000173",
+          "exit": 0,
+          "resource": {
+            "policy_sha256": "ba1da488e6cc355c50844ed244e71da8820673a34f4cbd48a18a663f1f14a903",
+            "schema_version": 2,
+            "explicit_memory_bytes": 6442450944,
+            "observed_cgroup_memory_bytes": 6442450944,
+            "cgroup_observed": true,
+            "cgroup_memory": {
+              "events": {
+                "low": 0,
+                "high": 0,
+                "max": 0,
+                "oom": 0,
+                "oom_kill": 0,
+                "oom_group_kill": 0
+              },
+              "peak_bytes": 2629632
+            },
+            "cgroup_sample_after_exit_record": true,
+            "process_exit_code": 0,
+            "termination_reason": "worker_exit",
+            "host_memory_bytes": 67341971456,
+            "runtime_deadline": null,
+            "unit": "tddesc-stitch-e9c43c53351d42aca3589263c15a2ad5.service"
+          }
+        }
+      ],
+      "verified": [
+        {
+          "rounds": 2,
+          "cost": {
+            "output_programs": "3",
+            "engine_reported_post_rewrite_baseline": "3",
+            "pre_rewrite_input": "47",
+            "ratio_numerator": "47",
+            "new_definitions": "23",
+            "ratio_denominator": "26",
+            "initial_library": "0",
+            "final_total": "26"
+          },
+          "job": "job-000064",
+          "publication": "5a8ac37f3eddc1476acb417bb5d393a942c66c0c262b022fc27573d336961089",
+          "programs": [
+            {
+              "length": 2,
+              "depth": 1,
+              "definition": "lib_4a2697e57af28a6efe8883f38cc764b9b89ce5c6c907cd960c449e043894acd3"
+            }
+          ],
+          "total_heap_pops": 3382438
+        },
+        {
+          "rounds": 2,
+          "cost": {
+            "output_programs": "3",
+            "engine_reported_post_rewrite_baseline": "3",
+            "pre_rewrite_input": "69",
+            "ratio_numerator": "69",
+            "new_definitions": "34",
+            "ratio_denominator": "37",
+            "initial_library": "0",
+            "final_total": "37"
+          },
+          "job": "job-000124",
+          "publication": "67f05d33039a708364110c9e2e0be241d336d57cd0026bd61fd21bb80b9f89d0",
+          "programs": [
+            {
+              "length": 3,
+              "depth": 1,
+              "definition": "lib_dc47046d3e1e05a9491ab6daade58f57c352d218b234841e23a1d8913a456c0e"
+            }
+          ],
+          "total_heap_pops": 8310434
+        },
+        {
+          "rounds": 2,
+          "cost": {
+            "output_programs": "7",
+            "engine_reported_post_rewrite_baseline": "7",
+            "pre_rewrite_input": "235",
+            "ratio_numerator": "499",
+            "new_definitions": "3",
+            "ratio_denominator": "274",
+            "initial_library": "264",
+            "final_total": "274"
+          },
+          "job": "job-000173",
+          "publication": "d66000b3473dfad75a5f03afd17bfbc709751b59c976118eb8b44eb42d4dfb51",
+          "programs": [
+            {
+              "length": 5,
+              "depth": 4,
+              "definition": "lib_65fa4cc4788120dc22053ef25c429254adcaa844f68932db83dae51342ec8986"
+            }
+          ],
+          "total_heap_pops": 11
+        }
+      ]
+    },
+    "projection-r04-compact-search-r03": {
+      "comparisons": [
+        {
+          "old_pin": {
+            "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+            "build_sha256": "b4d791d8d11e9a69a0df1b37d75872a06dd2d3de379a75cc0fdc4b5960672486",
+            "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+            "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+            "rust_version": "1.90.0",
+            "binary_sha256": "7875508f65b90d21fa142b5d554277889a083b8351a21d9c75b657dd06a02272",
+            "protocol_version": "tddescat.learn.v3"
+          },
+          "new_pin": {
+            "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+            "build_sha256": "661036ba76c94ae23b4bc9117ddf6a5fd8624f91fa48b9e2167c50030e836912",
+            "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+            "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+            "rust_version": "1.90.0",
+            "binary_sha256": "d60bd5a0072f7792f59883db72cfb57f9015280b7993e5b6bdf2cbc3ef1e64ba",
+            "protocol_version": "tddescat.learn.v3"
+          },
+          "job": "job-000126",
+          "exit": 23,
+          "resource": {
+            "policy_sha256": "ba1da488e6cc355c50844ed244e71da8820673a34f4cbd48a18a663f1f14a903",
+            "schema_version": 2,
+            "explicit_memory_bytes": 25769803776,
+            "observed_cgroup_memory_bytes": 25769803776,
+            "cgroup_observed": true,
+            "cgroup_memory": {
+              "events": {
+                "low": 0,
+                "high": 0,
+                "max": 36,
+                "oom": 1,
+                "oom_kill": 1,
+                "oom_group_kill": 0
+              },
+              "peak_bytes": 25769803776
+            },
+            "cgroup_sample_after_exit_record": true,
+            "process_exit_code": 137,
+            "termination_reason": "cgroup_oom_kill",
+            "host_memory_bytes": 67341971456,
+            "runtime_deadline": null,
+            "unit": "tddesc-stitch-d83bf21298184bd791e95cecb66c1645.service"
+          }
+        }
+      ],
+      "verified": []
+    },
+    "projection-r04-backlog-heavy-r01": {
+      "comparisons": [
+        {
+          "job": "job-000226",
+          "input_sha256": "f87ba3c4b9ddb77313f69d198f4db7175ee9640409ffd62183a1c27bcfb75292",
+          "exit": 0,
+          "resource": {
+            "policy_sha256": "ba1da488e6cc355c50844ed244e71da8820673a34f4cbd48a18a663f1f14a903",
+            "schema_version": 2,
+            "explicit_memory_bytes": 12884901888,
+            "observed_cgroup_memory_bytes": 12884901888,
+            "cgroup_observed": true,
+            "cgroup_memory": {
+              "events": {
+                "low": 0,
+                "high": 0,
+                "max": 0,
+                "oom": 0,
+                "oom_kill": 0,
+                "oom_group_kill": 0
+              },
+              "peak_bytes": 7141257216
+            },
+            "cgroup_sample_after_exit_record": true,
+            "process_exit_code": 0,
+            "termination_reason": "worker_exit",
+            "host_memory_bytes": 67341971456,
+            "runtime_deadline": null,
+            "unit": "tddesc-stitch-b8d86e8800cc4b3d95ddc365c6d5db72.service"
+          }
+        }
+      ],
+      "verified": [
+        {
+          "rounds": 3,
+          "cost": {
+            "output_programs": "3",
+            "engine_reported_post_rewrite_baseline": "3",
+            "pre_rewrite_input": "95",
+            "ratio_numerator": "95",
+            "new_definitions": "30",
+            "ratio_denominator": "33",
+            "initial_library": "0",
+            "final_total": "33"
+          },
+          "job": "job-000226",
+          "publication": "0e2d765190aa68a8a665324a22e70c69f6fc3b4bebf50e187412d85025de34de",
+          "programs": [
+            {
+              "length": 4,
+              "depth": 2,
+              "definition": "lib_1cdcf23d4c4c8902a2a8480fd52849c94226002a509f599ef1df36174ac2aebf"
+            }
+          ],
+          "total_heap_pops": 11482796
+        }
+      ]
+    }
+  },
+  "original_default_losses": [
+    {
+      "policy_sha256": "ba1da488e6cc355c50844ed244e71da8820673a34f4cbd48a18a663f1f14a903",
+      "schema_version": 2,
+      "explicit_memory_bytes": 6442450944,
+      "observed_cgroup_memory_bytes": 6442450944,
+      "cgroup_observed": true,
+      "cgroup_memory": {
+        "events": {
+          "low": 0,
+          "high": 0,
+          "max": 36,
+          "oom": 1,
+          "oom_kill": 1,
+          "oom_group_kill": 0
+        },
+        "peak_bytes": 6442450944
+      },
+      "cgroup_sample_after_exit_record": true,
+      "process_exit_code": 137,
+      "termination_reason": "cgroup_oom_kill",
+      "host_memory_bytes": 67341971456,
+      "runtime_deadline": null,
+      "unit": "tddesc-stitch-d65768db354f4acfb7018621a57fccbd.service"
+    },
+    {
+      "policy_sha256": "ba1da488e6cc355c50844ed244e71da8820673a34f4cbd48a18a663f1f14a903",
+      "schema_version": 2,
+      "explicit_memory_bytes": 6442450944,
+      "observed_cgroup_memory_bytes": 6442450944,
+      "cgroup_observed": true,
+      "cgroup_memory": {
+        "events": {
+          "low": 0,
+          "high": 0,
+          "max": 35,
+          "oom": 1,
+          "oom_kill": 1,
+          "oom_group_kill": 0
+        },
+        "peak_bytes": 6442450944
+      },
+      "cgroup_sample_after_exit_record": true,
+      "process_exit_code": 137,
+      "termination_reason": "cgroup_oom_kill",
+      "host_memory_bytes": 67341971456,
+      "runtime_deadline": null,
+      "unit": "tddesc-stitch-a237d6cdd2aa48bb9c442fa15ee9cf81.service"
+    },
+    {
+      "policy_sha256": "ba1da488e6cc355c50844ed244e71da8820673a34f4cbd48a18a663f1f14a903",
+      "schema_version": 2,
+      "explicit_memory_bytes": 6442450944,
+      "observed_cgroup_memory_bytes": 6442450944,
+      "cgroup_observed": true,
+      "cgroup_memory": {
+        "events": {
+          "low": 0,
+          "high": 0,
+          "max": 38,
+          "oom": 1,
+          "oom_kill": 1,
+          "oom_group_kill": 0
+        },
+        "peak_bytes": 6442450944
+      },
+      "cgroup_sample_after_exit_record": true,
+      "process_exit_code": 137,
+      "termination_reason": "cgroup_oom_kill",
+      "host_memory_bytes": 67341971456,
+      "runtime_deadline": null,
+      "unit": "tddesc-stitch-fe1097355a97403c94f1a83d0ca50a18.service"
+    },
+    {
+      "policy_sha256": "ba1da488e6cc355c50844ed244e71da8820673a34f4cbd48a18a663f1f14a903",
+      "schema_version": 2,
+      "explicit_memory_bytes": 6442450944,
+      "observed_cgroup_memory_bytes": 6442450944,
+      "cgroup_observed": true,
+      "cgroup_memory": {
+        "events": {
+          "low": 0,
+          "high": 0,
+          "max": 36,
+          "oom": 1,
+          "oom_kill": 1,
+          "oom_group_kill": 0
+        },
+        "peak_bytes": 6442450944
+      },
+      "cgroup_sample_after_exit_record": true,
+      "process_exit_code": 137,
+      "termination_reason": "cgroup_oom_kill",
+      "host_memory_bytes": 67341971456,
+      "runtime_deadline": null,
+      "unit": "tddesc-stitch-1247217e6f964c5d932382738178b2f5.service"
+    },
+    {
+      "policy_sha256": "ba1da488e6cc355c50844ed244e71da8820673a34f4cbd48a18a663f1f14a903",
+      "schema_version": 2,
+      "explicit_memory_bytes": 6442450944,
+      "observed_cgroup_memory_bytes": 6442450944,
+      "cgroup_observed": true,
+      "cgroup_memory": {
+        "events": {
+          "low": 0,
+          "high": 0,
+          "max": 35,
+          "oom": 1,
+          "oom_kill": 1,
+          "oom_group_kill": 0
+        },
+        "peak_bytes": 6442450944
+      },
+      "cgroup_sample_after_exit_record": true,
+      "process_exit_code": 137,
+      "termination_reason": "cgroup_oom_kill",
+      "host_memory_bytes": 67341971456,
+      "runtime_deadline": null,
+      "unit": "tddesc-stitch-d9607a2335a64b9fadb0440ac1aa592e.service"
+    }
+  ],
+  "release_tests": {
+    "base": {
+      "passed": 424,
+      "failed": 0
+    },
+    "compact": {
+      "passed": 425,
+      "failed": 0
+    }
+  },
+  "candidate_programs": {
+    "length_counts": {
+      "4": 19,
+      "5": 21,
+      "6": 16,
+      "7": 10,
+      "8": 3,
+      "9": 1
+    },
+    "depth_counts": {
+      "2": 1,
+      "3": 18,
+      "4": 51
+    },
+    "unique_programs": 70,
+    "default_limit_ledger": {
+      "search_incomplete": 6,
+      "unsubmitted": 0,
+      "search_complete": 143
+    },
+    "valid_initial": [
+      {
+        "cohort_steps": 5,
+        "instances": 6,
+        "job": "job-000173",
+        "publication": "442c7c473b1ae9f731b6aec8ea7af61ced9d21d0af785a0a003143141ed47ce1",
+        "programs": [
+          {
+            "definition": "lib_65fa4cc4788120dc22053ef25c429254adcaa844f68932db83dae51342ec8986",
+            "length": 5,
+            "depth": 4
+          }
+        ],
+        "status": "verified_compression_fixed_point"
+      },
+      {
+        "cohort_steps": 7,
+        "instances": 4,
+        "job": "job-000174",
+        "publication": "491315c452692c4105d957417d9c6f2a473c25f6abcaba821347964183e02d78",
+        "programs": [
+          {
+            "definition": "lib_b527d9cc03c103f2afd14536d61cffae82a78a383e96b910ee56fff3ad292344",
+            "length": 7,
+            "depth": 4
+          }
+        ],
+        "status": "verified_compression_fixed_point"
+      },
+      {
+        "cohort_steps": 9,
+        "instances": 2,
+        "job": "job-000175",
+        "publication": "2a662a0e236461218e4b76e4eea9fb8a7020a5c9b62460eda7d8f42cc69d79b1",
+        "programs": [
+          {
+            "definition": "lib_1c687a51815e667680001073f59d12004f442422ae7487769037d8355e449fd0",
+            "length": 9,
+            "depth": 4
+          }
+        ],
+        "status": "verified_compression_fixed_point"
+      }
+    ],
+    "valid_later": [
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000176",
+        "cohort": "216f293b5392f81eaf60329c8a821c7c0511afcfa72433ec08e162c85c284202",
+        "programs": [
+          {
+            "length": 8,
+            "depth": 4,
+            "definition": "lib_7f646f9114fce20d604d5b7dee1e776b05110bcd7363ced912b0c19d6756bd7e"
+          }
+        ],
+        "requested_length": 8
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000177",
+        "cohort": "34bd392667daa027f0224ae1b8b253a8d7e04e95335fa2db924df3c3a87e8fcd",
+        "programs": [
+          {
+            "length": 8,
+            "depth": 4,
+            "definition": "lib_d4a84a1e04e14096931242a103584012c2c3d2362fe15dfbcf55461f910402e9"
+          }
+        ],
+        "requested_length": 8
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000178",
+        "cohort": "980cab0a834962772d5c593561874d4c501b9ac652e3e25b24e8b44471f5afa2",
+        "programs": [
+          {
+            "length": 8,
+            "depth": 4,
+            "definition": "lib_126992e8f6568ce6de54272e29e9eeb38232e36a49873e6864e947d2b308b15e"
+          }
+        ],
+        "requested_length": 8
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000179",
+        "cohort": "19df5d13f274d58f757daf6291235c7af8dc06230f67ecbb7e8d7b8df53fb716",
+        "programs": [
+          {
+            "length": 7,
+            "depth": 4,
+            "definition": "lib_b17c1ab6f1c4da22074b9c2b49ed91ac55494e14971e7d443ed5de19da743555"
+          }
+        ],
+        "requested_length": 7
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000180",
+        "cohort": "1a80007a8e405a43283ff1f15774b4a1d0ec1fbb6f61afc3b967e1a49d69dda4",
+        "programs": [
+          {
+            "length": 7,
+            "depth": 4,
+            "definition": "lib_8c8cdfc7a0a2eb1de6e3fb04a0f5a2c30f94befa8d84ab1917951b73daca39c6"
+          }
+        ],
+        "requested_length": 7
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000181",
+        "cohort": "23670660e1a459477cb86ec5597c3fe024ce68c15b3e93179a2cf29c49e899f2",
+        "programs": [
+          {
+            "length": 7,
+            "depth": 4,
+            "definition": "lib_56f441dfa85ea76b14d379ca63bd55fd909510997b66502573ae572f8f05cb2b"
+          }
+        ],
+        "requested_length": 7
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000182",
+        "cohort": "3bf822ce10ad32136baae5e3667453777e8f8e6031b3fd19996de930cc54527c",
+        "programs": [
+          {
+            "length": 7,
+            "depth": 4,
+            "definition": "lib_01df2e7299506f3358d44fc43a8af9da287843d07d26a43e0bfb77635addf26d"
+          }
+        ],
+        "requested_length": 7
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000183",
+        "cohort": "52733df63dd891c07997014804be5656aa0c2fa3703ba08beddf4b962b1b48be",
+        "programs": [
+          {
+            "length": 7,
+            "depth": 4,
+            "definition": "lib_ac3fe6b64f222115087d3d5f7f9950ada505f0b350919627868596e84c66c364"
+          }
+        ],
+        "requested_length": 7
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000184",
+        "cohort": "55bb443386f6ec0094790a54f64b1284682510127573a354259955f3d592068b",
+        "programs": [
+          {
+            "length": 7,
+            "depth": 4,
+            "definition": "lib_567d7b64c52d3d8cb88f3ecab5be4e0a459bdd7b6c3d50e5668bb78402ca7740"
+          }
+        ],
+        "requested_length": 7
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000185",
+        "cohort": "59d6bd010e4e841bb7ce6cd670daee1482f89bc49ba5cc8acd621756a09c8053",
+        "programs": [
+          {
+            "length": 7,
+            "depth": 4,
+            "definition": "lib_42aa8e932bda11262d09c09498377b54dc857fc550d8f567c635fe054c288549"
+          }
+        ],
+        "requested_length": 7
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000186",
+        "cohort": "d3456cc54a52e9b896aeaadae5dc5bd3a101249caab82af9762c9f432babca0b",
+        "programs": [
+          {
+            "length": 7,
+            "depth": 4,
+            "definition": "lib_dcc68be9d434e101c4777817be2aca138d8c53cafbf4ea7e16d3e783a1176d22"
+          }
+        ],
+        "requested_length": 7
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000187",
+        "cohort": "eaaeda040aef5d4d45b8f1bdc5b10db6cac9b3b8319ee6c03f9320406201b5e7",
+        "programs": [
+          {
+            "length": 7,
+            "depth": 4,
+            "definition": "lib_bff2ec73252e1436097ea2663aaa3b692e84b26bb33314b198a621f30f1f587c"
+          }
+        ],
+        "requested_length": 7
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 4,
+        "job": "job-000188",
+        "cohort": "9aacd9c7472b19c6451773b21e13ad498c268ecb4c512de1d8a6c8d08eecd6ba",
+        "programs": [
+          {
+            "length": 6,
+            "depth": 4,
+            "definition": "lib_21b2cc24b9ebc9d7946b53dc0e40b2eb20debb2089ff94b1cb40035d831ebda6"
+          }
+        ],
+        "requested_length": 6
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 3,
+        "job": "job-000189",
+        "cohort": "e0884335669ff37fa4456aa84d48a9758fff2ebda76be6ee9f58d7788d49b737",
+        "programs": [
+          {
+            "length": 6,
+            "depth": 4,
+            "definition": "lib_2ec6962936f6d66236012db7755be1f5d1b3a93ef16eb393868fc4af956e2c0c"
+          }
+        ],
+        "requested_length": 6
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000190",
+        "cohort": "2f1659f6e8a96f4292281af42cd0aed943eab3bf6cb9d9f17a95f67c70df51c5",
+        "programs": [
+          {
+            "length": 6,
+            "depth": 4,
+            "definition": "lib_5a8e551a68428c2a111b7729f0624b57463d96a022a4e9a47c4024e0c77dd1aa"
+          }
+        ],
+        "requested_length": 6
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000191",
+        "cohort": "4fa89442fcabd20b0e5e9db9309c0f193e22c499d13e0ce53a0b8df576817745",
+        "programs": [
+          {
+            "length": 6,
+            "depth": 4,
+            "definition": "lib_9e246b7ef0e91a46c421ee79d62641270fc659b587be6aa4ea7686f1b0b171a1"
+          }
+        ],
+        "requested_length": 6
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000192",
+        "cohort": "5e14b2df5e8c5639e4f1f0506cbae1a74d5da52cd47969926bd76c65cc635d8f",
+        "programs": [
+          {
+            "length": 6,
+            "depth": 4,
+            "definition": "lib_0aa244d6df420f72d178d62d8decdb51d08c9f51c507ca3da6177cc97647316e"
+          }
+        ],
+        "requested_length": 6
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000193",
+        "cohort": "7498a3eb02f5e2511779a5b8c3ec4c26e92e54c93912565756a02116d3d979ad",
+        "programs": [
+          {
+            "length": 6,
+            "depth": 4,
+            "definition": "lib_688bdbae05a378bf6be3385bb318e6e2934a41ffa9c78e3a673b440292f149ee"
+          }
+        ],
+        "requested_length": 6
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000194",
+        "cohort": "852042abe12610a9f9f7753e473e987b21286ed48786fbc27e7925139a6acf27",
+        "programs": [
+          {
+            "length": 6,
+            "depth": 4,
+            "definition": "lib_3e620cbc0e8166d65fd963a37c93dfefb4597b3a4d445388f690bc8ffd7d26d6"
+          }
+        ],
+        "requested_length": 6
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000195",
+        "cohort": "a976d860623b1479e4cb4bba40c33434f94364068e396de51221ea326047769f",
+        "programs": [
+          {
+            "length": 6,
+            "depth": 4,
+            "definition": "lib_20f509fd324164168461ad07d26413bd9e5e621f4430ef507449ffa2145f7e03"
+          }
+        ],
+        "requested_length": 6
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000196",
+        "cohort": "c1b3f0496c28062de5cf6a5d783d1100fd0fe364a10f3979c6c2ee62cc8f53d4",
+        "programs": [
+          {
+            "length": 6,
+            "depth": 4,
+            "definition": "lib_ba1ac7834766d5e1571ca5906100484e95b14ef336d5262b5fafa4a6c655d8fa"
+          }
+        ],
+        "requested_length": 6
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000197",
+        "cohort": "cce06d27bade2bda6d24695c4a4feca8577c2329e30cb4a1183df6700478cc19",
+        "programs": [
+          {
+            "length": 6,
+            "depth": 4,
+            "definition": "lib_2053f25b36aa0c1afea875bc32288ec76b49d4cfdf0ebabee396ce522b6c9f90"
+          }
+        ],
+        "requested_length": 6
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000198",
+        "cohort": "d8ddae28c60043d884cb9075dce83f9c58edf4db95e81b104908d6236eb40597",
+        "programs": [
+          {
+            "length": 6,
+            "depth": 4,
+            "definition": "lib_2993d77a40e478dc08cbed4912c1ebfb0db64c09296564090a2de1d54f32e615"
+          }
+        ],
+        "requested_length": 6
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000199",
+        "cohort": "e18614baf0cd4de4a93706ba28fba04c195ebf8789125ed7dc4a19693b9aefc8",
+        "programs": [
+          {
+            "length": 6,
+            "depth": 4,
+            "definition": "lib_8e19163596780325d215117d66e01697060f363e94354bc15fef4ecb3ed42e10"
+          }
+        ],
+        "requested_length": 6
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000200",
+        "cohort": "e457fcf0e88e92e813deed4bce83a0913e35257fd1b1f3d0dbbe022021b8a6e1",
+        "programs": [
+          {
+            "length": 6,
+            "depth": 4,
+            "definition": "lib_cfec3371af8045fe055d86e333f7280378c369b22c5261a2bab0ef596422c7d1"
+          }
+        ],
+        "requested_length": 6
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000201",
+        "cohort": "e58f78f261f74a131eb3cd697883c6e4ba8b99119cdfb1bc1a4a1895a7c7db65",
+        "programs": [
+          {
+            "length": 6,
+            "depth": 4,
+            "definition": "lib_2e3ee09bab9d6fd00953e61b92a335b9bb4ea791d24ef7a4f0be868c78bb7456"
+          }
+        ],
+        "requested_length": 6
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000202",
+        "cohort": "f41f2b458ddca5d666927afe95f2867ca83af0fb348758ba8d61d447cb40985e",
+        "programs": [
+          {
+            "length": 6,
+            "depth": 4,
+            "definition": "lib_b248e3e9e6edd788bfb8c1c4a52413c0643a5d9267634fedae4b1318202c32b0"
+          }
+        ],
+        "requested_length": 6
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000203",
+        "cohort": "fa2c8e2996508c6a54fd0f66c57fba8fbbbc0a71cff066802ce8367cea68f2d2",
+        "programs": [
+          {
+            "length": 6,
+            "depth": 4,
+            "definition": "lib_8f2c6f9466a28233d3b187f2bab1ad8cd9674b086dc9f0245765f4576daafdba"
+          }
+        ],
+        "requested_length": 6
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 3,
+        "job": "job-000204",
+        "cohort": "4af51093f13b3f0254b5967cc32e652962756e966ed074c21ba856bc0148ab4e",
+        "programs": [
+          {
+            "length": 5,
+            "depth": 4,
+            "definition": "lib_0f7c5a2a702d725d170ec78618943e8e523b5debb99a7eb4cb79d4088f69e888"
+          }
+        ],
+        "requested_length": 5
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 3,
+        "job": "job-000205",
+        "cohort": "7f14bb3d4231425b7a45991ca0384620edda2bf334ef22871a16f25606a99d4d",
+        "programs": [
+          {
+            "length": 5,
+            "depth": 4,
+            "definition": "lib_35cd87894b515f3a1bcf3ef6ab21f42ea7a471501b40826a309cf8e7974d4e41"
+          }
+        ],
+        "requested_length": 5
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 3,
+        "job": "job-000206",
+        "cohort": "f0e6a3e6eb89ad19ff80d3472c31410a68c61484284afec65fb566fd0685d14c",
+        "programs": [
+          {
+            "length": 5,
+            "depth": 4,
+            "definition": "lib_2e42a43953a95ac96cfc17710ea6a4206413adfad2e5279fac16f00383c8db7e"
+          }
+        ],
+        "requested_length": 5
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000207",
+        "cohort": "077c3434ace8a50377e2fae7a5285b2d3d4f167f9abca731d534e1fb80cca7a7",
+        "programs": [
+          {
+            "length": 5,
+            "depth": 4,
+            "definition": "lib_c6a56ab48af48827e181be5ec4324d7999f4d83284cbfb6249b0da3894b5d245"
+          }
+        ],
+        "requested_length": 5
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000208",
+        "cohort": "3ab569ce483945a41988229ae938953ea78b677fcd381ef818dce2069bbdd881",
+        "programs": [
+          {
+            "length": 5,
+            "depth": 4,
+            "definition": "lib_845befa9ccf5121101b478edec0b44d9dbbb29e3293114f9af3b9a1be2225b0d"
+          }
+        ],
+        "requested_length": 5
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000209",
+        "cohort": "3dca5e70d83a2b36c6a356a19944004a5e42852f228ab141cf3c341692641265",
+        "programs": [
+          {
+            "length": 5,
+            "depth": 4,
+            "definition": "lib_ec9a99315737ee00845cdd53c2b5527cd8a5c2e0d9a5f6f06656a8018f10d299"
+          }
+        ],
+        "requested_length": 5
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000210",
+        "cohort": "4987a748238c11653e6ab4ebb7c2a70e53d1b54a7ecc7cfa5949bf5a6e95af69",
+        "programs": [
+          {
+            "length": 5,
+            "depth": 4,
+            "definition": "lib_47b4521fddba35202d09ec9ec1b7bf2b98a48cc7d1e8a0ca8c87c67516b899c1"
+          }
+        ],
+        "requested_length": 5
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000211",
+        "cohort": "4ab3a62ba0dbb83a28da05c7c246036a4bbaa8663587e62f9b1ba9b67c17c0d1",
+        "programs": [
+          {
+            "length": 5,
+            "depth": 4,
+            "definition": "lib_9a83ccae5b39d2c7e58c8eaf70a82f800539342182f6e2bb9d2ff89b2ebbe7a4"
+          }
+        ],
+        "requested_length": 5
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000212",
+        "cohort": "61481635f970defa27c3cbb144bd8b9815a279bc6d589cd2239fe06ef90be24d",
+        "programs": [
+          {
+            "length": 5,
+            "depth": 4,
+            "definition": "lib_9675d72f6a785bba11336934b4768788be5556c6983303c53035c8b870e63150"
+          }
+        ],
+        "requested_length": 5
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000213",
+        "cohort": "698890a3af37a33582e170fa2e2661a6d0152772f5de360d6a054c3c285c5507",
+        "programs": [
+          {
+            "length": 5,
+            "depth": 4,
+            "definition": "lib_5e6f7cea94dd0c950dd84a1990202289207a0368ae8623a6c57fb893003df84a"
+          }
+        ],
+        "requested_length": 5
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000214",
+        "cohort": "6ef2f91498700484289b227ad9e3ccb94590a2c12e0631fcb68df973d190d101",
+        "programs": [
+          {
+            "length": 5,
+            "depth": 4,
+            "definition": "lib_b59e17ff7026718f53c7bdda63ec2e95f3b5ed476465e6e25b84082623eafd2a"
+          }
+        ],
+        "requested_length": 5
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000215",
+        "cohort": "7b9c21029ab1a0cf07b38e941207166fd5cfb1256ccb54b889e7262e0b03abf1",
+        "programs": [
+          {
+            "length": 5,
+            "depth": 4,
+            "definition": "lib_1a100a1acacd7126defda96cc914701f26e10a57de5ac729945b9cb211c65e7d"
+          }
+        ],
+        "requested_length": 5
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000216",
+        "cohort": "84ed49c9706c405e268aeeb1df88daeb70f524c836eef7246d6f6c89e2b13490",
+        "programs": [
+          {
+            "length": 5,
+            "depth": 4,
+            "definition": "lib_127606925cd0714169b2746294e817327cc51447dcb4899d26e358abbbee9e0a"
+          }
+        ],
+        "requested_length": 5
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000217",
+        "cohort": "9fff0564f3df2819574f54d24bbfacb8d2a3bccdfed439b889ec6b142bf97711",
+        "programs": [
+          {
+            "length": 5,
+            "depth": 4,
+            "definition": "lib_99fb4cac3e28de664ab5e6962e6d041aa203a48507e50ea383440d47c2e96ff0"
+          }
+        ],
+        "requested_length": 5
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000218",
+        "cohort": "a326c25a0e620324ef7e27aac596e13a8f1f9166e1f0d5f479340d44ae9a2a4d",
+        "programs": [
+          {
+            "length": 5,
+            "depth": 4,
+            "definition": "lib_54e75bb0bc88f5f84507f2245e5524a3407fc0bdcceee74e3c4b99eb8ff91de9"
+          }
+        ],
+        "requested_length": 5
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000219",
+        "cohort": "c8cc7b255e541e6dfb41e09761112620b425ee13ec11d76b40ff3452e761bc49",
+        "programs": [
+          {
+            "length": 5,
+            "depth": 4,
+            "definition": "lib_b0259f9a1b7b4cf2a6725b9e5cf1d655091c9e9a9e32af37b25d6ed46de7e8c6"
+          }
+        ],
+        "requested_length": 5
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000220",
+        "cohort": "e3f65e22dcdb3353e182c976ff10cc62469f1041b1b9992b42796209bd8b0c62",
+        "programs": [
+          {
+            "length": 5,
+            "depth": 4,
+            "definition": "lib_8e3696006e31cdf37cb9039f5a546d73175d2234b55f90caee8ef29c70f0b4af"
+          }
+        ],
+        "requested_length": 5
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000221",
+        "cohort": "ef54be41091e70edffa757ec654fb9b91cfa7c7d1d2ede4c142ae1eea9d8ebb7",
+        "programs": [
+          {
+            "length": 5,
+            "depth": 4,
+            "definition": "lib_2b732743336a5d7d21501e6ce88bbb73b02cc53e57652b20ae856c90864b32a6"
+          }
+        ],
+        "requested_length": 5
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000222",
+        "cohort": "efb06ab5d32713c8cdac88137cb1d4db2d5f41f967406f04436faff1435ee216",
+        "programs": [
+          {
+            "length": 5,
+            "depth": 4,
+            "definition": "lib_1b52a7202a564cbd5819ee4d3b024e0f2baf69810528ebfc7a619625b5f49087"
+          }
+        ],
+        "requested_length": 5
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000223",
+        "cohort": "fe6765f2cac6d0179de89fe869a13bad55fbb9ac93ec12887568d73c11637c2c",
+        "programs": [
+          {
+            "length": 5,
+            "depth": 4,
+            "definition": "lib_f0ed89940bcd566ce006d0108d338c4680417999a1c0d0fa1992db616d909342"
+          }
+        ],
+        "requested_length": 5
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000224",
+        "cohort": "053b5b8779d167643753c939d82aaf5f656cb8a5819d57ddab0bc1ba7616ca68",
+        "programs": [
+          {
+            "length": 4,
+            "depth": 3,
+            "definition": "lib_f070df0cbd700ddacfdd6eeb6187bbc1a4be051513d3755685218abb996cf705"
+          }
+        ],
+        "requested_length": 4
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000225",
+        "cohort": "0e0edd8427bb6543222c08886a4f7f98867fe5ed9801e808273dcf3bfdc48d87",
+        "programs": [
+          {
+            "length": 4,
+            "depth": 3,
+            "definition": "lib_1e6ad812097c2d39209bb7ef638b8e32c0713b8c9ba335493b3e4cba9595799c"
+          }
+        ],
+        "requested_length": 4
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000227",
+        "cohort": "1ed66ee6c135f5d5373e9fad74e1d2924054c4b54c8e50b3661435094d661efb",
+        "programs": [
+          {
+            "length": 4,
+            "depth": 3,
+            "definition": "lib_014b9a981ce72f94f1e248ec78bf1ba8bfa5de4e9cea4832fdf3733da7008525"
+          }
+        ],
+        "requested_length": 4
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000228",
+        "cohort": "30b320f437f2db1e58fb1fd994d67431f40507b886dd38e92ab59d8b6c75643c",
+        "programs": [
+          {
+            "length": 4,
+            "depth": 3,
+            "definition": "lib_573e8698df0d48f366fe7a8c441fb6a01ba1f9f2a59349dcdac66b5105141fbe"
+          }
+        ],
+        "requested_length": 4
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000229",
+        "cohort": "41ffb50affcf8e45a0b87aad1770bc5b834c22b8e9a1a0850b4d13384d786dc5",
+        "programs": [
+          {
+            "length": 4,
+            "depth": 3,
+            "definition": "lib_735b8273b109c041a4d7c9a5a075a483a3f9f237416e28fabe216b03c538d030"
+          }
+        ],
+        "requested_length": 4
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000230",
+        "cohort": "5102d7f02b425535ff66323d5e6f0e96fda149dc183a34a982bd4ba80790fc3a",
+        "programs": [
+          {
+            "length": 4,
+            "depth": 3,
+            "definition": "lib_5942e529694f933bb231f1fd626f980d552532d947c66f1c830a1e7e2a0dd34e"
+          }
+        ],
+        "requested_length": 4
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000231",
+        "cohort": "5454ea45aeaa2a7cfe69949c3c8d79946197d9573b27d9f737a125c6df945823",
+        "programs": [
+          {
+            "length": 4,
+            "depth": 3,
+            "definition": "lib_f398dcadb3f33a3cadd418b6a699d70de205b58e4e59885f9627a9c6180fadd4"
+          }
+        ],
+        "requested_length": 4
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000232",
+        "cohort": "605669030884cd0d47121fb05d6c5b004f6e657fe534b033fad1d01a76a6c25a",
+        "programs": [
+          {
+            "length": 4,
+            "depth": 3,
+            "definition": "lib_525af77fd8fd46828bdecba7bd8f965c1da932911ec24348246084c00e8657d0"
+          }
+        ],
+        "requested_length": 4
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000233",
+        "cohort": "702d22cd5dff10ee337622df928532b7e8a8f02337741c9a23a2beff7ad599a0",
+        "programs": [
+          {
+            "length": 4,
+            "depth": 3,
+            "definition": "lib_d5d58933bb91ef0b71f5424b4af5c060daf5e4d92e44a3d38c1ac348a8cbd6d6"
+          }
+        ],
+        "requested_length": 4
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000234",
+        "cohort": "86a4f6a5df75a2d00434fb6f6bcbb2910e05a9b734bb335b48f56ca2cc3eb17c",
+        "programs": [
+          {
+            "length": 4,
+            "depth": 3,
+            "definition": "lib_8a49e0e2852ede37231798d8bfdc435724eef7c1b1326a670a8ce80a8c005f9a"
+          }
+        ],
+        "requested_length": 4
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000235",
+        "cohort": "8e6efe6fc7a65eb1ca70478848f853daf7db67f4892d5a96f59c6ac471ac8d94",
+        "programs": [
+          {
+            "length": 4,
+            "depth": 3,
+            "definition": "lib_62efa1ed01e7b17c2a0e65e89df83d549e2986a0be68c55fba20762708d72997"
+          }
+        ],
+        "requested_length": 4
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000236",
+        "cohort": "c49f3d7f84dfdb23aaa81c3c61796b80417ceef03f5e70b96dd98ed30fccb569",
+        "programs": [
+          {
+            "length": 4,
+            "depth": 3,
+            "definition": "lib_0b9d99b92e91d498755bd86267728592556c273dff013e2d75b682c6b079874d"
+          }
+        ],
+        "requested_length": 4
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000237",
+        "cohort": "c5a7218f972162445745b3c9c9ecf42b851bb9843b240fd8792e73cc32664b29",
+        "programs": [
+          {
+            "length": 4,
+            "depth": 3,
+            "definition": "lib_89e47aa14b0fc9b32bfe03b4d4de35598220df7dcc022bc6a042a2ad845d8507"
+          }
+        ],
+        "requested_length": 4
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000238",
+        "cohort": "d106266f0505a9a9d4e4f644643b368ae471038accbcacf03c3100f812c0d84d",
+        "programs": [
+          {
+            "length": 4,
+            "depth": 3,
+            "definition": "lib_829aca337be0617d1fe44c8ac8a4bc74d02189b7194301442ed8a3d50ab39b2d"
+          }
+        ],
+        "requested_length": 4
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000239",
+        "cohort": "de79821cc1d63597f174697077eacfb68bddc00500f5e0c02b30af69ee875bb4",
+        "programs": [
+          {
+            "length": 4,
+            "depth": 3,
+            "definition": "lib_b46f134ed6a25a376c854def8b2d915ffdcdbeb060d6c555206f5f2139ef486f"
+          }
+        ],
+        "requested_length": 4
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000240",
+        "cohort": "ee4234ceae1288844b5f74f88e879c9c14797b661db0142aefc16b8ccbc41e21",
+        "programs": [
+          {
+            "length": 4,
+            "depth": 3,
+            "definition": "lib_9076b84bd084e67bc7606c8a6483bb50ef20f151c5704c33a75f2be5485fde4b"
+          }
+        ],
+        "requested_length": 4
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000241",
+        "cohort": "f20552ca41dd610cb9ebcac71994bf5af333a3c36cd30cfab182c1361b5efa55",
+        "programs": [
+          {
+            "length": 4,
+            "depth": 3,
+            "definition": "lib_ce9e26d21d6a54af3070cbeec4da6f114fcb36bbc79443e47af9e8329e4408d1"
+          }
+        ],
+        "requested_length": 4
+      },
+      {
+        "search_complete": true,
+        "rounds": 2,
+        "instances": 2,
+        "job": "job-000242",
+        "cohort": "f4763c8c1738f22a10548f2716acacd15881422ff25466b04177fb7eb8d32ab7",
+        "programs": [
+          {
+            "length": 4,
+            "depth": 3,
+            "definition": "lib_8edd243fbfe957dfac92059bc5f311c77191c414658bb5bd359d514c8e986820"
+          }
+        ],
+        "requested_length": 4
+      }
+    ],
+    "valid_higher_limit": [
+      {
+        "rounds": 3,
+        "cost": {
+          "output_programs": "3",
+          "engine_reported_post_rewrite_baseline": "3",
+          "pre_rewrite_input": "95",
+          "ratio_numerator": "95",
+          "new_definitions": "30",
+          "ratio_denominator": "33",
+          "initial_library": "0",
+          "final_total": "33"
+        },
+        "job": "job-000226",
+        "publication": "0e2d765190aa68a8a665324a22e70c69f6fc3b4bebf50e187412d85025de34de",
+        "programs": [
+          {
+            "length": 4,
+            "depth": 2,
+            "definition": "lib_1cdcf23d4c4c8902a2a8480fd52849c94226002a509f599ef1df36174ac2aebf"
+          }
+        ],
+        "total_heap_pops": 11482796
+      }
+    ]
+  },
+  "official_game_optimized": {
+    "terminal": {
+      "state": "WIN",
+      "levels_completed": 7,
+      "events": 752,
+      "frames": 1514,
+      "audited_actions": 744,
+      "single_session": true,
+      "scorecard_win": true,
+      "scorecard_sha256": "c692e0d029ca886fbbafa3c8c64664d0eb54726395c3ca253a79f40abcf5de83",
+      "progress_transfer": true,
+      "replay_exit": 0
+    },
+    "source": {
+      "schema_version": 1,
+      "suite_id": "autonomous-offline-win",
+      "run_id": "relation-goals-optimized-r04",
+      "git_commit": "7d519eb7d07adbac4cfa4e84faf35ce76f85ec84",
+      "worktree_sha256": "7274c4c8d341fe9c98baebc8e4ec9d70b9b525ff212b642676a2378e4d0104bb",
+      "config_sha256": "1042b988b2cb9a8e6ce2a14531af88bc97f0acbdceba1b7757055045e6fea853",
+      "locks": {
+        "python": "606a07ec1ecbd2282472e305c1b24f94107343ea491acef8969801b703d89540",
+        "julia": "0ec6da0595f34a8ef38d83105253b1733668929e66540aa61f9f9ec5d432bbc8",
+        "rust": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2"
+      },
+      "environment": "official_offline_http",
+      "isolation": "linux_namespaces",
+      "started_at": "2026-11-25T12:04:03.725516+00:00"
+    },
+    "runtime_engine": {
+      "binary_sha256": "d60bd5a0072f7792f59883db72cfb57f9015280b7993e5b6bdf2cbc3ef1e64ba",
+      "build_sha256": "661036ba76c94ae23b4bc9117ddf6a5fd8624f91fa48b9e2167c50030e836912"
+    },
+    "native_program": {
+      "completed_measurement_calls": 10,
+      "control_dispositions": {
+        "completed": 10
+      },
+      "ordinary_action_differences": 14,
+      "baseline_action_differences": 0,
+      "cross_level": true,
+      "relation_uses": []
+    },
+    "raw_artifact_index_sha256": "36dc42550ce2435d466e39394613a448f3654612c44087b9a850933e94885b59",
+    "trace_compared": {
+      "baseline": "measurement-program-official-r04",
+      "evaluated": "relation-goals-optimized-r04",
+      "baseline_confirmed": 752,
+      "new_confirmed": 752,
+      "baseline_terminal": "WIN",
+      "new_terminal": "WIN",
+      "compared_fields": [
+        "action_input",
+        "frame",
+        "state",
+        "levels_completed",
+        "win_levels",
+        "available_actions"
+      ],
+      "prefix_equal": true,
+      "trace_equal": true,
+      "first_difference": null
+    },
+    "verified_index_entries": 8405,
+    "observed_online_scheduling": {
+      "relation-goals-official-r02": {
+        "worker_count": 159,
+        "worker_endings": {
+          "worker_exit": 153,
+          "cgroup_oom_kill": 6
+        },
+        "cohorts": {
+          "search_incomplete": 5,
+          "unsubmitted": 70,
+          "search_complete": 74
+        },
+        "peak_worker_bytes": 6442450944
+      },
+      "relation-goals-optimized-r04": {
+        "worker_count": 137,
+        "worker_endings": {
+          "worker_exit": 137
+        },
+        "cohorts": {
+          "search_incomplete": 0,
+          "unsubmitted": 92,
+          "search_complete": 57
+        },
+        "peak_worker_bytes": 3282132992
+      }
+    }
+  },
+  "main_rebuild_check": {
+    "process": {
+      "old_pin": {
+        "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+        "build_sha256": "b4d791d8d11e9a69a0df1b37d75872a06dd2d3de379a75cc0fdc4b5960672486",
+        "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+        "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+        "rust_version": "1.90.0",
+        "binary_sha256": "7875508f65b90d21fa142b5d554277889a083b8351a21d9c75b657dd06a02272",
+        "protocol_version": "tddescat.learn.v3"
+      },
+      "new_pin": {
+        "source_git_tree": "8fbb34ecb3d53975795381cb250101c722249214",
+        "build_sha256": "661036ba76c94ae23b4bc9117ddf6a5fd8624f91fa48b9e2167c50030e836912",
+        "cargo_lock_sha256": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2",
+        "upstream_commit": "e4cd59047b9e1c7d04bc035a3c1cadd66a1b7c92",
+        "rust_version": "1.90.0",
+        "binary_sha256": "b74dde7f7eeaeeae380cbab456bf610a82a07919eeb41ce43ea34e734671625b",
+        "protocol_version": "tddescat.learn.v3"
+      },
+      "job": "job-000173",
+      "exit": 0,
+      "resource": {
+        "policy_sha256": "ba1da488e6cc355c50844ed244e71da8820673a34f4cbd48a18a663f1f14a903",
+        "schema_version": 2,
+        "explicit_memory_bytes": 6442450944,
+        "observed_cgroup_memory_bytes": 6442450944,
+        "cgroup_observed": true,
+        "cgroup_memory": {
+          "events": {
+            "low": 0,
+            "high": 0,
+            "max": 0,
+            "oom": 0,
+            "oom_kill": 0,
+            "oom_group_kill": 0
+          },
+          "peak_bytes": 2797568
+        },
+        "cgroup_sample_after_exit_record": true,
+        "process_exit_code": 0,
+        "termination_reason": "worker_exit",
+        "host_memory_bytes": 67341971456,
+        "runtime_deadline": null,
+        "unit": "tddesc-stitch-7948a25cd66e46318dc76053342f87a5.service"
+      }
+    },
+    "proof": [
+      {
+        "rounds": 2,
+        "cost": {
+          "output_programs": "7",
+          "engine_reported_post_rewrite_baseline": "7",
+          "pre_rewrite_input": "235",
+          "ratio_numerator": "499",
+          "new_definitions": "3",
+          "ratio_denominator": "274",
+          "initial_library": "264",
+          "final_total": "274"
+        },
+        "job": "job-000173",
+        "publication": "8519f6fb77e775a7f2e964060a4515e0d0d8f55d289566d0ab48f6cb81c83dc8",
+        "programs": [
+          {
+            "length": 5,
+            "depth": 4,
+            "definition": "lib_65fa4cc4788120dc22053ef25c429254adcaa844f68932db83dae51342ec8986"
+          }
+        ],
+        "total_heap_pops": 11
+      }
+    ]
+  }
+}
