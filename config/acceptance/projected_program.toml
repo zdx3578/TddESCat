@@ -1,0 +1,6 @@
+schema_version = 1
+kind = "projected_program"
+output_name = "projected-program"
+environment_config = "../bench_server.toml"
+judge_config = "../bench_scenarios.toml"
+timeout_seconds = 690

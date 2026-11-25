@@ -20,7 +20,7 @@ from tddesc_tools.run import (
 
 
 def solver_process(
-    root, runtime, public, *args, offline=False, script=None, extra_read=()
+    root, runtime, public, *args, offline=False, script=None, extra_read=(), timeout=155
 ):
     script = script or root / "scripts/run.jl"
     command = julia_command(root, runtime, script, *args)
@@ -33,7 +33,7 @@ def solver_process(
         extra_read=extra_read,
         offline=offline,
     )
-    return subprocess.run(command, capture_output=True, text=True, timeout=155)
+    return subprocess.run(command, capture_output=True, text=True, timeout=timeout)
 
 
 def assertions(public, scene, contracts):
