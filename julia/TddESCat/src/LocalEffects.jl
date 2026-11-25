@@ -194,8 +194,12 @@ function observed_effects(previous, current)
             push!(alternatives, "ambiguous_selection_binding")
         end
     end
-    if length(current.observation.frames) > 1
-        push!(alternatives, "intermediate_frames_require_separate_interpretation")
+    if haskey(public_delta,"response_trace")
+        # Equal snapshots contribute frame evidence to the same public action.
+        # A trace with extra visible transitions needs its own interpretation.
+        counts = [row["changed_pixels"] for row in public_delta["response_trace"]]
+        one_transition = all(!isnothing,counts) && count(>(0),counts) <= 1
+        one_transition || push!(alternatives,"intermediate_frames_require_separate_interpretation")
     end
     if possible_scene_transform(effects)
         push!(alternatives,"shared_scene_transform_or_joint_motion")
