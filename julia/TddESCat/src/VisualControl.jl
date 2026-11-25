@@ -18,6 +18,7 @@ struct VisualStep
     signal_after::Union{Nothing,VisualValue}
     action::Int
     minimum_charge::Int
+    contact::Union{Nothing,Symbol}
 end
 
 struct VisualContinuation
@@ -25,13 +26,15 @@ struct VisualContinuation
     reason::String
     frontier::Pixel
     reads::Vector{String}
+    contact_plan::Union{Nothing,NamedTuple}
+    effect_gain::Int
 end
 
 mutable struct VisualControl
     field::Union{Nothing,VisualField}
-    targets::Dict{Pixel,VisualValue}
+    targets::Dict{Pixel,VisualSite}
     matched::Set{Pixel}
-    failed_targets::Set{Tuple{Pixel,VisualValue}}
+    contact_samples::Vector{ContactSample}
     reads::Vector{String}
     changes::Dict{Tuple,Vector{VisualTransition}}
     contacts::Vector{VisualContact}
@@ -42,12 +45,12 @@ mutable struct VisualControl
     rate::Int
     refill::Dict{Tuple,String}
     spent::Set{Pixel}
-    reset_budget::Int
+    exhausted_evidence::Set{String}
     continuation::Union{Nothing,VisualContinuation}
 end
 
-VisualControl() = VisualControl(nothing,Dict(),Set(),Set(),String[],Dict(),VisualContact[],
-    SceneMemory(),Dict(),NamedTuple[],nothing,0,Dict(),Set(),-1,nothing)
+VisualControl() = VisualControl(nothing,Dict(),Set(),ContactSample[],String[],Dict(),VisualContact[],
+    SceneMemory(),Dict(),NamedTuple[],nothing,0,Dict(),Set(),Set(),nothing)
 
 function begin_visual_level!(control, spatial)
     if !isempty(spatial.role)
@@ -57,7 +60,6 @@ function begin_visual_level!(control, spatial)
     control.field = nothing
     empty!(control.targets)
     empty!(control.matched)
-    empty!(control.failed_targets)
     empty!(control.reads)
     empty!(control.contacts)
     control.scene = SceneMemory()
@@ -65,8 +67,27 @@ function begin_visual_level!(control, spatial)
     control.resource = nothing
     control.rate = 0
     empty!(control.spent)
-    control.reset_budget = -1
+    empty!(control.exhausted_evidence)
     control.continuation = nothing
+end
+
+function may_retry_visual_attempt!(control, spatial, level)
+    # Compare learned content rather than a count of frames or events. A newly
+    # revealed contact can change the next experiment even on a visited tile.
+    evidence = [
+        [control.field],
+        [(p,site.field,site.value) for (p,site) in control.targets],
+        [(p,action,move.first_landing,move.after)
+            for ((p,action),moves) in spatial.trials for move in moves],
+        [(p,tile.patch,tile.perimeter) for (p,tile) in control.scene.tiles],
+        [(c.patch,c.transition.before,c.transition.after) for c in control.contacts],
+        [(s.point,s.context,s.site.value,s.outcome) for s in control.contact_samples if s.level == level],
+        collect(keys(control.refill))
+    ]
+    revision = content_hash(JSON.json([sort!(unique!(JSON.json.(group))) for group in evidence]))
+    revision in control.exhausted_evidence && return false
+    push!(control.exhausted_evidence,revision)
+    return true
 end
 
 function begin_visual_attempt!(control)
@@ -91,35 +112,35 @@ function bind_visual_fields!(control, spatial, frame, here, event)
     stride = spatial_grid(spatial)
     any(iszero,stride) && return
     w,h = role_size(spatial.role)
-    motifs = visual_motifs(frame,2max(w,h)+1)
-    paired = []
-    for signal in motifs
-        targets = Dict{Pixel,VisualValue}()
-        for mark in motifs
-            mark.field.scale < signal.field.scale || continue
-            mark.field.background == signal.field.background || continue
-            mark.value.pigment == visual_floor(spatial) && continue
-            motif_contrast_boundary(frame,mark.field,max(w,h)) || continue
-            (mark.value.width,mark.value.height) == (signal.value.width,signal.value.height) || continue
-            b = mark.field.box
-            p = (2b.x+b.width-w,2b.y+b.height-h)
-            all(iseven,p) || continue
-            q = div.(p,2)
-            all(iszero,mod.(q .- here,stride)) || continue
-            targets[q] = mark.value
+    sites = Dict{Pixel,VisualSite}()
+    windows = VisualField[]
+    for motif in visual_motifs(frame,2max(w,h)+1)
+        b = motif.field.box
+        centered = (2b.x+b.width-w,2b.y+b.height-h)
+        point = div.(centered,2)
+        on_lattice = all(iseven,centered) && all(iszero,mod.(point .- here,stride))
+        if !on_lattice
+            push!(windows,motif.field)
+        elseif b.width <= w && b.height <= h &&
+                motif_contrast_boundary(frame,motif.field,max(w,h))
+            sites[point] = VisualSite(motif.field,motif.value,event)
         end
-        isempty(targets) || push!(paired,(field=signal.field,targets=targets))
     end
-    isempty(paired) && return
+    isempty(sites) && return
     modified = isnothing(control.field)
     if modified
-        best = argmax(row->(length(row.targets),row.field.scale),paired)
-        control.field = best.field
+        isempty(windows) && return
+        # Prefer a less compressed observation window as the initial context.
+        # This choice places no condition on admitted interactions.
+        control.field = first(sort!(windows;by=f->(-f.box.width*f.box.height,f.box.y,f.box.x)))
     end
-    for pair in paired
-        pair.field == control.field || continue
-        modified |= any(get(control.targets,p,nothing) != value for (p,value) in pair.targets)
-        merge!(control.targets,pair.targets)
+    for (point,site) in sites
+        point in control.matched && continue
+        existing = get(control.targets,point,nothing)
+        if isnothing(existing) || existing.value != site.value || existing.field != site.field
+            control.targets[point] = site
+            modified = true
+        end
     end
     modified && push!(control.reads,event)
 end
@@ -194,7 +215,9 @@ end
 
 function autonomous_visual_plan(control,spatial,obs,decision,event)
     proposed = visual_plan(control,spatial,obs,decision,event)
-    if !isnothing(proposed) && proposed.reason in ("visual_goal_hypothesis","experiment_on_goal_route")
+    if !isnothing(proposed) &&
+            (proposed.reason in ("learned_visual_contact","experiment_on_contact_relation") ||
+            get(proposed,:effect_gain,0) > 0)
         return proposed
     end
     survey = scene_survey(control,spatial,obs,decision)
@@ -216,16 +239,7 @@ function observe_visual!(control, spatial, before, after, move, effects)
             push!(control.reads,effects.event_id)
         end
     end
-    if here == there
-        if !isnothing(control.field) && haskey(spatial.offsets,after.observation.action["id"])
-            delta = first(measured_offset(spatial,after.observation.action["id"]))
-            target = here .+ delta
-            signal = visual_value(a,control.field)
-            target in keys(control.targets) && !isnothing(signal) &&
-                push!(control.failed_targets,(target,signal))
-        end
-        return
-    end
+    here == there && return
     control.scene.tick += 1
     move.first_landing != move.after && observe_boundary_motion!(control.boundary_rules,spatial,a,move)
     patch = Tuple(footprint(a,spatial.role,there))
@@ -246,10 +260,46 @@ function observe_visual!(control, spatial, before, after, move, effects)
     end
     first_view && bind_visual_fields!(control,spatial,b,there,effects.event_id)
     isnothing(control.field) && return
-    there in keys(control.targets) && push!(control.matched,there)
     old,new = visual_value(a,control.field),visual_value(b,control.field)
     (isnothing(old) || isnothing(new)) && return
     push!(control.contacts,VisualContact(there,control.scene.tick,patch,VisualTransition(old,new,effects.event_id)))
+end
+
+function observe_visual_contact!(control, spatial, before, after)
+    isnothing(control.field) && return nothing
+    before_obs, after_obs = before.observation,after.observation
+    frame = last(before_obs.frames)
+    origin = locate_role(frame,spatial.role)
+    action = after_obs.action["id"]
+    offset = measured_offset(spatial,action)
+    (isnothing(origin) || isnothing(offset)) && return nothing
+    point = origin .+ first(offset)
+    point in control.matched && return nothing
+    site = get(control.targets,point,nothing)
+    isnothing(site) && return nothing
+    context = visual_value(frame,control.field)
+    isnothing(context) && return nothing
+    read_site = visual_value(frame,site.field)
+    read_site == site.value || return nothing
+    positions = [locate_role(result,spatial.role) for result in after_obs.frames]
+    progress = before_obs.levels_completed < after_obs.levels_completed
+    outcome = if progress && point in positions
+        :progress
+    elseif progress
+        return nothing
+    elseif last(positions) == point
+        :entered
+    elseif all(==(origin),positions)
+        :blocked
+    else
+        return nothing
+    end
+    outcome == :blocked || push!(control.matched,point)
+    sample = ContactSample(before_obs.levels_completed,point,context,site,control.field,origin,
+        action,outcome,before.event["event_id"],after.event["event_id"],spatial.role,
+        first(last(offset)))
+    push!(control.contact_samples,sample)
+    return sample
 end
 
 function learned_visual_transitions(control, clock, spatial)
@@ -320,7 +370,6 @@ struct VisualRouteState
     signal::VisualValue
     charge::Int
     spent::Tuple
-    matched::Tuple
     phase::Int
 end
 
@@ -338,29 +387,31 @@ function extend_visual_set(items, point)
     return Tuple(sort!([items...;[point]]))
 end
 
-function route_proposal(control, route, index, evidence, here; probe=nothing)
-    reads = copy(evidence)
+function route_proposal(control, route, probe, evidence, here; contact_plan=nothing, effect_gain=0)
+    reads = [evidence;probe.reads]
+    index = probe.index
+    source = route[index].state
+    mode = isnothing(contact_plan) ? nothing : contact_plan.conditions.judgment
+    steps = [VisualStep(source.point,probe.point,source.signal,nothing,probe.action,source.charge,mode)]
     certain = true
-    steps = VisualStep[]
-    frontier = isnothing(probe) ? route[index].state.point : probe.point
-    if !isnothing(probe)
-        append!(reads,probe.reads)
-        source = route[index].state
-        push!(steps,VisualStep(source.point,probe.point,source.signal,nothing,probe.action,source.charge))
-    end
     while route[index].parent != 0
         link = route[index]
         source = route[link.parent].state
         certain &= link.predicted
         append!(reads,link.reads)
         push!(steps,VisualStep(source.point,link.state.point,source.signal,
-            link.predicted ? link.state.signal : nothing,link.action,source.charge))
+            link.predicted ? link.state.signal : nothing,link.action,source.charge,nothing))
         index = link.parent
     end
     reverse!(steps)
-    reason = isnothing(probe) ? (certain ? "visual_goal_hypothesis" : "experiment_on_goal_route") :
+    reason = if isnothing(contact_plan)
         "experiment_on_unknown_visual_effect"
-    control.continuation = VisualContinuation(steps,reason,frontier,unique!(reads))
+    elseif mode == :admitted && certain
+        "learned_visual_contact"
+    else
+        "experiment_on_contact_relation"
+    end
+    control.continuation = VisualContinuation(steps,reason,probe.point,unique!(reads),contact_plan,effect_gain)
     return take_visual_step!(control,here)
 end
 
@@ -369,11 +420,13 @@ function take_visual_step!(control, here; checked=String[])
     step = popfirst!(continuation.steps)
     isempty(continuation.steps) && (control.continuation = nothing)
     return (id=step.action,reason=continuation.reason,reads=unique([continuation.reads;checked]),role=here,
-        destination=step.to,frontier=continuation.frontier,expected=step.signal_after)
+        destination=step.to,frontier=continuation.frontier,expected=step.signal_after,
+        contact=continuation.contact_plan,executes_contact=!isnothing(step.contact),
+        effect_gain=continuation.effect_gain)
 end
 
 function revalidate_visual_step!(control, spatial, frame, here, signal, charge, motions,
-        floor, targets, clock, transitions)
+        floor, targets, clock, transitions, fitted, level, event)
     isnothing(control.continuation) && return nothing
     step = first(control.continuation.steps)
     if step.from == here && step.signal_before == signal && charge >= step.minimum_charge &&
@@ -386,10 +439,23 @@ function revalidate_visual_step!(control, spatial, frame, here, signal, charge, 
             timed = timed_patch(clock,tile.patch,step.to,control.scene.tick+1,plain)
             patch = timed.patch
             reads = [control.reads;motion.reads;tile.reads;timed.reads]
-            gate = step.to in targets
-            if gate && signal == control.targets[step.to] && (step.to,signal) ∉ control.failed_targets
-                return take_visual_step!(control,here;checked=reads)
-            elseif !gate
+            if step.to in targets && !isnothing(step.contact)
+                site = control.targets[step.to]
+                signature = contact_signature(signal,site.value)
+                judgment = contact_judgment(fitted,signature)
+                tested = contact_observed(control.contact_samples,level,step.to,signal,site.value)
+                planned_site = control.continuation.contact_plan.site
+                if site == planned_site && visual_value(frame,site.field) == site.value &&
+                        judgment == step.contact && (!tested || judgment == :admitted)
+                    plan = control.continuation.contact_plan
+                    control.continuation = VisualContinuation(control.continuation.steps,
+                        control.continuation.reason,control.continuation.frontier,
+                        control.continuation.reads,merge(plan,(conditions=contact_conditions(fitted,signature),
+                            selected_at=event)),
+                        control.continuation.effect_gain)
+                    return take_visual_step!(control,here;checked=[reads;fitted.reads])
+                end
+            elseif step.to ∉ targets && isnothing(step.contact)
                 inferred = visual_prediction(transitions,patch,signal)
                 value = if isnothing(inferred)
                     !isempty(patch) && (allequal(patch) || haskey(control.refill,patch)) ? signal : nothing
@@ -407,16 +473,18 @@ function revalidate_visual_step!(control, spatial, frame, here, signal, charge, 
     return nothing
 end
 
-visual_outline(value) = (value.width,value.height,value.mask)
-
-function experiment_relevance(samples, current, targets)
-    isempty(targets) && return 0
-    # Compare the channels a landmark has measurably changed to those that
-    # still differ between the current binding and a candidate target.
-    pigments = any(row->row.before.pigment != row.after.pigment,samples)
-    outlines = any(row->visual_outline(row.before) != visual_outline(row.after),samples)
-    return maximum(Int(pigments && current.pigment != target.pigment) +
-        Int(outlines && visual_outline(current) != visual_outline(target)) for target in targets)
+function experiment_relevance(samples, current, sites, fitted)
+    changed = foldl(|,(xor(contact_signature(sample.before,sample.after),
+        (1 << length(CONTACT_COMPARISONS))-1) for sample in samples);init=0)
+    iszero(changed) && return 0
+    score = 0
+    for target in sites, guard in fitted.rules
+        current_signature = contact_signature(current,target)
+        required = guard.same | guard.different
+        unmet = xor(current_signature,guard.same) & required
+        score = max(score,count_ones(unmet & changed))
+    end
+    return score
 end
 
 function projected_motion(control, spatial, frame, from, action, delta, here, floor, targets)
@@ -468,26 +536,30 @@ function visual_plan(control, spatial, obs, decision, event)
     motions = Dict(id=>measured_offset(spatial,id) for id in action_ids)
     charge = isnothing(control.resource) ? typemax(Int) : read_counter(frame,control.resource)
     rate = isnothing(control.resource) ? 0 : max(1,control.rate)
-    targets = filter(p->p ∉ control.matched,collect(keys(control.targets)))
+    targets = sort!([p for p in keys(control.targets) if p ∉ control.matched])
+    fitted = fit_contact_guards(control.contact_samples)
+    level = obs.levels_completed
     continued = revalidate_visual_step!(control,spatial,frame,here,signal,charge,motions,
-        floor,targets,clock,transitions)
+        floor,targets,clock,transitions,fitted,level,event)
     isnothing(continued) || return continued
-    initial = VisualRouteState(here,signal,charge,Tuple(sort!(collect(control.spent))),(),
+    initial = VisualRouteState(here,signal,charge,Tuple(sort!(collect(control.spent))),
         mod(control.scene.tick,clock.period))
     cache = Dict{Pixel,NamedTuple}()
     edges = Dict{Tuple{Pixel,Int},Union{Nothing,NamedTuple}}()
     predictions = Dict{Tuple{Tuple,VisualValue},Union{Nothing,NamedTuple}}()
+    contacts = Dict{Tuple{Pixel,VisualValue},NamedTuple}()
     route = [VisualRouteLink(initial,0,0,String[],true,0)]
-    visited = Dict{Tuple{Pixel,VisualValue,Tuple,Tuple,Int},Int}(
-        (here,signal,initial.spent,initial.matched,initial.phase)=>charge)
+    visited = Dict{Tuple{Pixel,VisualValue,Tuple,Int},Int}(
+        (here,signal,initial.spent,initial.phase)=>charge)
     experiment = nothing
     best_score = nothing
-    evidence = unique([spatial.role_reads;control.reads])
-    goals = [control.targets[p] for p in targets]
+    contact = nothing
+    contact_rank = nothing
+    evidence = unique([event;spatial.role_reads;control.reads])
+    goals = [control.targets[p].value for p in targets]
+    effect_scores = Dict{Tuple{Tuple,VisualValue},Int}()
     for (index,row) in enumerate(route)
         s = row.state
-        !isempty(targets) && all(p->p in s.matched,targets) &&
-            return route_proposal(control,route,index,evidence,here)
         s.charge > 0 || continue
         for id in action_ids
             delta,sources = motions[id]
@@ -503,37 +575,57 @@ function visual_plan(control, spatial, obs, decision, event)
             timed = timed_patch(clock,tile.patch,destination,phase,plain)
             patch = timed.patch
             isempty(patch) && continue
-            gate = destination in targets && destination ∉ s.matched
-            opened = destination in s.matched
-            if gate
-                s.signal == control.targets[destination] || continue
-                (destination,s.signal) in control.failed_targets && continue
-            elseif !opened && !haskey(spatial.layouts,destination) && 2count(==(floor),patch) < length(patch)
+            reads = [first(sources);tile.reads;timed.reads;edge.reads]
+            if destination in targets
+                site = control.targets[destination]
+                observation = get!(contacts,(destination,s.signal)) do
+                    signature = contact_signature(s.signal,site.value)
+                    judgment = contact_judgment(fitted,signature)
+                    tested = contact_observed(control.contact_samples,level,destination,s.signal,site.value)
+                    (;signature,judgment,tested)
+                end
+                draft = (index=index,action=id,point=destination,reads=[reads;site.event;fitted.reads])
+                if observation.judgment == :admitted
+                    plan = (point=destination,site=site,context=s.signal,field=control.field,
+                        conditions=contact_conditions(fitted,observation.signature),selected_at=event)
+                    return route_proposal(control,route,draft,evidence,here;contact_plan=plan)
+                end
+                if !observation.tested
+                    rank = (observation.judgment == :unknown,-row.depth,s.charge)
+                    if isnothing(contact_rank) || rank > contact_rank
+                        contact_rank = rank
+                        contact = (probe=draft,context=s.signal,site=site,signature=observation.signature)
+                    end
+                end
                 continue
             end
-            prediction = if gate || opened
-                (value=s.signal,reads=String[])
-            else
-                get!(predictions,(patch,s.signal)) do
-                    visual_prediction(transitions,patch,s.signal)
-                end
+            opened = destination in control.matched
+            if !opened && !haskey(spatial.layouts,destination) && 2count(==(floor),patch) < length(patch)
+                continue
+            end
+            prediction = get!(predictions,(patch,s.signal)) do
+                visual_prediction(transitions,patch,s.signal)
             end
             collectible = haskey(control.refill,patch)
-            if isnothing(prediction) && (allequal(patch) || collectible)
+            if isnothing(prediction) && (allequal(patch) || collectible || opened)
                 prediction = (value=s.signal,reads=String[])
             end
             predicted = !isnothing(prediction)
             if !predicted
-                score = (experiment_relevance(get(transitions,patch,VisualTransition[]),s.signal,goals),
-                    -row.depth,s.charge)
+                gain = get!(effect_scores,(patch,s.signal)) do
+                    samples = get(transitions,patch,VisualTransition[])
+                    any(sample->sample.before == s.signal,samples) && return 0
+                    experiment_relevance(samples,s.signal,goals,fitted)
+                end
+                score = (gain,-row.depth,s.charge)
                 if isnothing(best_score) || score > best_score
                     best_score = score
+                    witnesses = [sample.event for sample in get(transitions,patch,VisualTransition[])]
                     experiment = (index=index,action=id,point=destination,
-                        reads=[first(sources);tile.reads;timed.reads;edge.reads])
+                        reads=unique([reads;witnesses;fitted.reads]),gain)
                 end
-                # A currently matching signal can motivate a route experiment
-                # while an unexplained surface remains open to immediate refutation.
-                any(control.targets[p] == s.signal for p in targets) || continue
+                any(value->contact_judgment(fitted,contact_signature(s.signal,value)) == :admitted,goals) ||
+                    continue
                 prediction = (value=s.signal,reads=String[])
             end
             new_charge, spent = max(0,s.charge-rate),s.spent
@@ -542,16 +634,20 @@ function visual_plan(control, spatial, obs, decision, event)
                 new_charge = max(capacity.width,capacity.height)
                 spent = extend_visual_set(spent,destination)
             end
-            matched = gate ? extend_visual_set(s.matched,destination) : s.matched
-            key = (destination,prediction.value,spent,matched,phase)
+            key = (destination,prediction.value,spent,phase)
             new_charge > get(visited,key,-1) || continue
             visited[key] = new_charge
-            required = [first(sources);tile.reads;timed.reads;edge.reads;prediction.reads]
-            spent != s.spent && push!(required,control.refill[patch])
-            push!(route,VisualRouteLink(VisualRouteState(destination,prediction.value,new_charge,spent,matched,phase),
-                index,id,required,predicted,row.depth+1))
+            append!(reads,prediction.reads)
+            spent != s.spent && push!(reads,control.refill[patch])
+            push!(route,VisualRouteLink(VisualRouteState(destination,prediction.value,new_charge,spent,phase),
+                index,id,reads,predicted,row.depth+1))
         end
     end
+    if !isnothing(contact) && (contact_rank[1] || isnothing(experiment))
+        plan = (point=contact.probe.point,site=contact.site,context=contact.context,field=control.field,
+            conditions=contact_conditions(fitted,contact.signature),selected_at=event)
+        return route_proposal(control,route,contact.probe,evidence,here;contact_plan=plan)
+    end
     isnothing(experiment) && return nothing
-    return route_proposal(control,route,experiment.index,evidence,here;probe=experiment)
+    return route_proposal(control,route,experiment,evidence,here;effect_gain=experiment.gain)
 end

@@ -564,10 +564,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         obs.state in ("WIN","GAME_OVER") && break
         if !isnothing(visual) && !isnothing(visual.resource) &&
                 read_counter(last(obs.frames),visual.resource) == 0
-            evidence_size = length(Set((c.patch,c.transition.before,c.transition.after)
-                for c in visual.contacts)) + length(spatial.visits) + length(visual.scene.tiles)
-            evidence_size == visual.reset_budget && break
-            visual.reset_budget = evidence_size
+            may_retry_visual_attempt!(visual,spatial,obs.levels_completed) || break
             reset = reset!(rec,obs.game_id)
             reset["completion"] == "confirmed" && rec.observation.levels_completed == obs.levels_completed || break
             event = read_json(store_path(rec.store,"events",rec.before_ref * ".json"))
@@ -736,7 +733,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         effects = observed_effects(entry,resulting)
         spatial_feedback = nothing
         visual_feedback = nothing
+        contact_feedback = nothing
         if !isnothing(spatial)
+            contact_feedback = observe_visual_contact!(visual,spatial,entry,resulting)
             if obs.levels_completed == resulting.observation.levels_completed
                 spatial_feedback = observe_spatial!(spatial,entry,resulting,effects)
                 observe_visual!(visual,spatial,entry,resulting,spatial_feedback,effects)
@@ -818,7 +817,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 "actual"=>assessment.actual,"assessments"=>assessment.assessments,"revisions"=>revisions,
                 "evidence"=>public_effect_record(effects),"coverage"=>coverage_record(decision,item,effects,assessment),
                 "policy"=>policy_note,"program"=>program_note,"spatial_feedback"=>spatial_feedback,
-                "visual_feedback"=>visual_feedback))
+                "visual_feedback"=>visual_feedback,"contact_feedback"=>contact_feedback))
         attempts[action_key(item.action)] = get(attempts,action_key(item.action),0) + 1
         push!(history,item.action["id"])
         frozen || push!(pairs,(entry,resulting))

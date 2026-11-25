@@ -24,6 +24,12 @@ from tddesc_tools.run import (
     write_json,
 )
 
+from tests.bench.autonomous_audit import (
+    audit_contact_plan,
+    audit_contact_sample,
+    require,
+)
+
 
 def offline_capture(root, task, run):
     public = run / "public"
@@ -136,6 +142,12 @@ def autonomous_report(root, run):
     progress = []
     decisions = []
     structural_consumption = []
+    contact_samples = {}
+    contact_control = []
+    audited_actions = []
+    bootstrap_actions = []
+    audit_errors = []
+    parents = {}
     for event in ordered:
         ref = event["event_id"]
         receipt = json.loads((public / "blobs" / event["response_blob"]).read_bytes())
@@ -143,38 +155,118 @@ def autonomous_report(root, run):
         command = descriptor["command_ref"]
         position = receipt["levels_completed"]
         before = through_level
-        check_path = public / "checks" / f"{command}.json"
-        if check_path.is_file():
-            check = json.loads(check_path.read_bytes())
-            prediction = json.loads(
-                (public / "predictions" / f"{command}.json").read_bytes()
-            )
-            experiment = prediction.get("spatial_experiment", {})
-            sources = experiment.get("reads", [])
-            trained = [
-                read
-                for read in sources
-                if read in receipts and receipts[read]["action_input"]["id"] != 0
-            ]
-            if (
-                trained
-                and set(sources) <= receipts.keys()
-                and experiment.get("reason") == "visual_goal_hypothesis"
-                and (
-                    position > before
-                    or (check.get("visual_feedback") or {}).get("verdict")
-                    == "supported"
+        parents[ref] = descriptor["before_ref"]
+        if receipt["action_input"]["id"] != 0:
+            try:
+                before_receipt = receipts[parents[ref]]
+                check = json.loads((public / "checks" / f"{command}.json").read_bytes())
+                decision = json.loads(
+                    (public / "decisions" / f"{command}.json").read_bytes()
                 )
-            ):
-                decisions.append({"event": ref, "level": before + 1, "reads": trained})
-            if (
-                check["definition_refs"]
-                and check["assessments"]
-                and set(check["assessments"].values()) == {"supported"}
-            ):
-                structural_consumption.append(
-                    {"event": ref, "definitions": check["definition_refs"]}
+                prediction = json.loads(
+                    (public / "predictions" / f"{command}.json").read_bytes()
                 )
+                require(
+                    check["event_ref"] == ref
+                    and decision["before_ref"] == parents[ref]
+                    and descriptor["action"]
+                    == prediction["action"]
+                    == decision["action"]
+                    == check["action"]
+                    and descriptor["action"]["id"] == receipt["action_input"]["id"]
+                    and descriptor["action"]["id"]
+                    in before_receipt["available_actions"],
+                    "action_witness",
+                )
+                experiment = prediction.get("spatial_experiment")
+                reads = set(check["read_events"])
+                require(
+                    reads <= receipts.keys() and parents[ref] in reads,
+                    "action_read_scope",
+                )
+                require(
+                    experiment == decision.get("spatial_experiment"), "frozen_selection"
+                )
+                trained = []
+                if experiment:
+                    sources = set(experiment["reads"])
+                    require(sources <= reads, "unrecorded_spatial_reads")
+                    require(
+                        experiment["id"] == decision["action"]["id"],
+                        "substituted_action",
+                    )
+                    trained = sorted(
+                        read
+                        for read in sources
+                        if receipts[read]["action_input"]["id"] != 0
+                    )
+                    require(trained, "empty_spatial_training")
+                    decisions.append(
+                        {"event": ref, "level": before + 1, "reads": trained}
+                    )
+                    if plan := experiment.get("contact"):
+                        require(
+                            plan["point"] == experiment["frontier"],
+                            "control_frontier",
+                        )
+                        executing = experiment["executes_contact"]
+                        if executing:
+                            require(
+                                plan["point"] == experiment["destination"],
+                                "control_landing",
+                            )
+                        judgment, contrasted = audit_contact_plan(
+                            plan,
+                            contact_samples,
+                            reads,
+                            receipts,
+                            executing=executing,
+                            before=before_receipt,
+                        )
+                        if executing:
+                            reported = check.get("contact_feedback")
+                            if reported:
+                                require(
+                                    reported["point"] == plan["point"]
+                                    and reported["site"] == plan["site"]
+                                    and reported["context"] == plan["context"],
+                                    "substituted_contact",
+                                )
+                            contact_control.append(
+                                {
+                                    "event": ref,
+                                    "level": before + 1,
+                                    "judgment": judgment,
+                                    "contrasted": contrasted,
+                                    "training": plan["conditions"]["sample_events"],
+                                    "outcome": (
+                                        check.get("contact_feedback") or {}
+                                    ).get("outcome"),
+                                }
+                            )
+                elif not decisions and decision["reason"] == "uncovered":
+                    bootstrap_actions.append(ref)
+                else:
+                    require(
+                        check["definition_refs"] and prediction["model_version"],
+                        "unaccounted_action_selection",
+                    )
+                if sample := check.get("contact_feedback"):
+                    audit_contact_sample(
+                        sample, ref, before_receipt, receipt, receipts, parents
+                    )
+                    contact_samples[ref] = sample
+                if (
+                    check["definition_refs"]
+                    and check["assessments"]
+                    and set(check["assessments"].values()) == {"supported"}
+                ):
+                    structural_consumption.append(
+                        {"event": ref, "definitions": check["definition_refs"]}
+                    )
+                audited_actions.append(ref)
+            except (OSError, KeyError, TypeError, ValueError) as error:
+                audit_errors.append({"event": ref, "error": str(error)})
         if position != before:
             progress.append(
                 {"completed": position, "event": ref, "sha256": event["response_blob"]}
@@ -209,10 +301,26 @@ def autonomous_report(root, run):
     single_session = {(row["game_id"], row["guid"]) for row in receipts.values()} == {
         (game_id, final.get("guid"))
     }
+    isolation = json.loads((public / "solver-isolation.json").read_bytes())
+    isolated = bool(isolation) and all(isolation.values())
     passed = (
         cold
+        and isolated
         and single_session
         and target > 0
+        and not audit_errors
+        and {row["event"] for row in progress}
+        == {row["event"] for row in contact_control if row["outcome"] == "progress"}
+        and all(
+            contact_samples.get(row["event"], {}).get("outcome") == "progress"
+            for row in progress
+        )
+        and any(
+            row["contrasted"]
+            and row["judgment"] == "admitted"
+            and row["outcome"] == "progress"
+            for row in contact_control
+        )
         and [row["completed"] for row in progress] == list(range(1, target + 1))
         and final.get("state") == "WIN"
         and official_completion
@@ -229,6 +337,12 @@ def autonomous_report(root, run):
         "events": len(ordered),
         "frames": sum(row["frame_count"] for row in ordered),
         "learned_decisions": decisions,
+        "audited_actions": len(audited_actions),
+        "bootstrap_actions": bootstrap_actions,
+        "audit_errors": audit_errors,
+        "contact_samples": list(contact_samples.values()),
+        "contact_control": contact_control,
+        "isolated": isolated,
         "structural_consumption": structural_consumption,
         "scorecard_sha256": close.get("response_blob"),
         "scorecard_win": official_completion,

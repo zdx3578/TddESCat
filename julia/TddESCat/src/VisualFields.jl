@@ -14,6 +14,8 @@ end
 function visual_value(frame, field::VisualField)
     box = field.box
     scale = field.scale
+    scale > 0 && box.width % scale == box.height % scale == 0 || return nothing
+    checkbounds(Bool,frame,box.y+box.height,box.x+box.width) || return nothing
     width,height = div(box.width,scale),div(box.height,scale)
     width*height <= 64 || return nothing
     mask = UInt64(0)

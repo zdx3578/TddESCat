@@ -9,32 +9,47 @@ function picture_entry(ref, parent, action, frame)
     return (event=Dict("event_id"=>ref,"before_ref"=>parent),observation=observation)
 end
 
-@testset "A completed target remains on a projected route" begin
+@testset "Public contact evidence chooses between candidate relations" begin
     frame = fill(0x00,4,5)
-    frame[1,:] = [0x07,0x0c,0x02,0x0d,0x00]
+    frame[1,:] = [0x07,0x0c,0x02,0x00,0x00]
     frame[3,4] = 0x02
     state = TS.SpatialLearning()
     state.role = [(0,0,0x0c)]
     state.role_reads = ["motion"]
     state.offsets[2] = Dict((1,0)=>["right"])
     state.offsets[3] = Dict((-1,0)=>["left"])
-    state.layouts[(0,0)] = [0x07]
-    state.layouts[(1,0)] = [0x06]
-    state.floors[0x06] = 1
+    state.floors[0x00] = 1
     control = TS.VisualControl()
-    control.field = TS.VisualField(Window(3,2,1,1),0x00,1)
-    before = TS.VisualValue(1,1,UInt64(1),0x02)
-    after = TS.VisualValue(1,1,UInt64(1),0x0d)
-    control.targets[(2,0)] = before
-    control.targets[(3,0)] = after
-    control.changes[(0x07,)] = [TS.VisualTransition(before,after,"signal")]
+    field = TS.VisualField(Window(3,2,1,1),0x00,1)
+    control.field = field
+    same = TS.VisualValue(1,1,UInt64(1),0x02)
+    different = TS.VisualValue(1,1,UInt64(1),0x07)
+    left = TS.VisualSite(TS.VisualField(Window(0,0,1,1),0x00,1),different,"visible")
+    right = TS.VisualSite(TS.VisualField(Window(2,0,1,1),0x00,1),same,"visible")
+    control.targets[(0,0)] = left
+    control.targets[(2,0)] = right
     observation = picture_entry("fresh",nothing,0,frame).observation
     domain = (ranked=[(action=Dict("id"=>id),) for id in (2,3)],)
+    cold = TS.visual_plan(control,state,observation,domain,"fresh")
+    @test cold.reason == "experiment_on_contact_relation"
+    @test cold.id == 2
+    @test cold.contact.conditions.judgment == :unknown
+    denied = TS.ContactSample(0,(2,0),same,right,field,(1,0),2,:blocked,
+        "before-block","blocked",state.role,"right")
+    permitted = TS.ContactSample(0,(0,0),same,left,field,(1,0),3,:entered,
+        "before-entry","entered",state.role,"left")
+    append!(control.contact_samples,[denied,permitted])
     command = TS.visual_plan(control,state,observation,domain,"fresh")
-    @test command.reason == "visual_goal_hypothesis"
-    @test command.destination == (2,0)
-    @test "signal" in command.reads
-    @test [step.to for step in control.continuation.steps] == [(1,0),(0,0),(1,0),(2,0),(3,0)]
+    @test command.reason == "learned_visual_contact"
+    @test command.id == 3
+    @test command.executes_contact
+    @test all(ref->ref in command.reads,["entered","blocked"])
+    contradiction = TS.ContactSample(0,(0,0),same,left,field,(1,0),3,:blocked,
+        "before-counterexample","later-blocked",state.role,"left")
+    push!(control.contact_samples,contradiction)
+    @test isempty(TS.fit_contact_guards(control.contact_samples).rules)
+    @test TS.contact_judgment(TS.fit_contact_guards(control.contact_samples),
+        TS.contact_signature(same,different)) == :unknown
 end
 
 @testset "Learned input binding and exploration" begin
