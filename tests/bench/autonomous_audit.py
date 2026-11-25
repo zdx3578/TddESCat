@@ -2,10 +2,12 @@
 
 from hashlib import sha256
 from itertools import product
+from math import gcd
 import json
 
 
 COMPARISONS = ("extent", "support", "pigment", "cardinality")
+CONTACT_DOMAIN = "visible-site-obligations-v2"
 
 
 def require(condition, reason):
@@ -94,7 +96,9 @@ def audit_site_geometry(point, field, role):
     )
 
 
-def audit_site_facts(facts, receipts, level, role=None):
+def audit_site_facts(
+    facts, receipts, level, role=None, *, domain=None, domain_reads=None
+):
     points = set()
     for point, site in facts["remaining"]:
         require(tuple(point) not in points, "repeated_site_binding")
@@ -107,21 +111,44 @@ def audit_site_facts(facts, receipts, level, role=None):
         )
         if role:
             audit_site_geometry(point, site["field"], role)
+    if domain is not None:
+        require(facts.get("domain_version") == CONTACT_DOMAIN, "site_domain_version")
+        require(
+            {tuple(point): site for point, site in facts["remaining"]} == domain,
+            "incomplete_or_substituted_site_domain",
+        )
+    if domain_reads is not None:
+        require(
+            set(facts["domain_reads"]) == domain_reads <= receipts.keys(),
+            "site_domain_reads",
+        )
     return points
 
 
-def audit_progress_sample(sample, before, after, receipts):
+def audit_progress_sample(sample, before, after, receipts, *, site_domain=None):
     facts = sample["facts"]
     require(
         facts["previous_action"] == before["action_input"]["id"], "progress_history"
     )
     require(sample["public_state"] == after["state"], "public_terminal_label")
-    points = audit_site_facts(facts, receipts, sample["level"], sample["role"])
-    require(tuple(sample["point"]) in points, "missing_contact_binding")
-    require(
-        [sample["point"], sample["site"]] in facts["remaining"],
-        "substituted_site_context",
+    audit_site_facts(
+        facts,
+        receipts,
+        sample["level"],
+        sample["role"],
+        domain=None if site_domain is None else site_domain.remaining(),
+        domain_reads=None if site_domain is None else site_domain.reads(),
     )
+    if site_domain is None:
+        require(
+            [sample["point"], sample["site"]] in facts["remaining"],
+            "substituted_site_context",
+        )
+    else:
+        require(
+            site_domain.sites.get(tuple(sample["point"])) == sample["site"],
+            "substituted_site_context",
+        )
 
 
 def progress_variables(row, action):
@@ -132,10 +159,27 @@ def progress_variables(row, action):
     }
 
 
-def audit_progress_plan(plan, samples, reads, receipts, *, executing, before, action):
+def audit_progress_plan(
+    plan,
+    samples,
+    reads,
+    receipts,
+    *,
+    executing,
+    before,
+    action,
+    domain=None,
+    domain_reads=None,
+):
     progress = plan["progress"]
     facts = progress["facts"]
-    points = audit_site_facts(facts, receipts, before["levels_completed"])
+    points = audit_site_facts(
+        facts,
+        receipts,
+        before["levels_completed"],
+        domain=domain,
+        domain_reads=domain_reads,
+    )
     require(tuple(plan["point"]) in points, "missing_progress_target")
     require(
         [plan["point"], plan["site"]] in facts["remaining"], "wrong_progress_target"
@@ -149,7 +193,10 @@ def audit_progress_plan(plan, samples, reads, receipts, *, executing, before, ac
     entries = []
     for ref in receipts:
         sample = samples.get(ref)
-        if sample and sample["outcome"] in ("entered", "progress"):
+        outstanding = (
+            sample and [sample["point"], sample["site"]] in sample["facts"]["remaining"]
+        )
+        if outstanding and sample["outcome"] in ("entered", "progress"):
             entries.append(sample)
         if ref == plan["selected_at"]:
             break
@@ -158,9 +205,11 @@ def audit_progress_plan(plan, samples, reads, receipts, *, executing, before, ac
         "omitted_progress_evidence",
     )
     sources = {site["event"] for _, site in facts["remaining"]}
+    sources.update(facts.get("domain_reads", ()))
     for entry in entries:
         sources.update((entry["event"], entry["before"]))
         sources.update(site["event"] for _, site in entry["facts"]["remaining"])
+        sources.update(entry["facts"].get("domain_reads", ()))
     require(sources == set(progress["reads"]) <= reads, "progress_reads")
 
     observed = {row["outcome"] == "progress" for row in entries}
@@ -181,6 +230,8 @@ def audit_progress_plan(plan, samples, reads, receipts, *, executing, before, ac
                 votes.append(outcomes.get(value))
     require(progress["rules"] == candidates, "progress_rules")
     body = [[row["variable"], row["rows"]] for row in candidates]
+    if body and facts.get("domain_version") == CONTACT_DOMAIN:
+        body = [CONTACT_DOMAIN, body]
     model = None
     if body:
         model = (
@@ -193,6 +244,232 @@ def audit_progress_plan(plan, samples, reads, receipts, *, executing, before, ac
         verdict = "progress" if votes[0] else "enter_only"
     require(progress["judgment"] == verdict, "progress_judgment")
     return verdict
+
+
+def contained_box(inner, outer):
+    return (
+        outer["x"] <= inner["x"]
+        and outer["y"] <= inner["y"]
+        and inner["x"] + inner["width"] <= outer["x"] + outer["width"]
+        and inner["y"] + inner["height"] <= outer["y"] + outer["height"]
+    )
+
+
+def visible_motifs(frame, size_limit):
+    height, width = len(frame), len(frame[0])
+    found = {}
+    for side in range(4, min(height, width, size_limit) + 1):
+        for y in range(height - side + 1):
+            for x in range(width - side + 1):
+                right, bottom = x + side - 1, y + side - 1
+                bg = frame[y][x]
+                if not (
+                    bg == frame[y][right] == frame[bottom][x] == frame[bottom][right]
+                    and all(
+                        frame[y][x + i]
+                        == frame[bottom][x + i]
+                        == frame[y + i][x]
+                        == frame[y + i][right]
+                        == bg
+                        for i in range(1, side - 1)
+                    )
+                ):
+                    continue
+                ink = [
+                    (a, b, frame[b][a])
+                    for b in range(y + 1, bottom)
+                    for a in range(x + 1, right)
+                    if frame[b][a] != bg
+                ]
+                if len({c for _, _, c in ink}) != 1:
+                    continue
+                left, top = min(a for a, _, _ in ink), min(b for _, b, _ in ink)
+                w = max(a for a, _, _ in ink) - left + 1
+                h = max(b for _, b, _ in ink) - top + 1
+                box = dict(x=left, y=top, width=w, height=h)
+                for scale in range(gcd(w, h), 0, -1):
+                    if min(w, h) < 2 * scale or w % scale or h % scale:
+                        continue
+                    field = dict(box=box, background=bg, scale=scale)
+                    item = decode_value(frame, field)
+                    if (
+                        item
+                        and 2
+                        < item["mask"].bit_count()
+                        < item["width"] * item["height"]
+                    ):
+                        found[(left, top, w, h, bg)] = (field, item)
+                        break
+    maximal = []
+    for (_, _, w, h, bg), (field, item) in sorted(
+        found.items(),
+        key=lambda row: (
+            -row[0][2] * row[0][3],
+            row[0][1],
+            row[0][0],
+            row[0][2],
+            row[0][3],
+            row[0][4],
+            row[1][1]["pigment"],
+        ),
+    ):
+        if any(
+            parent["background"] == bg
+            and old["pigment"] == item["pigment"]
+            and contained_box(field["box"], parent["box"])
+            for parent, old in maximal
+        ):
+            continue
+        maximal.append((field, item))
+    return maximal
+
+
+def contrasting_boundary(frame, field, max_margin):
+    x, y, w, h = (field["box"][key] for key in ("x", "y", "width", "height"))
+    for d in range(1, max_margin + 1):
+        left, right, top, bottom = x - d, x + w + d - 1, y - d, y + h + d - 1
+        if left < 0 or top < 0 or right >= len(frame[0]) or bottom >= len(frame):
+            continue
+        border = frame[top][left]
+        if (
+            border != field["background"]
+            and all(
+                frame[top][u] == frame[bottom][u] == border
+                for u in range(left, right + 1)
+            )
+            and all(
+                frame[v][left] == frame[v][right] == border
+                for v in range(top, bottom + 1)
+            )
+        ):
+            return True
+    return False
+
+
+class SiteDomain:
+    """Replay the observable bound domain and its intervention lifecycle."""
+
+    def __init__(self):
+        self.field = None
+        self.sites = {}
+        self.handled = set()
+        self.detached = set()
+        self.status = {}
+
+    def reset_attempt(self):
+        self.handled.clear()
+        self.detached.clear()
+        self.status.clear()
+
+    def reset_level(self):
+        self.field = None
+        self.sites.clear()
+        self.reset_attempt()
+
+    def remaining(self):
+        return {
+            p: site
+            for p, site in self.sites.items()
+            if p not in self.handled and p not in self.detached
+        }
+
+    def reads(self):
+        return {site["event"] for site in self.sites.values()} | set(
+            self.status.values()
+        )
+
+    def entered(self, sample):
+        if sample["outcome"] != "blocked":
+            point = tuple(sample["point"])
+            self.handled.add(point)
+            self.status[point] = sample["event"]
+
+    def observe(self, surveys, receipts, level, *, frame_cache=None):
+        for survey in surveys:
+            ref = survey["event"]
+            raw = receipts[ref]
+            require(raw["levels_completed"] == level, "survey_level")
+            frame = raw["frame"][-1]
+            role = survey["role"]
+            origin = tuple(survey["origin"])
+            stride_x, stride_y = survey["stride"]
+            require(
+                locate_role(frame, role) == origin
+                and 0 < stride_x <= len(frame[0])
+                and 0 < stride_y <= len(frame),
+                "survey_role_binding",
+            )
+            w = 1 + max(x for x, _, _ in role)
+            h = 1 + max(y for _, y, _ in role)
+            occupied = {(origin[0] + u, origin[1] + v) for u, v, _ in role}
+            for point, site in self.sites.items():
+                field = site["field"]
+                b = field["box"]
+                right, bottom = b["x"] + b["width"], b["y"] + b["height"]
+                if right > len(frame[0]) or bottom > len(frame):
+                    continue
+                cells = {
+                    (u, v) for u in range(b["x"], right) for v in range(b["y"], bottom)
+                }
+                if (
+                    point not in self.detached
+                    and occupied.isdisjoint(cells)
+                    and all(frame[v][u] == field["background"] for u, v in cells)
+                ):
+                    self.detached.add(point)
+                    self.status[point] = ref
+            maximal = 2 * max(w, h) + 1
+            cache_key = (ref, maximal)
+            if frame_cache is None:
+                motifs = visible_motifs(frame, maximal)
+            else:
+                if cache_key not in frame_cache:
+                    frame_cache[cache_key] = visible_motifs(frame, maximal)
+                motifs = frame_cache[cache_key]
+            windows, sites = [], {}
+            for field, item in motifs:
+                b = field["box"]
+                center_x = 2 * b["x"] + b["width"] - w
+                center_y = 2 * b["y"] + b["height"] - h
+                p = (center_x // 2, center_y // 2)
+                on_grid = (
+                    center_x % 2 == center_y % 2 == 0
+                    and (p[0] - origin[0]) % stride_x
+                    == (p[1] - origin[1]) % stride_y
+                    == 0
+                )
+                if not on_grid:
+                    windows.append(field)
+                elif (
+                    b["width"] <= w
+                    and b["height"] <= h
+                    and contrasting_boundary(frame, field, max(w, h))
+                ):
+                    sites[p] = dict(field=field, value=item, event=ref)
+            if not sites:
+                continue
+            if self.field is None:
+                if not windows:
+                    continue
+                self.field = min(
+                    windows,
+                    key=lambda field: (
+                        -field["box"]["width"] * field["box"]["height"],
+                        field["box"]["y"],
+                        field["box"]["x"],
+                    ),
+                )
+            for point, site in sites.items():
+                previous = self.sites.get(point)
+                if (
+                    point in self.detached
+                    or previous is None
+                    or any(previous[k] != site[k] for k in ("field", "value"))
+                ):
+                    self.sites[point] = site
+                    self.handled.discard(point)
+                    self.detached.discard(point)
+                    self.status[point] = ref
 
 
 def audit_contact_sample(sample, ref, before, after, receipts, parents):
@@ -335,6 +612,7 @@ def audit_contact_plan(plan, samples, reads, receipts, *, executing, before):
                 (row["event"], row["before"], row["site"]["event"], row["motion_event"])
             )
             needed.update(site["event"] for _, site in row["facts"]["remaining"])
+            needed.update(row["facts"].get("domain_reads", ()))
             inputs = {"signature": 0, **progress_variables(row["facts"], row["action"])}
             observed.append(
                 (

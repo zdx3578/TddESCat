@@ -206,8 +206,8 @@ impl Registry {
             let sort = r.sort_id(&slot.sort)?;
             ensure!(
                 match slot.sort.as_str() {
-                    "RoleBefore" | "SceneBefore" => slot.time_role == "before",
-                    "RoleAfter" | "SceneAfter" => slot.time_role == "after",
+                    "RoleBefore" | "SceneBefore" | "MeasureBefore" => slot.time_role == "before",
+                    "RoleAfter" | "SceneAfter" | "MeasureAfter" => slot.time_role == "after",
                     _ => true,
                 },
                 "slot time role conflicts with its sort"

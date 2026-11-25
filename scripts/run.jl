@@ -17,6 +17,7 @@ function capture(config, public_dir; supervised=false, collect_only=false)
         prior = TddESCat.prior_trials(config)
         TddESCat.before_session!(rec,prior.events)
         knowledge = TddESCat.OnlineKnowledge()
+        merge!(knowledge.observations,prior.observations)
         prepared = nothing
         frozen = collect_only || get(config.execution,"frozen_evaluation",false)
         if !isnothing(config.learning)

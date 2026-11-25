@@ -17,6 +17,8 @@ end
 mutable struct SceneMemory
     tiles::Dict{Pixel,TileObservation}
     sightings::Dict{Tuple,Dict{Int,LandmarkObservation}}
+    action_sightings::Dict{Tuple,Dict{Int,LandmarkObservation}}
+    clock_conflicts::Set{Tuple}
     read_views::Set{String}
     viewpoints::Set{Pixel}
     tick::Int
@@ -24,7 +26,7 @@ mutable struct SceneMemory
     occlusion_ref::Union{Nothing,String}
 end
 
-SceneMemory() = SceneMemory(Dict(),Dict(),Set(),Set(),0,0,nothing)
+SceneMemory() = SceneMemory(Dict(),Dict(),Dict(),Set(),Set(),Set(),0,0,nothing)
 
 function observe_scene!(scene, spatial, frame, here, event)
     event in scene.read_views && return
@@ -61,16 +63,16 @@ function observe_scene!(scene, spatial, frame, here, event)
     end
     for (patch,points) in landmarks
         length(points) == 1 || continue
-        samples = get!(Dict{Int,LandmarkObservation},scene.sightings,patch)
         p = only(points)
-        earlier = get(samples,scene.tick,nothing)
-        if isnothing(earlier)
-            samples[scene.tick] = LandmarkObservation(p,event)
-        elseif earlier.point != p
-            # A clock fitted to a previous attempt is a hypothesis. Keep the new
-            # evidence and allow a different history dependence to be found.
-            empty!(samples)
-            samples[scene.tick] = LandmarkObservation(p,event)
+        for (basis,table,tick) in ((:movement,scene.sightings,scene.tick),
+                (:action,scene.action_sightings,scene.confirmed_actions))
+            samples = get!(Dict{Int,LandmarkObservation},table,patch)
+            earlier = get(samples,tick,nothing)
+            if isnothing(earlier)
+                samples[tick] = LandmarkObservation(p,event)
+            elseif earlier.point != p
+                push!(scene.clock_conflicts,(basis,patch))
+            end
         end
     end
     push!(scene.read_views,event)
@@ -117,12 +119,27 @@ end
 function scene_clock(scene, spatial)
     strides = spatial_grid(spatial)
     moving = Dict{Tuple,Any}()
-    for (patch,samples) in scene.sightings
-        length(Set(s.point for s in values(samples))) > 1 || continue
-        moving[patch] = infer_landmark_period(samples,strides)
+    for (patch,samples) in scene.action_sightings
+        different = length(Set(s.point for s in values(samples))) > 1
+        different || (:movement,patch) in scene.clock_conflicts || continue
+        by_move = (:movement,patch) in scene.clock_conflicts ? nothing :
+            infer_landmark_period(scene.sightings[patch],strides)
+        by_action = (:action,patch) in scene.clock_conflicts ? nothing : infer_landmark_period(samples,strides)
+        if !isnothing(by_move) && !isnothing(by_action)
+            a,b = by_move.positions,by_action.positions
+            agree = all(a[mod(scene.tick+i,length(a))+1] ==
+                b[mod(scene.confirmed_actions+i,length(b))+1] for i in 0:lcm(length(a),length(b))-1)
+            moving[patch] = agree ? merge(by_move,(basis=:movement,)) : nothing
+        elseif !isnothing(by_move)
+            moving[patch] = merge(by_move,(basis=:movement,))
+        elseif !isnothing(by_action)
+            moving[patch] = merge(by_action,(basis=:action,))
+        else
+            moving[patch] = nothing
+        end
     end
     period = foldl(lcm,(length(path.positions) for path in values(moving) if !isnothing(path));init=1)
-    return (; moving,period)
+    return (;moving,period,action_offset=scene.confirmed_actions-scene.tick)
 end
 
 function scene_tile(scene, spatial, frame, target, here)
@@ -138,10 +155,11 @@ function scene_tile(scene, spatial, frame, target, here)
     return (patch=cached.patch,reads=[cached.event])
 end
 
-function timed_patch(clock, patch, point, phase, plain)
+function timed_patch(clock,patch,point,phase,plain;action_phase=phase+clock.action_offset)
     for (symbol,path) in clock.moving
         isnothing(path) && continue
-        if path.positions[mod(phase,length(path.positions))+1] == point
+        tick = path.basis == :action ? action_phase : phase
+        if path.positions[mod(tick,length(path.positions))+1] == point
             return (patch=symbol,reads=path.reads)
         end
     end

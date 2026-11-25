@@ -261,7 +261,7 @@ def audit_resource(path, scene, positive):
             for key, value in outgoing[action]["expected"].items()
             if key.startswith("count-")
         }
-        assert budget == {"count-1": 0}
+        assert len(budget) == 1 and list(budget.values()) == [0]
     assert commands == [2, 2]
     assert not projected_path_exists(plan, outgoing[1]["after"])
     assert projected_path_exists(plan, outgoing[2]["after"])

@@ -34,6 +34,7 @@ class Resource:
     gate_cells: tuple[Point, ...]
     color: int
     initial: int
+    display_spacing: int = 2
 
 
 @dataclass(frozen=True)

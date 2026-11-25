@@ -1,14 +1,20 @@
 struct PublicTrial
     sample::MotionExample
     action::Dict{String,Int}
+    effects::Union{Nothing,PublicEffects}
 end
+
+PublicTrial(sample,action) = PublicTrial(sample,action,nothing)
 
 struct ActiveMechanism
     rule::JointMechanism
     condition::GuardSearch
     counterexamples::Vector{String}
     unknown::Vector{String}
+    meter_scopes::Set{Tuple}
 end
+
+ActiveMechanism(rule,condition,refuted,unknown) = ActiveMechanism(rule,condition,refuted,unknown,Set{Tuple}())
 
 mutable struct OnlineKnowledge
     rules::Vector{JointMechanism}
@@ -17,13 +23,16 @@ mutable struct OnlineKnowledge
     learning_jobs::Int
     definition_depths::Dict{String,Int}
     programs::Vector{Any}
+    observations::Dict{String,PublicEffects}
 end
 
-OnlineKnowledge() = OnlineKnowledge(JointMechanism[], ActiveMechanism[], PublicTrial[], 0, Dict{String,Int}(), Any[])
+OnlineKnowledge() = OnlineKnowledge(JointMechanism[],ActiveMechanism[],PublicTrial[],0,Dict{String,Int}(),
+    Any[],Dict{String,PublicEffects}())
 
 function prior_trials(config)
     directory = isnothing(config.learning) ? nothing : get(config.learning,"prior_evidence",nothing)
-    isnothing(directory) && return (; events=Any[], pairs=Tuple[], trials=PublicTrial[])
+    observations = Dict{String,PublicEffects}()
+    isnothing(directory) && return (;events=Any[],pairs=Tuple[],trials=PublicTrial[],observations)
     events = Any[]
     pairs = Tuple[]
     trials = PublicTrial[]
@@ -31,6 +40,7 @@ function prior_trials(config)
     for name in readdir(directory;join=true)
         isdir(name) && realpath(name) == name && isdir(joinpath(name,"commands")) || continue
         sources = recover_run(RunStore(name);read_only=true)
+        replay_effects!(observations,[sources])
         history = Int[]
         previous = nothing
         for item in sources
@@ -44,14 +54,14 @@ function prior_trials(config)
             else
                 !isnothing(previous) && !isempty(history) || error("Earlier action lacks the reset context")
                 push!(pairs,(previous,item))
-                push!(trials,PublicTrial(motion_example(previous,item;history),action))
+                push!(trials,PublicTrial(motion_example(previous,item;history),action,observations[ref]))
             end
             push!(history,action["id"])
             previous = item
         end
     end
     isempty(trials) && error("Prior evidence contains no actionable events")
-    return (; events,pairs,trials)
+    return (;events,pairs,trials,observations)
 end
 
 public_components(frame) = sort!(color_components(frame).groups; by=shape->(length(shape),anchor(shape)))
@@ -60,12 +70,27 @@ function evaluate_joint_trial(rule, trial)
     trial.action["id"] == rule.action_id || return nothing
     row = trial.sample
     groups = public_components(row.before)
-    evaluation = evaluate_joint_rule(rule,row.before,groups,enclosure_pairs(groups),trial.action)
+    meters = isnothing(trial.effects) ? MeterBinding[] : trial_meters(trial.effects)
+    evaluation = evaluate_joint_rule(rule,row.before,groups,enclosure_pairs(groups),trial.action;meters)
     evaluation.truth == proven || return nothing
     assessed = measure_joint((model=rule,fragments=evaluation.fragments),row.after)
     verdict = "refuted" in values(assessed.assessments) ? disproven :
         all(==("supported"),values(assessed.assessments)) ? proven : unknown_truth
     return (;row,evaluation.fragments,verdict)
+end
+
+function trial_meters(effects)
+    result = Dict(meter_identity(binding)=>binding for binding in effects.live_meters)
+    for effect in effects.effects
+        effect.family == :measurement && (result[effect.context.instance] = effect.context.binding)
+    end
+    return collect(values(result))
+end
+
+function measured_scope(fragments)
+    ids = Tuple(part.instance for part in fragments if part.family == :measurement)
+    isempty(ids) && return nothing
+    return (ids,Tuple(part.value for part in fragments if part.family == :translation))
 end
 
 function fit_joint_condition(rule, trials, limits)
@@ -79,9 +104,14 @@ function fit_joint_condition(rule, trials, limits)
     support = findall(item -> item.verdict == proven, chosen)
     broken = findall(item -> item.verdict == disproven, chosen)
     unknowns = ids[findall(item -> item.verdict == unknown_truth, chosen)]
+    scopes = Set{Tuple}()
+    for i in support
+        scope = measured_scope(chosen[i].fragments)
+        isnothing(scope) || push!(scopes,scope)
+    end
     if isempty(broken)
         condition = GuardSearch(MotionPredicate[],ids[support],String[],String[],true,!isempty(support),1)
-        return ActiveMechanism(rule,condition,ids[broken],unknowns)
+        return ActiveMechanism(rule,condition,ids[broken],unknowns,scopes)
     end
     move_index = findfirst(effect -> effect.family == :translation, rule.effects)
     effect = isnothing(move_index) ? first(rule.effects) : rule.effects[move_index]
@@ -95,7 +125,7 @@ function fit_joint_condition(rule, trials, limits)
         if !isnothing(query)
             condition = GuardSearch(MotionPredicate[query],ids[support],ids[broken],String[],true,true,
                 length(query.programs))
-            return ActiveMechanism(rule,condition,ids[broken],unknowns)
+            return ActiveMechanism(rule,condition,ids[broken],unknowns,scopes)
         end
     end
     pool = predicate_pool(rows,effect.template,delta;
@@ -108,7 +138,7 @@ function fit_joint_condition(rule, trials, limits)
     found = search_guards(ids,support,broken,pool.pool,test)
     updated = GuardSearch(found.atoms,found.support,found.excluded,found.unresolved,
         found.complete && pool.complete,found.feasible,found.visited)
-    return ActiveMechanism(rule,updated,ids[broken],unknowns)
+    return ActiveMechanism(rule,updated,ids[broken],unknowns,scopes)
 end
 
 function update_joint_condition(current, rule, trial, trials, limits)
@@ -118,19 +148,22 @@ function update_joint_condition(current, rule, trial, trials, limits)
         isnothing(evaluated) && return current
         ref = trial.sample.event_id
         if evaluated.verdict == unknown_truth
-            return ActiveMechanism(rule,current.condition,String[],[current.unknown;ref])
+            return ActiveMechanism(rule,current.condition,String[],[current.unknown;ref],current.meter_scopes)
         elseif evaluated.verdict == proven
             support = [current.condition.support;ref]
             condition = GuardSearch(MotionPredicate[],support,String[],String[],true,true,1)
-            return ActiveMechanism(rule,condition,String[],current.unknown)
+            scope = measured_scope(evaluated.fragments)
+            scopes = isnothing(scope) ? current.meter_scopes : union(current.meter_scopes,[scope])
+            return ActiveMechanism(rule,condition,String[],current.unknown,scopes)
         end
     end
     return fit_joint_condition(rule,trials,limits)
 end
 
 function active_id(model::ActiveMechanism)
-    return "mechanism-" * content_hash(JSON.json([model.rule.id,
-        predicate_record.(model.condition.atoms),model.condition.feasible,model.condition.complete]))
+    fields = Any[model.rule.id,predicate_record.(model.condition.atoms),model.condition.feasible,model.condition.complete]
+    isempty(model.meter_scopes) || push!(fields,sort!(collect(model.meter_scopes);by=repr))
+    return "mechanism-" * content_hash(JSON.json(fields))
 end
 
 function frozen_knowledge_digest(knowledge)
@@ -163,17 +196,23 @@ function mechanism_key(rule; composing=false)
     observation = composing && !isnothing(patch) ? (patch.shape,patch.moving,patch.fixed) : nothing
     meaning = [rule.action_id,
         [(item.family,item.template,item.position,item.family == :selection ? Int[] : item.values,
-          item.visibility,item.enclosed) for item in rule.effects],
+          item.visibility,item.enclosed,isnothing(item.measurement) ? nothing :
+            (meter_layout(item.measurement),meter_window(item.measurement.face.box),item.measurement.face.fill))
+            for item in rule.effects],
         any(effect->effect.family == :count,rule.effects) ? rule.anchors : Pixel[],
         rule.spacing,rule.entry_colors,isnothing(rule.parent)]
     composing && push!(meaning,observation)
     return content_hash(JSON.json(meaning))
 end
 
-function candidate_evaluation(active, before, groups, enclosure, action, history; transients=nothing)
+function candidate_evaluation(active, before, groups, enclosure, action, history; transients=nothing,meters=())
     rule = active.rule
-    result = evaluate_joint_rule(rule,before,groups,enclosure,action)
+    result = evaluate_joint_rule(rule,before,groups,enclosure,action;meters)
     result.truth == proven || return result
+    scope = measured_scope(result.fragments)
+    if !isnothing(scope) && scope ∉ active.meter_scopes
+        return (truth=unknown_truth,fragments=result.fragments,reason="measurement_interaction_unproved")
+    end
     active.condition.feasible ||
         return (truth=unknown_truth,fragments=result.fragments,reason="unresolved_condition")
     index = findfirst(effect -> effect.family == :translation, rule.effects)
@@ -211,7 +250,7 @@ end
 
 action_key(a) = (a["id"],get(a,"x",-1),get(a,"y",-1))
 
-function enabled_condition(knowledge, item, current, history)
+function enabled_condition(knowledge, item, current, history; meters=())
     selected = filter(part -> part.family == :pigment, item.fragments)
     isempty(selected) && return nothing
     result = copy(current.frame)
@@ -224,9 +263,9 @@ function enabled_condition(knowledge, item, current, history)
         isempty(other.condition.atoms) && continue
         for action in current.actions
             other.rule.action_id == action["id"] || continue
-            original = candidate_evaluation(other,current.frame,current.groups,current.enclosure,action,history)
+            original = candidate_evaluation(other,current.frame,current.groups,current.enclosure,action,history;meters)
             original.reason == "learned_condition_false" || continue
-            hypothetical = candidate_evaluation(other,result,groups,enclosures,action,[history;item.model.rule.action_id])
+            hypothetical = candidate_evaluation(other,result,groups,enclosures,action,[history;item.model.rule.action_id];meters)
             hypothetical.truth == proven || continue
             target = plan_channels(hypothetical.fragments)
             isnothing(target) || return (; action, model=other, expected=target)
@@ -243,7 +282,7 @@ function resource_binding(rule, fragments)
 end
 
 function ranked_public_actions(knowledge, observation, history, attempts, max_action_coordinates;
-        composing=false, required_action=nothing, programs_pending=false, program_cursor=nothing)
+        composing=false, required_action=nothing, programs_pending=false, program_cursor=nothing,meters=())
     values = public_action_candidates(observation,max_action_coordinates)
     transients = receipt_transient_colors(observation.frames)
     if programs_pending
@@ -265,7 +304,7 @@ function ranked_public_actions(knowledge, observation, history, attempts, max_ac
         relation_reads = []
         for model in knowledge.active
             model.rule.action_id == action["id"] || continue
-            selected = candidate_evaluation(model,values.frame,values.groups,values.enclosure,action,history;transients)
+            selected = candidate_evaluation(model,values.frame,values.groups,values.enclosure,action,history;transients,meters)
             for atom in model.condition.atoms
                 atom isa RelationPredicate || continue
                 selected.reason in ("published_joint_effects","learned_condition_false","learned_condition_unknown") || continue
@@ -275,8 +314,8 @@ function ranked_public_actions(knowledge, observation, history, attempts, max_ac
             push!(reasons,selected.reason)
             rejected |= selected.truth == disproven
             selected.reason == "resource_precondition" && push!(blocked_parents,model.rule.id)
-            if composing && any(effect->effect.family == :count && only(effect.values) < 0,model.rule.effects) &&
-                selected.reason in ("resource_precondition","incomplete_effect_binding")
+            if composing && any(effect->effect.family in (:count,:measurement) && only(effect.values) < 0,model.rule.effects) &&
+                selected.reason in ("resource_precondition","incomplete_effect_binding","measurement_interaction_unproved")
                 binding = resource_binding(model.rule,selected.fragments)
                 isnothing(binding) || push!(blocked_resources,binding)
             end
@@ -332,7 +371,7 @@ function ranked_public_actions(knowledge, observation, history, attempts, max_ac
             end
         end
         if !isnothing(chosen) && !composing
-            follow = enabled_condition(knowledge,chosen,values,history)
+            follow = enabled_condition(knowledge,chosen,values,history;meters)
             if !isnothing(follow)
                 priority = 0
                 reason = "establishes_observed_condition"
@@ -387,7 +426,9 @@ function predict_public(rec, item; plan_reads=String[])
     if isnothing(choice)
         return nothing
     end
-    reads = sort!(unique([recovery_reads(rec,choice.model);plan_reads]))
+    measurements = String[ref for part in choice.fragments if part.family == :measurement
+        for ref in (part.binding.face.source,part.binding.calibrated_at)]
+    reads = sort!(unique([recovery_reads(rec,choice.model);plan_reads;measurements]))
     binding = [
         Dict("slot"=>i-1,"ref"=>rec.before_ref * "-query-" * key)
         for (i,key) in enumerate(sort!(collect(keys(choice.expected))))
@@ -434,7 +475,8 @@ function prepare_effect_learning!(knowledge, config, store, pairs, repo_root; ex
     publication_dir = store_path(store,"publication")
     current = read_published_stitch(publication_dir)
     base = isnothing(current) ? LibrarySnapshot() : current.snapshot
-    corpus = relation_corpus(pairs; previous_signature=isnothing(current) ? nothing : current.bundle["signature"])
+    corpus = relation_corpus(pairs;previous_signature=isnothing(current) ? nothing : current.bundle["signature"],
+        observations=knowledge.observations)
     isnothing(current) || merge_semantic_signature!(corpus.signature,current.bundle["signature"])
     atomic_json(joinpath(job,"observations.json"),Dict("scope_complete"=>corpus.complete,
         "events"=>public_effect_record.(corpus.observed),"bindings"=>corpus.bindings,
@@ -496,7 +538,9 @@ function collect_effect_learning!(knowledge,config,store,prepared,status)
     end
     knowledge.rules = sort!(collect(values(known));by=rule->rule.id)
     limits = mechanism_limits(config)
-    knowledge.active = [fit_joint_condition(rule,knowledge.trials,limits) for rule in knowledge.rules]
+    current_models = Dict(model.rule.id=>model for model in knowledge.active)
+    knowledge.active = [get(() -> fit_joint_condition(rule,knowledge.trials,limits),current_models,rule.id)
+        for rule in knowledge.rules]
     persist_relation_certificates!(store,knowledge.active)
     learning_assessment!(job,batch,"published"; complete, status, termination_reason, fixed_point,
         publication=digest, definitions=published.bundle["new_definition_ids"],
@@ -560,7 +604,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     inflight = nothing
     sequence_enabled = !frozen && get(config.learning,"sequences",false)
     sequence_events = sequence_enabled ? Any[entry] : Any[]
-    sequence_effects = Dict{String,PublicEffects}()
+    measurement = MeterContext()
     program_jobs = Dict{String,Any}[]
     program_prefix = nothing
     last_sequence_check = 0
@@ -585,9 +629,11 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         end
         decision_started = time_ns()
         obs = rec.observation
+        meter_context!(measurement,obs)
+        meters = collect(values(measurement.bindings))
         obs.state in ("WIN","GAME_OVER") && break
         if !isnothing(visual) && !isnothing(visual.resource) &&
-                read_counter(last(obs.frames),visual.resource) == 0
+                read_meter(last(obs.frames),visual.resource) == 0
             may_retry_visual_attempt!(visual,spatial,obs.levels_completed) || break
             reset = reset!(rec,obs.game_id)
             reset["completion"] == "confirmed" && rec.observation.levels_completed == obs.levels_completed || break
@@ -607,13 +653,13 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         !isnothing(goal) && goal_truth(goal,last(obs.frames)) == proven && break
         programs_pending = !composing && !isempty(knowledge.programs)
         decision = ranked_public_actions(knowledge,obs,history,attempts,coordinates;
-            composing,programs_pending,program_cursor)
+            composing,programs_pending,program_cursor,meters)
         isempty(decision.ranked) && break
         item = first(decision.ranked)
         policy_note = nothing
         goal_cursor = nothing
         if composing
-            selection = choose_observed_goal_step(rec,knowledge,goal,history,decision,goal_pending,coordinates)
+            selection = choose_observed_goal_step(rec,knowledge,goal,history,decision,goal_pending,coordinates;meters)
             item = isnothing(selection.item) ? item : selection.item
             if isnothing(goal)
                 request = argmin(candidate->(get(attempts,action_key(candidate.action),0),
@@ -675,7 +721,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             choice = findfirst(row->row.action == experiment.action,decision.ranked)
             if isnothing(choice)
                 decision = ranked_public_actions(knowledge,obs,history,attempts,coordinates;
-                    required_action=experiment.action)
+                    required_action=experiment.action,meters)
                 choice = findfirst(row->row.action == experiment.action,decision.ranked)
             end
             item = decision.ranked[choice]
@@ -736,6 +782,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         isnothing(spatial_choice) || (decision_record["spatial_experiment"] = spatial_choice)
         isnothing(item.experiment) || (decision_record["experiment"] = item.experiment)
         isnothing(experiment) || (decision_record["experiment_obligation"] = experiment)
+        isnothing(visual) || (decision_record["site_surveys"] = take_site_surveys!(visual))
         isnothing(program_note) || (decision_record["program"] = program_note)
         isnothing(inflight) || (decision_record["pending_learning_job"] = basename(inflight.job))
         if !isnothing(item.chosen)
@@ -765,10 +812,10 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         register_evidence_obligation!(rec.store,resulting;frozen)
         isnothing(experiment) || record_experiment_service!(experiments,rec.store,experiment,event)
         sample = motion_example(entry,resulting;history)
-        effects = observed_effects(entry,resulting)
+        effects = observed_effects(entry,resulting;meters=measurement)
+        knowledge.observations[effects.event_id] = effects
         if sequence_enabled
             push!(sequence_events,resulting)
-            sequence_effects[effects.event_id] = effects
         end
         spatial_feedback = nothing
         visual_feedback = nothing
@@ -854,7 +901,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             knowledge.active = [fit_joint_condition(rule,knowledge.trials,limits) for rule in knowledge.rules]
             previous
         else
-            archive_trial!(knowledge,PublicTrial(sample,item.action),limits)
+            archive_trial!(knowledge,PublicTrial(sample,item.action,effects),limits)
         end
         frozen || persist_relation_certificates!(rec.store,knowledge.active)
         revisions = []
@@ -876,6 +923,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 "evidence"=>public_effect_record(effects),"coverage"=>coverage_record(decision,item,effects,assessment),
                 "policy"=>policy_note,"program"=>program_note,"spatial_feedback"=>spatial_feedback,
                 "visual_feedback"=>visual_feedback,"contact_feedback"=>contact_feedback,
+                "site_surveys"=>isnothing(visual) ? [] : take_site_surveys!(visual),
                 "visual_observation"=>visual_observation,"motion_revision"=>motion_revision))
         attempts[action_key(item.action)] = get(attempts,action_key(item.action),0) + 1
         push!(history,item.action["id"])
@@ -886,7 +934,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             count_for_batch = config.learning["batch_confirmed_events"]
             prepared = nothing
             if sequence_enabled && last_job == :effect && count-last_sequence_check >= count_for_batch
-                corpus = compile_sequence_corpus([sequence_events];observations=sequence_effects,
+                corpus = compile_sequence_corpus([sequence_events];observations=knowledge.observations,
                     close_revisits=true,include_open=false)
                 last_sequence_check = count
                 key = program_corpus_key(corpus)
@@ -925,7 +973,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     sequence = nothing
     if sequence_enabled
         episodes = [sequence_events]
-        corpus = compile_sequence_corpus(episodes;observations=sequence_effects,close_revisits=true)
+        corpus = compile_sequence_corpus(episodes;observations=knowledge.observations,close_revisits=true)
         artifact = store_path(rec.store,"learning","sequence-corpus.json")
         compiled = persist_sequence_corpus(episodes,artifact;corpus)
         if !rec.frozen && !isempty(corpus.programs) && program_corpus_key(corpus) != program_prefix
@@ -959,6 +1007,8 @@ function recover_learning!(store, config, repo_root)
     prior = prior_trials(config)
     knowledge = OnlineKnowledge()
     append!(knowledge.trials,prior.trials)
+    merge!(knowledge.observations,prior.observations)
+    replay_effects!(knowledge.observations,[sources])
     pairs = copy(prior.pairs)
     previous = nothing
     history = Int[]
@@ -971,7 +1021,8 @@ function recover_learning!(store, config, repo_root)
             !isnothing(previous) && item.event["before_ref"] == previous.event["event_id"] ||
                 error("Recovered action lacks its observed preconditions")
             push!(pairs,(previous,item))
-            push!(knowledge.trials,PublicTrial(motion_example(previous,item;history),action))
+            push!(knowledge.trials,PublicTrial(motion_example(previous,item;history),action,
+                knowledge.observations[item.event["event_id"]]))
         end
         push!(history,action["id"])
         previous = item

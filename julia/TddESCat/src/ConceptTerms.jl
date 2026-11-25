@@ -46,6 +46,7 @@ function evidence_signature()
         "link" => primitive(("RoleBefore", "RoleAfter", "Delta"), "Relation"),
         "pigment" => primitive(("RoleBefore", "RoleAfter", "Color", "Color"), "Relation"),
         "count_shift" => primitive(("RoleBefore", "RoleAfter", "Integer"), "Relation"),
+        "display_shift" => primitive(("MeasureBefore", "MeasureAfter", "Integer"), "Relation"),
         "selection" => primitive(("RoleBefore", "RoleAfter", "Coord"), "Relation"),
         "marked" => primitive(("Relation",), "Relation"),
         "pair" => primitive(("Relation", "Relation"), "Relation"),

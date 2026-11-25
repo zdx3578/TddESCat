@@ -170,7 +170,11 @@ def audit_camera(path, scene, positive, proof):
         assert all(
             set(row["assessments"].values()) == {"supported"} for row in checks[1:]
         )
-        assert checks[2]["expected"]["count-1"] == 0
+        assert [
+            value
+            for key, value in checks[2]["expected"].items()
+            if key.startswith("count-")
+        ] == [0]
         assert checks[-1]["policy"]["feedback"] == "achieved"
     else:
         assert learned["state"] != "WIN"

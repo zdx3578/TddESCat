@@ -23,6 +23,7 @@ struct PixelSource
 end
 
 whole_window(frame) = Window(0, 0, size(frame, 2), size(frame, 1))
+in_window(b::Window,x,y) = b.x <= x < b.x+b.width && b.y <= y < b.y+b.height
 
 function crop_frame(frame, window::Window)
     window.x + window.width <= size(frame, 2) &&

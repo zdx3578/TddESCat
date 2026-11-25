@@ -81,7 +81,7 @@ function visual_motifs(frame, size_limit)
     # A small crop of the same diagram is not an independent symbol.
     motifs = sort!(collect(values(unique_fields));by=m->begin
         b = m.field.box
-        (-b.width*b.height,b.y,b.x)
+        (-b.width*b.height,b.y,b.x,b.width,b.height,m.field.background,m.value.pigment)
     end)
     maximal = NamedTuple[]
     for motif in motifs
@@ -108,25 +108,6 @@ function motif_contrast_boundary(frame, field, maximum_margin)
             all(frame[y,left] == frame[y,right] == color for y in top:bottom) && return true
     end
     return false
-end
-
-function rectangular_fields(frame, role_width, role_height)
-    candidates = []
-    for component in color_components(frame).groups
-        x,y = anchor(component)
-        w = maximum(first,component)-x+1
-        h = maximum(c->c[2],component)-y+1
-        length(component) == w*h && max(w,h) >= 4min(w,h) || continue
-        max(w,h) >= max(role_width,role_height) && min(w,h) < min(role_width,role_height) || continue
-        push!(candidates,(box=Window(x,y,w,h),pixel=first(component)[3]))
-    end
-    return candidates
-end
-
-function read_counter(frame, counter)
-    b = counter.box
-    observed = count(==(counter.pixel),@view frame[b.y+1:b.y+b.height,b.x+1:b.x+b.width])
-    return div(observed,min(b.width,b.height))
 end
 
 function visual_transform(value::VisualValue, operation)

@@ -229,8 +229,22 @@ function program_step_key(step)
         for effect in step["effects"]]])
 end
 
-program_input(fragment) = fragment.family == :count ?
-    (count=fragment.basis,support=fragment.token_support) : fragment.basis
+function program_input(fragment)
+    fragment.family == :measurement && return (instance=fragment.instance,value=fragment.basis)
+    fragment.family == :count && return (instance=fragment.instance,count=fragment.basis,support=fragment.token_support)
+    return fragment.basis
+end
+
+function observed_port(effect,after)
+    if effect.family == :measurement
+        return (instance=effect.context.instance,value=after ? effect.context.after_value : effect.context.before_value)
+    elseif effect.family == :count
+        return (instance=semantic_hash(["discrete-component-count",effect.context.prototype]),
+            count=after ? effect.context.after_count : effect.context.before_count,
+            support=after ? effect.after : effect.before)
+    end
+    return after || effect.family == :selection ? effect.after : effect.before
+end
 
 function current_program_step(cursor, decision)
     step = cursor.program.steps[cursor.next_step]
@@ -269,13 +283,11 @@ function program_feedback!(cursor, item, assessment, observed)
     for fragment in item.chosen.fragments
         matches = filter(observed.effects) do effect
             effect.family == fragment.family || return false
-            fragment.family == :count && return (count=effect.context.before_count,support=effect.before) == program_input(fragment)
-            fragment.family == :selection && return effect.after == fragment.basis
-            return effect.before == fragment.basis
+            return observed_port(effect,false) == program_input(fragment)
         end
         length(matches) == 1 || return "output_binding_unproved"
         effect = only(matches)
-        push!(outputs,effect.family == :count ? (count=effect.context.after_count,support=effect.after) : effect.after)
+        push!(outputs,observed_port(effect,true))
     end
     cursor.outputs = outputs
     cursor.next_step += 1

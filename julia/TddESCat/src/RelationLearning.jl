@@ -80,7 +80,7 @@ function train_prior_relations!(knowledge,config,store,repo_root)
         updated[relation_index] = replaced
         active = GuardSearch(updated,condition.support,condition.excluded,condition.unresolved,
             condition.complete,condition.feasible,condition.visited)
-        knowledge.active[index] = ActiveMechanism(model.rule,active,model.counterexamples,model.unknown)
+        knowledge.active[index] = ActiveMechanism(model.rule,active,model.counterexamples,model.unknown,model.meter_scopes)
     end
     return nothing
 end

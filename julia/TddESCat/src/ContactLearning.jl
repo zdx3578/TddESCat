@@ -4,12 +4,18 @@ struct VisualSite
     event::String
 end
 
+const CONTACT_DOMAIN = "visible-site-obligations-v2"
+
 struct ContactFacts
     # These candidates were bound in the current instance. Visibility does not
     # certify that the set contains every site in the environment.
     remaining::Vector{Tuple{Pixel,VisualSite}}
     previous_action::Int
+    domain_version::String
+    domain_reads::Vector{String}
 end
+
+ContactFacts(remaining,previous_action,reads=String[]) = ContactFacts(remaining,previous_action,CONTACT_DOMAIN,reads)
 
 struct ContactSample
     level::Int
@@ -134,13 +140,16 @@ function progress_value(variable, facts, action)
 end
 
 function progress_witnesses(sample)
-    return unique([sample.before;sample.event;[site.event for (_,site) in sample.facts.remaining]])
+    return unique([sample.before;sample.event;sample.facts.domain_reads;
+        [site.event for (_,site) in sample.facts.remaining]])
 end
 
 function fit_progress_relations(samples)
     # A blocked move answers the admission question. An actual entry can
     # distinguish advancement from completing only an intermediate step.
-    entries = filter(sample->sample.outcome in (:entered,:progress),samples)
+    entries = filter(samples) do sample
+        sample.outcome in (:entered,:progress) && sample.point in first.(sample.facts.remaining)
+    end
     outcomes = Bool[sample.outcome == :progress for sample in entries]
     models = Pair{Symbol,FiniteRelation{Int,Bool}}[]
     witnesses = progress_witnesses.(entries)
@@ -155,7 +164,7 @@ function fit_progress_relations(samples)
     rules = [(variable=variable,rows=sort!(collect(keys(relation.evidence))))
         for (variable,relation) in models]
     model = isempty(models) ? nothing : "progress-" * semantic_hash(
-        [[string(row.variable),row.rows] for row in rules])
+        [CONTACT_DOMAIN,[[string(row.variable),row.rows] for row in rules]])
     return (;models,rules,model,reads,samples=[sample.event for sample in entries])
 end
 
@@ -168,5 +177,6 @@ function progress_conditions(fit, facts, action)
         first(results) ? :progress : :enter_only
     end
     return (judgment=verdict,facts,action,model=fit.model,rules=fit.rules,
-        sample_events=fit.samples,reads=unique([fit.reads;[site.event for (_,site) in facts.remaining]]))
+        sample_events=fit.samples,reads=unique([fit.reads;facts.domain_reads;
+            [site.event for (_,site) in facts.remaining]]))
 end

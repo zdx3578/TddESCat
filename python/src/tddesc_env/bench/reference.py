@@ -175,7 +175,10 @@ def logical_colors(scene, state, *, signal=False):
     if scene.resource:
         x, y = scene.resource.panel
         colors.update(
-            {(x + 2 * i, y): scene.resource.color for i in range(state.resource)}
+            {
+                (x + scene.resource.display_spacing * i, y): scene.resource.color
+                for i in range(state.resource)
+            }
         )
     if scene.selection_color is not None:
         x, y = state.positions[state.selected]

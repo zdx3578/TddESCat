@@ -83,7 +83,7 @@ function typed_motion_signature(deltas)
     operators = [
         Dict("symbol"=>name, "inputs"=>op.inputs, "output"=>op.output,
              "purity"=>"pure", "read_rule"=>op.reads .- 1, "binder_children"=>Int[],
-             "semantic_version"=>"finite-pixel-v1")
+             "semantic_version"=>name == "display_shift" ? METER_METHOD * "-" * METER_UNIT : "finite-pixel-v1")
         for (name, op) in sort!(collect(primitives); by=first)
     ]
     values = sort!(unique([value for delta in deltas for value in delta]))
@@ -98,7 +98,8 @@ function typed_motion_signature(deltas)
         for value in 0:15
     ])
     return Dict("schema_version"=>3, "signature_id"=>"frame-motion-v1",
-        "sorts"=>[Dict{String,Any}("id"=>name) for name in ("Integer", "Color", "Coord", "Delta", "RoleBefore", "RoleAfter", "Relation")],
+        "sorts"=>[Dict{String,Any}("id"=>name) for name in ("Integer", "Color", "Coord", "Delta",
+            "RoleBefore", "RoleAfter", "Relation", "MeasureBefore", "MeasureAfter")],
         "operators"=>operators)
 end
 
