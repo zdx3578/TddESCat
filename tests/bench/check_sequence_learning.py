@@ -221,6 +221,100 @@ def run_click_program(root, runtime, url, public, previous, target):
     return {"click": click_command(target), "checks": feedback, "adaptive": live}
 
 
+def live_program_scene(base):
+    return replace(
+        base,
+        public_id=base.public_id + "L01",
+        start=((7, 8),),
+        moves=((1, 1, 0), (2, -1, 0)),
+        static=(),
+        blocked=(),
+        holes=(),
+    )
+
+
+def run_live_program(root, runtime, url, public, scene):
+    path = public / "live"
+    path.mkdir()
+    cfg = path / "agent.toml"
+    online_config(
+        cfg,
+        root,
+        url,
+        scene,
+        budget=96,
+        batch=8,
+        sequences=True,
+        background_search=True,
+    )
+    assert supervise(root, cfg, path) == 0, (path / "solver.log").read_text()
+    return audit_live_program(path, check_scene(path, scene))
+
+
+def audit_live_program(path, events):
+    run = load(path, "public-run.json")
+    assert run["prior_publication"] is None
+    receipts = {event["event_id"]: event for event in events}
+    assert set(event["action"]["id"] for event in events[1:]) <= {1, 2}
+    decisions = {row["command_id"]: row for row in captured_rows(path, "decisions")}
+    discovered = {
+        assessment["publication"]: assessment
+        for assessment in run["sequence"]["jobs"]
+        if assessment["result"] == "published" and assessment["programs"]
+    }
+    assert discovered, run["sequence"]["jobs"]
+    applications = []
+    for check in captured_rows(path, "checks"):
+        program = check["program"]
+        if not program or program["feedback"] not in ("advance", "completed"):
+            continue
+        receipt = receipts[check["event_ref"]]
+        decision = decisions[receipt["command_ref"]]
+        assert decision["reason"] == "revalidated_learned_program"
+        assert set(check["assessments"].values()) == {"supported"}
+        activation = discovered[program["publication"]]
+        assert program["available_after"] == activation["available_after"]
+        available = receipts[program["available_after"]]["sequence"]
+        assert (
+            available
+            <= receipts[receipt["before_ref"]]["sequence"]
+            < receipt["sequence"]
+        )
+        assert all(
+            receipts[ref]["sequence"] <= available for ref in program["training_events"]
+        )
+        assert program["available_after"] in check["read_events"]
+        assert set(program["training_events"]) <= set(check["read_events"])
+        assert program["definition"] in check["definition_refs"]
+        assert program["definition"] in activation["programs"]
+        (effect,) = [
+            effect
+            for effect in check["evidence"]["effects"]
+            if effect["family"] == "translation"
+        ]
+        pose = [min(pixel[axis] for pixel in effect["before"]) for axis in (0, 1)]
+        applications.append(
+            {"event": receipt["event_id"], "before_pose": pose, **program}
+        )
+    completed = [row for row in applications if row["feedback"] == "completed"]
+    assert len(completed) >= 2, applications
+    assert len({row["event"] for row in completed}) == len(completed)
+    repeated = {}
+    for i, row in enumerate(applications):
+        if row["feedback"] != "completed":
+            continue
+        start = applications[i - row["length"] + 1]
+        assert start["index"] == 1 and start["definition"] == row["definition"]
+        repeated.setdefault(row["definition"], set()).add(tuple(start["before_pose"]))
+    assert any(len(poses) >= 2 for poses in repeated.values()), completed
+    return {
+        "actions": len(events) - 1,
+        "publications": list(discovered.values()),
+        "applications": applications,
+        "completed": len(completed),
+    }
+
+
 def main(config, run):
     root = Path.cwd()
     runtime = runtime_paths(root)
@@ -256,6 +350,7 @@ def main(config, run):
         if scene.variant == "click-interior"
     )
     click_training, click_target = click_program_scenes(click_base)
+    live = live_program_scene(base)
     games = run / "private/games"
     materialize(
         games,
@@ -267,6 +362,7 @@ def main(config, run):
             resource_target,
             *click_training,
             click_target,
+            live,
         ],
     )
     for scene in (held, blocked, resource_target):
@@ -327,6 +423,7 @@ def main(config, run):
         reports["click"] = run_click_program(
             root, runtime, url, public, click_training, click_target
         )
+        reports["live"] = run_live_program(root, runtime, url, public, live)
     write_json(public / "sequences.json", reports)
     for identifier in (
         "sequence_discovery",
@@ -334,6 +431,7 @@ def main(config, run):
         "sequence_withdrawal",
         "sequence_resource",
         "sequence_click",
+        "sequence_live",
     ):
         append_assertion(run, identifier, True, ["public/sequences.json"])
     return 0

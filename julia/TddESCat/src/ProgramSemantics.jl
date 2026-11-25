@@ -5,6 +5,7 @@ struct LearnedProgram
     sources::Vector{String}
     steps::Vector{Dict{String,Any}}
     shared::Vector
+    available_after::Union{Nothing,String}
 end
 
 mutable struct ProgramCursor
@@ -49,46 +50,67 @@ function decode_program_steps(term, registry)
     error("Unsupported program operator")
 end
 
-function read_program_macros(published, corpus)
+function verify_program_interval(expanded, registry, scope, first_step, last_step)
+    interval = first_step:last_step
+    shared = scope["shared"][first_step:last_step-1]
+    canonical_bytes(expanded.shared) == canonical_bytes(shared) ||
+        error("Program expansion changed trace sharing")
+    for (step,record,slots) in zip(expanded.steps,scope["steps"][interval],scope["role_slots"][interval])
+        raw = record["effects"]
+        step.action == record["action"]["id"] && length(step.effects) == length(raw) ||
+            error("Program expansion changed public action or effect count")
+        for (child,data,pair) in zip(step.effects,raw,slots)
+            family = Symbol(data["family"])
+            expected = if family == :selection
+                binding = relative_click(data["values"],data["after"])
+                name = child["operator"]
+                step.layout["click_binding"] == "target-support-grid" &&
+                    registry[name]["descriptor"] == click_descriptor(binding) ||
+                    error("Click target frame changed after publication")
+                wire_call(name,[wire_slot.(collect(pair));wire_const.("Integer",collect(binding.offset))])
+            else
+                effect = LocalEffect(family,MotionShape(),MotionShape(),collect(Int,data["values"]),Pixel[],(;))
+                decode_model_term(effect,pair...)
+            end
+            child == expected || error("Program effect changed after publication")
+        end
+    end
+    return shared
+end
+
+function read_program_macros(published, corpus; available_after=nothing)
     bundle = published.bundle
     bundle["source_programs"] == corpus.programs || error("Program source changed after learning")
     registry,definitions = registry_from(bundle["signature"],published.snapshot.entries)
     selected = LearnedProgram[]
     for (i,(text,scope)) in enumerate(zip(bundle["rewritten_programs"],corpus.scopes))
-        term = decode_program(text,registry)
-        term["kind"] == "Call" || continue
-        id = term["operator"]
-        haskey(definitions,id) && startswith(definitions[id]["result_sort"],"prog_") || continue
-        calls = filter(call->call["program_index"] == i-1 && isempty(call["call_path"]) &&
-            call["definition_ref"] == id,bundle["calls"])
-        length(calls) == 1 || error("Program root lacks a unique search witness")
-        expanded = decode_program_steps(expand_library_term(term,definitions),registry)
-        length(expanded.steps) == length(scope["steps"]) &&
-            canonical_bytes(expanded.shared) == canonical_bytes(scope["shared"]) ||
-            error("Program expansion changed trace length or shared ports")
-        for (step,record,slots) in zip(expanded.steps,scope["steps"],scope["role_slots"])
-            raw = record["effects"]
-            step.action == record["action"]["id"] && length(step.effects) == length(raw) ||
-                error("Program expansion changed public action or effect count")
-            for (child,data,pair) in zip(step.effects,raw,slots)
-                family = Symbol(data["family"])
-                expected = if family == :selection
-                    binding = relative_click(data["values"],data["after"])
-                    name = child["operator"]
-                    step.layout["click_binding"] == "target-support-grid" &&
-                        registry[name]["descriptor"] == click_descriptor(binding) ||
-                        error("Click target frame changed after publication")
-                    wire_call(name,[wire_slot.(collect(pair));wire_const.("Integer",collect(binding.offset))])
-                else
-                    local_effect = LocalEffect(family,MotionShape(),MotionShape(),collect(Int,data["values"]),Pixel[],(;))
-                    decode_model_term(local_effect,pair...)
+        cases = Dict(Tuple(call["call_path"])=>call for call in bundle["calls"]
+            if call["program_index"] == i-1)
+        function visit(node, path, lo)
+            node["kind"] == "Call" || error("Invalid program partition")
+            id = node["operator"]
+            if haskey(definitions,id)
+                startswith(definitions[id]["result_sort"],"prog_") || error("Unexpected program sort")
+                witness = cases[path]
+                witness["definition_ref"] == id || error("Program call lacks a search witness")
+                expanded = decode_program_steps(expand_library_term(node,definitions),registry)
+                hi = lo + length(expanded.steps) - 1
+                hi <= length(scope["steps"]) || error("Program escaped its source interval")
+                shared = verify_program_interval(expanded,registry,scope,lo,hi)
+                if lo < hi
+                    push!(selected,LearnedProgram(published.publication,id,bundle["definition_depths"][id],
+                        collect(String,scope["events"][lo:hi]),scope["steps"][lo:hi],shared,available_after))
                 end
-                child == expected || error("Program effect changed after publication")
+                return hi+1
             end
+            kind = registry[id]["descriptor"]["kind"]
+            kind == "Step" && return lo+1
+            kind == "Seq" || error("Unknown program partition")
+            boundary = visit(node["args"][1],(path...,0),lo)
+            return visit(node["args"][2],(path...,1),boundary)
         end
-        any(program->program.definition == id,selected) && continue
-        push!(selected,LearnedProgram(published.publication,id,bundle["definition_depths"][id],
-            collect(String,scope["events"]),scope["steps"],scope["shared"]))
+        visit(decode_program(text,registry),(),1) == length(scope["steps"])+1 ||
+            error("A rewritten program changed the source interval")
     end
     return selected
 end
@@ -98,7 +120,7 @@ function record_program_assessment(job,assessment)
     return merge(assessment,Dict("job"=>basename(job)))
 end
 
-function train_program_corpus!(knowledge,config,store,repo_root,corpus)
+function prepare_program_learning!(knowledge,config,store,repo_root,corpus)
     isempty(corpus.programs) && return nothing
     settings = read_json(store_path(store,"supervision.json"))
     config_text = read(config.learning["policy_file"],String)
@@ -117,7 +139,11 @@ function train_program_corpus!(knowledge,config,store,repo_root,corpus)
         corpus.programs,corpus.origins,corpus.slots;repo_root,config_text,
         engine_identity=settings["engine_identity"],input_scope_complete=isempty(corpus.obligations),
         intent="program",consumer="program-semantics",obligation_refs=refs)
-    status = wait_worker(job,store_path(store))
+    return (;job,manifest,snapshot,corpus)
+end
+
+function collect_program_learning!(knowledge,store,prepared,status; available_after=nothing)
+    (;job,manifest,snapshot,corpus) = prepared
     status["policy_sha256"] == manifest["config_file"]["sha256"] &&
         status["binary_sha256"] == manifest["engine_pin"]["binary_sha256"] ||
         error("Program worker policy or binary differs")
@@ -136,12 +162,22 @@ function train_program_corpus!(knowledge,config,store,repo_root,corpus)
     end
     id = publish_stitch!(store_path(store,"publication"),checked;current_evidence=snapshot)
     released = read_published_stitch(store_path(store,"publication");publication=id)
-    programs = read_program_macros(released,corpus)
-    append!(knowledge.programs,programs)
+    programs = read_program_macros(released,corpus;available_after)
+    for program in programs
+        any(p->p.definition == program.definition && p.sources == program.sources,knowledge.programs) ||
+            push!(knowledge.programs,program)
+    end
     merge!(knowledge.definition_depths,released.bundle["definition_depths"])
-    sort!(knowledge.programs;by=p->(-length(p.steps),-p.depth,p.definition))
+    sort!(knowledge.programs;by=p->(-length(p.steps),p.definition))
     return record_program_assessment(job,merge(assessment,Dict("result"=>"published","publication"=>id,
-        "programs"=>[program.definition for program in programs])))
+        "available_after"=>available_after,"programs"=>unique([program.definition for program in programs]))))
+end
+
+function train_program_corpus!(knowledge,config,store,repo_root,corpus; available_after=nothing)
+    prepared = prepare_program_learning!(knowledge,config,store,repo_root,corpus)
+    isnothing(prepared) && return nothing
+    status = wait_worker(prepared.job,store_path(store))
+    return collect_program_learning!(knowledge,store,prepared,status;available_after)
 end
 
 function train_prior_programs!(knowledge,config,store,repo_root)
@@ -180,6 +216,17 @@ function program_click_actions(knowledge,cursor,groups,available)
         end
     end
     return unique!(actions)
+end
+
+function program_step_key(action, effects::Vector{EffectModel})
+    return semantic_hash([action["id"],
+        [[string(effect.family),effect.family == :selection ? Int[] : effect.values] for effect in effects]])
+end
+
+function program_step_key(step)
+    return semantic_hash([step["action"]["id"],
+        [[effect["family"],effect["family"] == "selection" ? Int[] : effect["values"]]
+        for effect in step["effects"]]])
 end
 
 program_input(fragment) = fragment.family == :count ?

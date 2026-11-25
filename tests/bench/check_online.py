@@ -29,6 +29,7 @@ def online_config(
     adapt=False,
     association=False,
     sequences=False,
+    background_search=False,
     policy_file=None,
     learning_memory_bytes=None,
 ):
@@ -74,6 +75,7 @@ policy_file = "{policy_file}"
 batch_confirmed_events = {batch}
 association = {str(association).lower()}
 sequences = {str(sequences).lower()}
+background_search = {str(background_search).lower()}
 {prior_setting}
 [search]
 context_radii = [1, 2, 4]

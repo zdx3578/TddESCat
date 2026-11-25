@@ -1,8 +1,13 @@
-function confirmed_segments(events)
+function sequence_observation_key(obs)
+    return semantic_hash([obs.levels_completed,obs.available_actions,JSON.json(last(obs.frames))])
+end
+
+function confirmed_segments(events; close_revisits=false, include_open=true)
     segments = Vector{Tuple}[]
     pending = Tuple[]
     boundaries = Dict{String,Any}[]
     previous = nothing
+    seen = Dict{String,Int}()
     for current in events
         ref = current.event["event_id"]
         action = current.observation.action["id"]
@@ -12,9 +17,13 @@ function confirmed_segments(events)
         if action == 0 || !adjacent
             isempty(pending) || push!(segments,pending)
             pending = Tuple[]
+            empty!(seen)
             push!(boundaries,Dict("event_ref"=>ref,"reason"=>action == 0 ? "reset" : "missing_predecessor"))
         else
             a,b = previous.observation,current.observation
+            if close_revisits && isempty(pending)
+                seen[sequence_observation_key(a)] = 0
+            end
             push!(pending,(previous,current))
             reason = b.levels_completed != a.levels_completed ? "level_changed" :
                 b.state in ("WIN","GAME_OVER") ? "terminal" :
@@ -22,12 +31,23 @@ function confirmed_segments(events)
             if !isnothing(reason)
                 push!(segments,pending)
                 pending = Tuple[]
+                empty!(seen)
                 push!(boundaries,Dict("event_ref"=>ref,"reason"=>reason))
+            elseif close_revisits
+                key = sequence_observation_key(b)
+                start = get!(seen,key,length(pending))
+                if length(pending)-start >= 2
+                    start == 0 || push!(segments,pending[1:start])
+                    push!(segments,pending[start+1:end])
+                    pending = Tuple[]
+                    empty!(seen)
+                    push!(boundaries,Dict("event_ref"=>ref,"reason"=>"observed_revisit"))
+                end
             end
         end
         previous = current
     end
-    isempty(pending) || push!(segments,pending)
+    include_open && !isempty(pending) && push!(segments,pending)
     return (; segments,boundaries)
 end
 
@@ -150,18 +170,21 @@ function sequence_evidence(before,after,result)
         "public_changes"=>result.public_delta,"alternatives"=>result.alternatives)
 end
 
-function compile_sequence_corpus(episodes)
+function compile_sequence_corpus(episodes; observations=Dict{String,PublicEffects}(),
+        close_revisits=false, include_open=true)
     partitions = []
     obligations = Dict{String,Any}[]
     boundaries = Dict{String,Any}[]
     values = Set(-64:64)
     for events in episodes
-        chained = confirmed_segments(events)
+        chained = confirmed_segments(events;close_revisits,include_open)
         append!(boundaries,chained.boundaries)
         for segment in chained.segments
             ready = []
             for (before,after) in segment
-                result = observed_effects(before,after)
+                result = get!(observations,after.event["event_id"]) do
+                    observed_effects(before,after)
+                end
                 raw = sequence_evidence(before,after,result)
                 if !result.complete || !isempty(result.residual) || isempty(result.effects) ||
                         (result.action["id"] == 6 && !any(effect->effect.family == :selection,result.effects))
