@@ -267,9 +267,11 @@ def audit_contact_plan(plan, samples, reads, receipts, *, executing, before):
     selected = plan["selected_at"]
     require(selected in reads, "contact_selection_read")
     prefix = {}
+    history = []
     for ref in receipts:
         if ref in samples:
             row = samples[ref]
+            history.append(row)
             key = (
                 signature(row["context"], row["site"]["value"]),
                 row["outcome"] != "blocked",
@@ -292,7 +294,6 @@ def audit_contact_plan(plan, samples, reads, receipts, *, executing, before):
             row["motion_event"],
         )
     }
-    require(needed == set(conditions["reads"]) <= reads, "contact_training_reads")
     examples = {
         (signature(row["context"], row["site"]["value"]), row["outcome"] != "blocked")
         for row in records
@@ -318,8 +319,45 @@ def audit_contact_plan(plan, samples, reads, receipts, *, executing, before):
     }
     require(actual == set(feasible), "contact_rules")
     votes = {accepts(rule, s) for rule in feasible}
+    scoped = history if not feasible else []
+    require(
+        conditions["scope_events"] == [row["event"] for row in scoped],
+        "omitted_scoped_contact_evidence",
+    )
+    candidates = []
+    if scoped:
+        progress = plan["progress"]
+        facts = progress["facts"]
+        measures = {"signature": 0, **progress_variables(facts, progress["action"])}
+        observed = []
+        for row in scoped:
+            needed.update(
+                (row["event"], row["before"], row["site"]["event"], row["motion_event"])
+            )
+            needed.update(site["event"] for _, site in row["facts"]["remaining"])
+            inputs = {"signature": 0, **progress_variables(row["facts"], row["action"])}
+            observed.append(
+                (
+                    signature(row["context"], row["site"]["value"]),
+                    inputs,
+                    row["outcome"] != "blocked",
+                )
+            )
+        for name, value in measures.items():
+            outputs = {}
+            for sig, inputs, admitted in observed:
+                if outputs.setdefault((sig, inputs[name]), admitted) != admitted:
+                    break
+            else:
+                rows = [[list(key), value] for key, value in sorted(outputs.items())]
+                candidates.append({"variable": name, "rows": rows})
+                votes.add(outputs.get((s, value)))
+                if name == "signature":
+                    break
+    require(conditions["scope_rules"] == candidates, "scoped_contact_rules")
+    require(needed == set(conditions["reads"]) <= reads, "contact_training_reads")
     judgment = "unknown"
-    if examples and len(votes) == 1:
+    if examples and len(votes) == 1 and None not in votes:
         judgment = "admitted" if True in votes else "blocked"
     require(judgment == conditions["judgment"], "contact_judgment")
     return judgment, {allowed for _, allowed in examples} == {False, True}

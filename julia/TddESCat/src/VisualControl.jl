@@ -475,14 +475,15 @@ function revalidate_visual_step!(control, spatial, frame, here, signal, charge, 
             if step.to in targets && !isnothing(step.contact)
                 site = control.targets[step.to]
                 signature = contact_signature(signal,site.value)
-                judgment = contact_judgment(fitted,signature)
-                tested = contact_observed(control.contact_samples,level,step.to,signal,site.value)
+                judgment = contact_judgment(fitted,signature,facts,step.action)
+                tested = contact_observed(control.contact_samples,level,step.to,signal,site.value;
+                    facts=isempty(fitted.scope_samples) ? nothing : facts,action=step.action)
                 planned_site = control.continuation.contact_plan.site
                 if site == planned_site && visual_value(frame,site.field) == site.value &&
                         judgment == step.contact && (!tested || judgment == :admitted)
                     completion = progress_conditions(progress,facts,step.action)
                     if plan.progress.judgment == completion.judgment
-                        updated = merge(plan,(conditions=contact_conditions(fitted,signature),
+                        updated = merge(plan,(conditions=contact_conditions(fitted,signature,facts,step.action),
                             progress=completion,selected_at=event))
                         control.continuation = VisualContinuation(control.continuation.steps,
                             control.continuation.reason,control.continuation.frontier,
@@ -577,7 +578,8 @@ function visual_plan(control, spatial, obs, decision, event)
     targets = first.(facts.remaining)
     fitted = fit_contact_guards(control.contact_samples)
     progress = fit_progress_relations(control.contact_samples)
-    use_history = any(row->first(row) == :previous_action,progress.models)
+    use_history = any(row->first(row) == :previous_action,progress.models) ||
+        !isempty(fitted.scope_samples)
     level = obs.levels_completed
     continued = revalidate_visual_step!(control,spatial,frame,here,signal,charge,motions,
         floor,targets,clock,transitions,fitted,progress,facts,level,event)
@@ -587,7 +589,7 @@ function visual_plan(control, spatial, obs, decision, event)
     cache = Dict{Pixel,NamedTuple}()
     edges = Dict{Tuple{Pixel,Int,Bool},Union{Nothing,NamedTuple}}()
     predictions = Dict{Tuple{Tuple,VisualValue},Union{Nothing,NamedTuple}}()
-    contacts = Dict{Tuple{Pixel,VisualValue},NamedTuple}()
+    contacts = Dict{Tuple{Pixel,VisualValue,Int,Int},NamedTuple}()
     route = [VisualRouteLink(initial,0,0,String[],true,0)]
     visited = Dict{Tuple{Pixel,VisualValue,Tuple,Int,Int},Int}(
         (here,signal,initial.spent,initial.phase,use_history ? facts.previous_action : 0)=>charge)
@@ -621,19 +623,23 @@ function visual_plan(control, spatial, obs, decision, event)
             reads = [first(sources);tile.reads;timed.reads;edge.reads]
             if destination in targets
                 site = control.targets[destination]
-                observation = get!(contacts,(destination,s.signal)) do
+                prior = current ? facts.previous_action : row.action
+                context = ContactFacts(facts.remaining,prior)
+                key = isempty(fitted.scope_samples) ? (destination,s.signal,0,0) :
+                    (destination,s.signal,prior,id)
+                observation = get!(contacts,key) do
                     signature = contact_signature(s.signal,site.value)
-                    judgment = contact_judgment(fitted,signature)
-                    tested = contact_observed(control.contact_samples,level,destination,s.signal,site.value)
+                    judgment = contact_judgment(fitted,signature,context,id)
+                    tested = contact_observed(control.contact_samples,level,destination,s.signal,site.value;
+                        facts=isempty(fitted.scope_samples) ? nothing : context,action=id)
                     (;signature,judgment,tested)
                 end
                 draft = (index=index,action=id,point=destination,reads=[reads;site.event;fitted.reads])
                 if observation.judgment == :admitted
-                    prior = current ? facts.previous_action : row.action
-                    completion = progress_conditions(progress,ContactFacts(facts.remaining,prior),id)
+                    completion = progress_conditions(progress,context,id)
                     draft = merge(draft,(reads=[draft.reads;completion.reads],))
                     plan = (point=destination,site=site,context=s.signal,field=control.field,
-                        conditions=contact_conditions(fitted,observation.signature),selected_at=event,
+                        conditions=contact_conditions(fitted,observation.signature,context,id),selected_at=event,
                         progress=completion)
                     if isnothing(progress.model) || completion.judgment == :progress
                         return route_proposal(control,route,draft,evidence,here;contact_plan=plan)
@@ -646,7 +652,7 @@ function visual_plan(control, spatial, obs, decision, event)
                     if isnothing(contact_rank) || rank > contact_rank
                         contact_rank = rank
                         contact = (probe=draft,context=s.signal,site=site,signature=observation.signature,
-                            prior=current ? facts.previous_action : row.action)
+                            facts=context)
                     end
                 end
                 continue
@@ -699,9 +705,10 @@ function visual_plan(control, spatial, obs, decision, event)
         return route_proposal(control,route,intermediate.probe,evidence,here;contact_plan=intermediate.plan)
     end
     if !isnothing(contact) && (contact_rank[1] || isnothing(experiment))
-        completion = progress_conditions(progress,ContactFacts(facts.remaining,contact.prior),contact.probe.action)
+        completion = progress_conditions(progress,contact.facts,contact.probe.action)
         plan = (point=contact.probe.point,site=contact.site,context=contact.context,field=control.field,
-            conditions=contact_conditions(fitted,contact.signature),selected_at=event,progress=completion)
+            conditions=contact_conditions(fitted,contact.signature,contact.facts,contact.probe.action),
+            selected_at=event,progress=completion)
         probe = merge(contact.probe,(reads=[contact.probe.reads;completion.reads],))
         return route_proposal(control,route,probe,evidence,here;contact_plan=plan)
     end

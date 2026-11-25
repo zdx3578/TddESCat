@@ -20,10 +20,10 @@ function post_image(relation::FiniteRelation, subset)
     return Set(y for (x,y) in keys(relation.evidence) if x in subset)
 end
 
-function empirical_relation(values::Vector{Int}, outcomes::Vector{T}, witnesses) where T
+function empirical_relation(values::Vector{S}, outcomes::Vector{T}, witnesses) where {S,T}
     length(values) == length(outcomes) == length(witnesses) ||
         throw(ArgumentError("Empirical relation requires paired observations"))
-    outputs = Dict{Int,T}()
+    outputs = Dict{S,T}()
     for (value,outcome) in zip(values,outcomes)
         get!(outputs,value,outcome) == outcome || return nothing
     end
