@@ -180,3 +180,36 @@ end
         observed_step("same-history-refutation",changed,4,frame))
     @test isempty(TS.fit_contact_guards(controller.contact_samples).scoped)
 end
+
+@testset "The whole response qualifies one step only when its trace agrees" begin
+    function frame_at(x)
+        frame = fill(0x00,8,10)
+        frame[3:4,x:x+1] .= 0x03
+        return frame
+    end
+    function snapshot(i, action, frames)
+        observation = TS.PublicObservation("public-trace","test-session",frames,"NOT_FINISHED",
+            0,1,Dict("id"=>action),[1],false)
+        event = Dict("event_id"=>"trace-$i","before_ref"=>i == 1 ? nothing : "trace-$(i-1)",
+            "sequence"=>i,"response_blob"=>"blob-$i")
+        return (;event,observation)
+    end
+    a,b,c = frame_at.(2:4)
+    initial = snapshot(1,0,[a])
+    first = snapshot(2,1,[a,b,b])
+    last = snapshot(3,1,[b,c,c])
+    effects = TS.observed_effects(initial,first)
+    @test effects.complete
+    @test length(effects.public_delta["response_trace"]) == 3
+    @test isempty(effects.residual)
+    corpus = TS.compile_sequence_corpus([[initial,first,last]])
+    @test corpus.confirmed_program_actions == 2
+    @test [step["frame_count"] for step in only(corpus.scopes)["steps"]] == [3,3]
+    @test only(corpus.scopes)["events"] == ["trace-2","trace-3"]
+
+    transient = snapshot(2,1,[a,b,a])
+    effects = TS.observed_effects(initial,transient)
+    @test !effects.complete
+    @test "intermediate_frames_require_separate_interpretation" in effects.alternatives
+    @test isempty(TS.compile_sequence_corpus([[initial,transient,last]]).programs)
+end
