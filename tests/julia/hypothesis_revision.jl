@@ -134,3 +134,49 @@ end
         @test Set(proposal.contact.progress.sample_events) == Set(["entry-confirmed","advance-confirmed"])
     end
 end
+
+@testset "History restores contact after contradictory visual signatures" begin
+    state = TS.SpatialLearning()
+    state.role = [(0,0,0x0c)]
+    state.role_reads = ["motion"]
+    state.offsets[4] = Dict((1,0)=>["right"])
+    state.floors[0x00] = 1
+    controller = TS.VisualControl()
+    controller.field = TS.VisualField(Window(4,3,1,1),0x00,1)
+    frame = fill(0x00,5,6)
+    frame[2,2] = 0x0c
+    frame[2,3] = frame[4,5] = 0x02
+    value = TS.visual_value(frame,controller.field)
+    mark = TS.VisualSite(TS.VisualField(Window(2,1,1,1),0x00,1),value,"initial")
+    controller.targets[(2,1)] = mark
+
+    waiting = observed_step("initial",nothing,3,frame)
+    blocked = observed_step("blocked",waiting,4,frame)
+    @test TS.observe_visual_contact!(controller,state,waiting,blocked).outcome == :blocked
+    changed = observed_step("changed",blocked,5,frame)
+    next = copy(frame)
+    next[2,2] = 0x00
+    next[2,3] = 0x0c
+    passed = observed_step("passed",changed,4,next)
+    @test TS.observe_visual_contact!(controller,state,changed,passed).outcome == :entered
+    TS.begin_visual_attempt!(controller)
+    fit = TS.fit_contact_guards(controller.contact_samples)
+    @test isempty(fit.rules)
+    @test first(only(fit.scoped)) == :previous_action
+    signature = TS.contact_signature(value,value)
+    @test TS.contact_judgment(fit,signature,TS.contact_facts(controller,3),4) == :blocked
+    @test TS.contact_judgment(fit,signature,TS.contact_facts(controller,5),4) == :admitted
+    @test TS.contact_judgment(fit,signature,TS.contact_facts(controller,0),4) == :unknown
+
+    domain = (ranked=[(action=Dict("id"=>4),)],)
+    denied = TS.visual_plan(controller,state,waiting.observation,domain,"initial")
+    @test isnothing(denied)
+    admitted = TS.visual_plan(controller,state,changed.observation,domain,"changed")
+    @test admitted.reason == "learned_visual_contact"
+    @test admitted.contact.conditions.judgment == :admitted
+    @test Set(admitted.contact.conditions.scope_events) == Set(["blocked","passed"])
+
+    TS.observe_visual_contact!(controller,state,changed,
+        observed_step("same-history-refutation",changed,4,frame))
+    @test isempty(TS.fit_contact_guards(controller.contact_samples).scoped)
+end

@@ -49,6 +49,28 @@ const CONTACT_GUARDS = [ContactGuard(same,different)
     for same in 0:(1<<length(CONTACT_COMPARISONS))-1
     for different in 0:(1<<length(CONTACT_COMPARISONS))-1 if iszero(same & different)]
 
+admission_witnesses(sample) = unique([sample.before,sample.event,sample.site.event,sample.motion_event])
+
+function scoped_admission_value(variable, signature, facts, action)
+    return (signature, variable == :signature ? 0 : progress_value(variable,facts,action))
+end
+
+function fit_scoped_admission(samples)
+    outcomes = Bool[sample.outcome != :blocked for sample in samples]
+    witnesses = [unique([admission_witnesses(sample);progress_witnesses(sample)]) for sample in samples]
+    signatures = [contact_signature(sample.context,sample.site.value) for sample in samples]
+    models = Pair{Symbol,FiniteRelation{Tuple{Int,Int},Bool}}[]
+    for variable in (:signature,PROGRESS_VARIABLES...)
+        values = [scoped_admission_value(variable,signature,sample.facts,sample.action)
+            for (signature,sample) in zip(signatures,samples)]
+        relation = empirical_relation(values,outcomes,witnesses)
+        isnothing(relation) && continue
+        push!(models,variable=>relation)
+        variable == :signature && break
+    end
+    return models,sort!(unique!(reduce(vcat,witnesses;init=String[])))
+end
+
 function fit_contact_guards(samples)
     examples = Dict{Tuple{Int,Bool},ContactSample}()
     for sample in samples
@@ -65,24 +87,43 @@ function fit_contact_guards(samples)
         votes = count(rule->contact_accepts(rule,signature),rules)
         return votes == 0 ? :blocked : votes == length(rules) ? :admitted : :unknown
     end
-    return (;rules,reads,examples,judgments)
+    scope_samples = isempty(rules) ? samples : ContactSample[]
+    scoped, scope_reads = isempty(scope_samples) ?
+        (Pair{Symbol,FiniteRelation{Tuple{Int,Int},Bool}}[],String[]) : fit_scoped_admission(scope_samples)
+    return (;rules,reads=sort!(unique!([reads;scope_reads])),examples,judgments,
+        scoped,scope_samples,scope_reads)
 end
 
-contact_judgment(fitted, signature) = fitted.judgments[signature+1]
+function contact_judgment(fitted, signature, facts=nothing, action=0)
+    if isempty(fitted.scoped) || isnothing(facts)
+        return fitted.judgments[signature+1]
+    end
+    votes = [empirical_successor(relation,scoped_admission_value(variable,signature,facts,action))
+        for (variable,relation) in fitted.scoped]
+    (any(isnothing,votes) || !allequal(votes)) && return :unknown
+    return first(votes) ? :admitted : :blocked
+end
 
-function contact_conditions(fitted, signature)
-    judgment = contact_judgment(fitted,signature)
+function contact_conditions(fitted, signature, facts, action)
+    judgment = contact_judgment(fitted,signature,facts,action)
     return (;judgment,signature,
         rules=[(;same=[key for (i,key) in enumerate(CONTACT_COMPARISONS) if !iszero(rule.same & (1<<(i-1)))],
             different=[key for (i,key) in enumerate(CONTACT_COMPARISONS) if !iszero(rule.different & (1<<(i-1)))])
             for rule in fitted.rules],
         sample_events=sort!([sample.event for sample in values(fitted.examples)]),
-        reads=fitted.reads)
+        scope_events=[sample.event for sample in fitted.scope_samples],
+        scope_rules=[(variable=variable,rows=sort!(collect(keys(relation.evidence))))
+            for (variable,relation) in fitted.scoped],reads=fitted.reads)
 end
 
-function contact_observed(samples, level, point, context, value)
-    return any(sample->sample.level == level && sample.point == point &&
-        sample.context == context && sample.site.value == value,samples)
+function contact_observed(samples, level, point, context, value; facts=nothing, action=0)
+    return any(samples) do sample
+        same = sample.level == level && sample.point == point &&
+            sample.context == context && sample.site.value == value
+        return same && (isnothing(facts) ||
+            (sample.facts.previous_action == facts.previous_action && sample.action == action &&
+                length(sample.facts.remaining) == length(facts.remaining)))
+    end
 end
 
 const PROGRESS_VARIABLES = (:remaining_sites, :action, :previous_action)
