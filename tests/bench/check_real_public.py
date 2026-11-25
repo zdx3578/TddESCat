@@ -25,6 +25,7 @@ from tddesc_tools.run import (
 )
 
 from tests.bench.autonomous_audit import (
+    SiteDomain,
     audit_contact_plan,
     audit_contact_sample,
     audit_progress_plan,
@@ -150,6 +151,9 @@ def autonomous_report(root, run):
     bootstrap_actions = []
     audit_errors = []
     parents = {}
+    site_domain = SiteDomain()
+    domain_by_receipt = {}
+    survey_cache = {}
     for event in ordered:
         ref = event["event_id"]
         receipt = json.loads((public / "blobs" / event["response_blob"]).read_bytes())
@@ -164,6 +168,13 @@ def autonomous_report(root, run):
                 check = json.loads((public / "checks" / f"{command}.json").read_bytes())
                 decision = json.loads(
                     (public / "decisions" / f"{command}.json").read_bytes()
+                )
+                site_domain.observe(
+                    decision["site_surveys"], receipts, before, frame_cache=survey_cache
+                )
+                domain_by_receipt[parents[ref]] = (
+                    site_domain.remaining(),
+                    site_domain.reads(),
                 )
                 prediction = json.loads(
                     (public / "predictions" / f"{command}.json").read_bytes()
@@ -225,6 +236,7 @@ def autonomous_report(root, run):
                             executing=executing,
                             before=before_receipt,
                         )
+                        domain, domain_reads = domain_by_receipt[plan["selected_at"]]
                         progress_judgment = audit_progress_plan(
                             plan,
                             contact_samples,
@@ -233,6 +245,8 @@ def autonomous_report(root, run):
                             executing=executing,
                             before=before_receipt,
                             action=decision["action"]["id"],
+                            domain=domain,
+                            domain_reads=domain_reads,
                         )
                         if executing:
                             reported = check.get("contact_feedback")
@@ -272,8 +286,15 @@ def autonomous_report(root, run):
                     audit_contact_sample(
                         sample, ref, before_receipt, receipt, receipts, parents
                     )
-                    audit_progress_sample(sample, before_receipt, receipt, receipts)
+                    audit_progress_sample(
+                        sample,
+                        before_receipt,
+                        receipt,
+                        receipts,
+                        site_domain=site_domain,
+                    )
                     contact_samples[ref] = sample
+                    site_domain.entered(sample)
                 if (
                     check["definition_refs"]
                     and check["assessments"]
@@ -283,14 +304,25 @@ def autonomous_report(root, run):
                         {"event": ref, "definitions": check["definition_refs"]}
                     )
                 audited_actions.append(ref)
+                if position != before:
+                    site_domain.reset_level()
+                site_domain.observe(
+                    check["site_surveys"],
+                    {**receipts, ref: receipt},
+                    position,
+                    frame_cache=survey_cache,
+                )
             except (OSError, KeyError, TypeError, ValueError) as error:
                 audit_errors.append({"event": ref, "error": str(error)})
+        else:
+            site_domain.reset_attempt()
         if position != before:
             progress.append(
                 {"completed": position, "event": ref, "sha256": event["response_blob"]}
             )
             through_level = position
         receipts[ref] = receipt
+        domain_by_receipt[ref] = (site_domain.remaining(), site_domain.reads())
     final = receipts.get(ledger["through_event"], {})
     target = final.get("win_levels", 0)
     first = next(iter(receipts.values()), {})
@@ -321,12 +353,21 @@ def autonomous_report(root, run):
     }
     isolation = json.loads((public / "solver-isolation.json").read_bytes())
     isolated = bool(isolation) and all(isolation.values())
+    learned_progress = {}
+    for row in contact_control:
+        if (
+            row["progress_model"]
+            and row["progress_judgment"] == row["outcome"] == "progress"
+        ):
+            learned_progress.setdefault(row["progress_model"], set()).add(row["level"])
+    progress_transfer = any(len(levels) > 1 for levels in learned_progress.values())
     passed = (
         cold
         and isolated
         and single_session
         and target > 0
         and not audit_errors
+        and progress_transfer
         and {row["event"] for row in progress}
         == {row["event"] for row in contact_control if row["outcome"] == "progress"}
         and all(
@@ -360,6 +401,7 @@ def autonomous_report(root, run):
         "audit_errors": audit_errors,
         "contact_samples": list(contact_samples.values()),
         "contact_control": contact_control,
+        "progress_transfer": progress_transfer,
         "isolated": isolated,
         "structural_consumption": structural_consumption,
         "scorecard_sha256": close.get("response_blob"),

@@ -53,6 +53,12 @@ function describe_learning_context(signature, entries, programs, origins, slots;
     registry, definitions = registry_from(signature,entries)
     terms = [decode_program(text,registry) for text in programs]
     sorts = String[slot["sort"] for slot in slots]
+    for slot in slots
+        sort = slot["sort"]
+        phase = sort in ("RoleBefore","SceneBefore","MeasureBefore") ? "before" :
+            sort in ("RoleAfter","SceneAfter","MeasureAfter") ? "after" : nothing
+        isnothing(phase) || slot["time_role"] == phase || error("Typed slot has the wrong observation phase")
+    end
     sources = [Dict{String,Any}(source) for source in origins]
     sites = Dict((source["program_index"],Tuple(source["expression_path"]))=>source for source in sources)
     length(sites) == length(sources) || error("Repeated learning origin")

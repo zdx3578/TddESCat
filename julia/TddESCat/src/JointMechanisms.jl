@@ -5,7 +5,11 @@ struct EffectModel
     values::Vector{Int}
     visibility::MotionShape
     enclosed::Bool
+    measurement::Union{Nothing,MeterBinding}
 end
+
+EffectModel(family,template,position,values,visibility,enclosed) =
+    EffectModel(family,template,position,values,visibility,enclosed,nothing)
 
 const PixelChange = Tuple{Int,Int,UInt8,UInt8}
 
@@ -33,6 +37,7 @@ function frame_patch(output, before, after, anchors)
     moving = Set{Pixel}()
     fixed = Set{Pixel}()
     for effect in output.effects
+        effect.family == :measurement && continue
         union!(effect.family == :translation ? moving : fixed, effect.changed)
     end
     isdisjoint(moving, fixed) || return nothing
@@ -114,11 +119,13 @@ function joint_model(compiled, program, original, definitions, calls, occurrence
         if effect.family == :translation
             push!(moving, before_role)
         end
-        prototype = effect.family == :count ? effect.context.prototype : shape_template(before_role)
+        meter = effect.family == :measurement ? effect.context.binding : nothing
+        prototype = effect.family == :count ? effect.context.prototype :
+            isnothing(meter) ? shape_template(before_role) : MotionShape()
         position = effect.family == :pigment ? anchor(before_role) : nothing
         visibility = effect.family == :count ? effect.context.visibility : ColorCell[]
         push!(models, EffectModel(effect.family, prototype, position, values, visibility,
-            effect.family == :translation && before_role in enclosed_targets))
+            effect.family == :translation && before_role in enclosed_targets,meter))
     end
     anchors = anchor.(moving)
     spacing = isempty(anchors) ? Pixel[] : [a .- first(anchors) for a in anchors]
@@ -188,7 +195,7 @@ function model_count(model, frame, groups)
     return count(s -> shape_template(s) == model.template, groups)
 end
 
-function result_model(model, before, groups, enclosure, action)
+function result_model(model, before, groups, enclosure, action; meters=())
     if model.family == :translation
         bound = model_binding(model, groups, [role.target for role in enclosure])
         isnothing(bound) && return nothing
@@ -200,13 +207,23 @@ function result_model(model, before, groups, enclosure, action)
         n = model_count(model, before, groups)
         isnothing(n) && return nothing
         support = sort!(reduce(vcat,(part for part in groups if shape_template(part) == model.template);init=ColorCell[]))
-        return (family=:count, basis=n, expected=n + only(model.values), value=n, token_support=support)
+        return (family=:count,basis=n,expected=n+only(model.values),value=n,token_support=support,
+            instance=semantic_hash(["discrete-component-count",model.template]))
+    elseif model.family == :measurement
+        binding = match_meter(model.measurement,meters)
+        isnothing(binding) && return nothing
+        n = read_meter(before,binding)
+        isnothing(n) && return nothing
+        return (family=:measurement,basis=n,expected=n+only(model.values),value=n,binding,
+            instance=meter_identity(binding))
     elseif model.family == :pigment
         x,y = model.position
         seen = [s for s in groups if anchor(s) == model.position && position_offsets(s) == position_offsets(model.template)]
         length(seen) == 1 || return nothing
         bound = only(seen)
         return (family=:pigment, basis=bound, expected=last(model.values), value=Int(before[y+1,x+1]))
+    elseif model.family != :selection
+        error("No joint consumer for " * string(model.family))
     end
     length(enclosure) == 1 || return nothing
     xy = (action["x"],action["y"])
@@ -218,12 +235,14 @@ function result_model(model, before, groups, enclosure, action)
     return (family=:selection, basis=only(targets), expected=anchor(only(targets)), value=anchor(only(enclosure).target))
 end
 
-function evaluate_joint_rule(rule, before, groups, enclosure, action)
-    fragments = [result_model(effect,before,groups,enclosure,action) for effect in rule.effects]
+function evaluate_joint_rule(rule, before, groups, enclosure, action; meters=())
+    fragments = [result_model(effect,before,groups,enclosure,action;meters) for effect in rule.effects]
     any(isnothing,fragments) && return (truth=unknown_truth, fragments, reason="incomplete_effect_binding")
     for (effect,fragment) in zip(rule.effects, fragments)
         if effect.family == :count && fragment.expected < 0
             return (truth=disproven, fragments, reason="resource_precondition")
+        elseif effect.family == :measurement && !(0 <= fragment.expected <= meter_length(fragment.binding.face.box))
+            return (truth=disproven,fragments,reason="resource_precondition")
         elseif effect.family == :pigment && fragment.value != first(effect.values)
             return (truth=disproven, fragments, reason="observed_color_precondition")
         elseif effect.family == :selection && fragment.expected == fragment.value
@@ -258,7 +277,7 @@ end
 function scope_key(fragment)
     # Include the operand binding so two moving roles remain separate channels.
     match = fragment.family == :translation ? fragment.value :
-        fragment.family == :count ? fragment.basis :
+        fragment.family in (:count,:measurement) ? fragment.instance :
         anchor(fragment.basis)
     return string(fragment.family) * "-" * (match isa Tuple ? join(match,"-") : string(match))
 end
@@ -304,12 +323,16 @@ function measure_joint(choice, after)
             isnothing(corresponding) ? nothing : anchor(corresponding) .- part.value
         elseif part.family == :count
             model_count(model,after,groups)
+        elseif part.family == :measurement
+            read_meter(after,part.binding)
         elseif part.family == :pigment
             matches = filter(s -> anchor(s) == model.position &&
                 position_offsets(s) == position_offsets(model.template), groups)
             length(matches) == 1 ? Int(first(only(matches))[3]) : nothing
-        else
+        elseif part.family == :selection
             length(enclosure) == 1 ? anchor(only(enclosure).target) : nothing
+        else
+            error("No public feedback semantics for " * string(part.family))
         end
         name = scope_key(part)
         actual[name] = value

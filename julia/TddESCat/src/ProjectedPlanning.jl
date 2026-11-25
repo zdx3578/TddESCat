@@ -55,6 +55,12 @@ function project_frame(choice, before)
             target[y+1,x+1] = new
         end
     end
+    for part in choice.fragments
+        part.family == :measurement || continue
+        affected = meter_pixels(part.binding,part.basis,part.expected)
+        isdisjoint(touched,affected) && render_meter!(target,part.binding,part.expected) || return nothing
+        union!(touched,affected)
+    end
     observed = measure_joint((model=rule,fragments=choice.fragments),target)
     !isempty(observed.assessments) && all(==("supported"),values(observed.assessments)) || return nothing
     return target
@@ -138,7 +144,7 @@ end
 frame_key(frame) = content_hash(vec(frame))
 state_key(state) = (frame_key(state.frame), Tuple(state.actions), Tuple(state.history))
 
-function project_goal_model(knowledge, obs, history, goal, history_width, max_action_coordinates)
+function project_goal_model(knowledge,obs,history,goal,history_width,max_action_coordinates;meters=())
     initial = ProjectedState(last(obs.frames),sort(obs.available_actions),copy(history))
     states = [initial]
     ids = Dict{Tuple{String,Tuple,Tuple},Int}(state_key(initial)=>1)
@@ -159,7 +165,7 @@ function project_goal_model(knowledge, obs, history, goal, history_width, max_ac
         else
             view = (frames=[state.frame],available_actions=state.actions)
             decision = ranked_public_actions(knowledge,view,state.history,Dict{ConcreteAction,Int}(),
-                max_action_coordinates; composing=true)
+                max_action_coordinates;composing=true,meters)
             enabled[index] = Set(action_key(item.action) for item in decision.ranked)
             if 6 in state.actions && decision.click_count < 4096
                 push!(gaps,(state=index,action=nothing,reason="unmodeled_click_domain"))
@@ -195,9 +201,9 @@ function project_goal_model(knowledge, obs, history, goal, history_width, max_ac
     return GoalProjection(model,states,edges,goals,gaps,work,obs.levels_completed)
 end
 
-function search_observed_goal(knowledge, obs, history, goal, history_width, max_action_coordinates, command)
+function search_observed_goal(knowledge,obs,history,goal,history_width,max_action_coordinates,command;meters=())
     projection = project_goal_model(knowledge,obs,last(history,min(history_width,length(history))),
-        goal,history_width,max_action_coordinates)
+        goal,history_width,max_action_coordinates;meters)
     solved = solve_policy(projection.model,Set([1]),projection.goals)
     cursor = nothing
     if !isnothing(solved.policy) && !isnothing(solved.policy.action)
@@ -286,7 +292,7 @@ function public_projection_record(result)
             Dict(key=>sort!(collect(value)) for (key,value) in result.cursor.index.readers))
 end
 
-function choose_observed_goal_step(rec, knowledge, goal, history, decision, pending, max_action_coordinates)
+function choose_observed_goal_step(rec,knowledge,goal,history,decision,pending,max_action_coordinates;meters=())
     note = Dict{String,Any}("operation"=>"search_observed_goal","status"=>"unbound_observed_goal")
     isnothing(goal) && return (item=nothing,cursor=nothing,note)
     if !isnothing(pending)
@@ -303,7 +309,7 @@ function choose_observed_goal_step(rec, knowledge, goal, history, decision, pend
     history_width = maximum((atom isa HistorySuffix ? length(atom.actions) : atom isa RecentAction ? 1 : 0
         for model in knowledge.active for atom in model.condition.atoms);init=1)
     id = command_id(rec.next_sequence)
-    result = search_observed_goal(knowledge,rec.observation,history,goal,history_width,max_action_coordinates,id)
+    result = search_observed_goal(knowledge,rec.observation,history,goal,history_width,max_action_coordinates,id;meters)
     proof = public_projection_record(result)
     proof["before_ref"] = rec.before_ref
     proof["goal"] = Dict("relation"=>"distance_to_marker","role_color"=>goal.role_color,

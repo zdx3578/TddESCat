@@ -16,6 +16,8 @@ end
         frame[6,x+1:x+2] .= 0x03
         frame[7,x+1:x+2] .= 0x08
         frame[2,22] = open ? 0x0c : 0x05
+        frame[17:19,1:10] .= 0x0d
+        frame[18,2:9] .= 0x00
         frame[18,2:charge+1] .= 0x0e
         frame[3:4,10:11] .= open ? 0x07 : 0x04
         return frame

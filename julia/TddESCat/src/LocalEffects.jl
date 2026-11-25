@@ -19,6 +19,8 @@ struct PublicEffects
     public_delta::Dict{String,Any}
     complete::Bool
     candidate_roles::Int
+    live_meters::Vector{MeterBinding}
+    uncertain_meters::Vector{String}
 end
 
 effect_points(shape) = Set((x, y) for (x,y,_) in shape)
@@ -112,7 +114,7 @@ function possible_scene_transform(effects)
     return false
 end
 
-function observed_effects(previous, current)
+function observed_effects(previous, current; meters=MeterContext())
     sample = motion_example(previous, current)
     action = current.observation.action
     frame_before = length(previous.observation.frames) - 1
@@ -123,12 +125,42 @@ function observed_effects(previous, current)
     public_delta = observed_public_delta(previous,current)
     if size(before) != size(after)
         return PublicEffects(sample.event_id, sample.before_id, action, frame_before, frame_after,
-            effects, Pixel[], ["different_frame_domains"], public_delta, false, 0)
+            effects, Pixel[], ["different_frame_domains"], public_delta, false, 0,MeterBinding[],String[])
     end
     changed = Set((pixel.x, pixel.y) for pixel in frame_difference(before, after))
     before_groups = color_components(before).groups
     after_groups = color_components(after).groups
     candidate_roles = length(before_groups) + length(after_groups)
+    meter_context!(meters,previous.observation)
+    readings = NamedTuple[]
+    live_meters = MeterBinding[]
+    uncertain_meters = String[]
+    if previous.observation.levels_completed == current.observation.levels_completed
+        measured = meter_readings!(meters,before,current.observation.frames,before_groups,
+            sample.before_id,sample.event_id)
+        readings,live_meters,uncertain_meters = measured.readings,measured.live,measured.unresolved
+        isempty(uncertain_meters) || push!(alternatives,"measurement_visibility_unresolved")
+    end
+    for row in readings
+        binding = row.binding
+        from,to = first(row.values),last(row.values)
+        from == to && continue
+        pixels = meter_pixels(binding,from,to)
+        push!(effects,LocalEffect(:measurement,meter_support(binding,from),meter_support(binding,to),
+            [to-from],pixels,(measurement=meter_contract(),binding,instance=meter_identity(binding),
+                before_value=from,after_value=to,response_values=row.values[2:end],
+                reads=unique([binding.face.source,binding.calibrated_at,sample.before_id,sample.event_id]))))
+    end
+    # A certified display profile already explains these supports. Keep the
+    # same pixels out of the discrete-component and pigment interpretations.
+    if !isempty(readings)
+        inside_display(shape) = any(readings) do row
+            box = row.binding.face.box
+            all(cell->in_window(box,cell[1],cell[2]),shape)
+        end
+        filter!(shape->!inside_display(shape),before_groups)
+        filter!(shape->!inside_display(shape),after_groups)
+    end
     B, A = group_by_shape(before_groups), group_by_shape(after_groups)
     static_support = Set(intersect(before_groups,after_groups))
     for key in sort!(collect(intersect(keys(B), keys(A))))
@@ -207,7 +239,28 @@ function observed_effects(previous, current)
     covered = Set(pixel for effect in effects for pixel in effect.changed)
     return PublicEffects(sample.event_id, sample.before_id, action, frame_before, frame_after,
         effects, sort!(collect(setdiff(changed, covered))), unique(alternatives), public_delta,
-        isempty(alternatives), candidate_roles)
+        isempty(alternatives), candidate_roles,live_meters,uncertain_meters)
+end
+
+function replay_effects!(observations, episodes)
+    for episode in episodes
+        all(after->after.observation.action["id"] == 0 || haskey(observations,after.event["event_id"]),
+            Iterators.drop(episode,1)) && continue
+        meters = MeterContext()
+        for (before,after) in zip(episode,Iterators.drop(episode,1))
+            after.observation.action["id"] == 0 && continue
+            after.event["before_ref"] == before.event["event_id"] || (meters = MeterContext(); continue)
+            ref = after.event["event_id"]
+            result = observed_effects(before,after;meters)
+            if haskey(observations,ref)
+                JSON.json(public_effect_record(observations[ref])) == JSON.json(public_effect_record(result)) ||
+                    error("Replayed public observation differs from its earlier interpretation")
+            else
+                observations[ref] = result
+            end
+        end
+    end
+    return observations
 end
 
 function effect_record(effect::LocalEffect)
@@ -220,7 +273,8 @@ function public_effect_record(result::PublicEffects)
         "frames"=>[result.frame_before,result.frame_after], "effects"=>effect_record.(result.effects),
         "residual"=>result.residual, "alternatives"=>result.alternatives,
         "public_delta"=>result.public_delta,"complete"=>result.complete,
-        "candidate_roles"=>result.candidate_roles)
+        "candidate_roles"=>result.candidate_roles,"live_meters"=>result.live_meters,
+        "uncertain_meters"=>result.uncertain_meters)
 end
 
 function effect_program(effect, before, after)
@@ -231,9 +285,15 @@ function effect_program(effect, before, after)
         return Call("pigment", before, after, [Literal("Color", value) for value in effect.values]...)
     elseif effect.family == :count
         return Call("count_shift", before, after, only(ints))
+    elseif effect.family == :measurement
+        return Call("display_shift", before, after, only(ints))
+    elseif effect.family == :selection
+        return Call("selection", before, after, Call("coord", ints...))
     end
-    return Call("selection", before, after, Call("coord", ints...))
+    error("No public effect semantics for " * string(effect.family))
 end
+
+effect_sort(family,after) = (family == :measurement ? "Measure" : "Role") * (after ? "After" : "Before")
 
 function compose_effects(terms, lo=firstindex(terms), hi=lastindex(terms))
     lo == hi && return terms[lo]
@@ -241,16 +301,17 @@ function compose_effects(terms, lo=firstindex(terms), hi=lastindex(terms))
     return Call("pair", compose_effects(terms, lo, middle), compose_effects(terms, middle + 1, hi))
 end
 
-function relation_corpus(pairs; previous_signature=nothing)
+function relation_corpus(pairs; previous_signature=nothing, observations=Dict{String,PublicEffects}())
     programs = String[]
     origins = Dict{String,Any}[]
     bindings = Dict{String,Any}()
-    observed = [observed_effects(previous,current) for (previous,current) in pairs]
+    observed = [get!(() -> observed_effects(previous,current),observations,current.event["event_id"])
+        for (previous,current) in pairs]
     compiled = []
     dispositions = Dict{String,String}()
     values = Set(-64:64)
     for output in observed, effect in output.effects, value in effect.values
-        if effect.family == :count
+        if effect.family in (:count,:measurement)
             push!(values, value)
         end
     end
@@ -262,7 +323,8 @@ function relation_corpus(pairs; previous_signature=nothing)
     end
     signature = typed_motion_signature(((v,0) for v in values))
     registry, _ = registry_from(signature, [])
-    used_slots = 0
+    slots = Dict{String,Any}[]
+    ports = Dict{Tuple{Int,String},Int}()
     for output in observed
         if isempty(output.effects)
             dispositions[output.event_id] = isempty(output.alternatives) ? "no_supported_effect" : "unresolved"
@@ -273,18 +335,25 @@ function relation_corpus(pairs; previous_signature=nothing)
             continue
         end
         joined = join_effect_roles(length(output.effects))
-        vertices = [role for pair in joined.roles for role in pair]
-        slots_by_role = Dict(v=>index - 1 for (index,v) in enumerate(vertices))
-        effect_terms = ConceptTerm[effect_program(effect, Slot(slots_by_role[pre]), Slot(slots_by_role[post]))
+        function role_slot(role,effect,after)
+            sort = effect_sort(effect.family,after)
+            return get!(ports,(role,sort)) do
+                index = length(slots)
+                push!(slots,Dict("index"=>index,"sort"=>sort,"time_role"=>after ? "after" : "before","role_constraints"=>[]))
+                index
+            end
+        end
+        role_slots = [(role_slot(pre,effect,false),role_slot(post,effect,true))
             for (effect,(pre,post)) in zip(output.effects, joined.roles)]
+        effect_terms = ConceptTerm[effect_program(effect,Slot(pre),Slot(post))
+            for (effect,(pre,post)) in zip(output.effects,role_slots)]
         term = compose_effects(effect_terms)
         rendered = render_term(term)
         syntax = decode_program(rendered,registry)
         index = length(programs)
         push!(programs, rendered)
         dispositions[output.event_id] = output.complete ? "compiled" : "compiled_with_unresolved_interpretation"
-        used_slots = max(used_slots,length(vertices))
-        push!(compiled, (output=output, roles=[(slots_by_role[pre],slots_by_role[post]) for (pre,post) in joined.roles]))
+        push!(compiled, (output=output, roles=role_slots))
         reference = "effects-" * output.event_id
         bindings[reference] = merge(public_effect_record(output),
             Dict("catlab_event"=>joined.event, "catlab_role_vertices"=>joined.roles, "role_slots"=>last(compiled).roles))
@@ -295,8 +364,6 @@ function relation_corpus(pairs; previous_signature=nothing)
                 "slot_bindings_ref"=>reference,"support_ref"=>reference,"source_kind"=>"observed"))
         end
     end
-    slots = [Dict("index"=>index - 1, "sort"=>isodd(index) ? "RoleBefore" : "RoleAfter",
-        "time_role"=>isodd(index) ? "before" : "after", "role_constraints"=>[]) for index in 1:used_slots]
     return (; signature, slots, programs, origins, bindings, observed, compiled, dispositions,
         complete=all(output -> output.complete, observed))
 end

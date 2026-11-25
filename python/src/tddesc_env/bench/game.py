@@ -253,7 +253,9 @@ class ShapeGame(ARCBaseGame):
         if self.scene.resource:
             x, y = self.scene.resource.panel
             for i in range(self.resource):
-                view[y, x + i * 2] = self.scene.resource.color
+                view[y, x + i * self.scene.resource.display_spacing] = (
+                    self.scene.resource.color
+                )
         if self.scene.signal is not None and (
             flash
             or (

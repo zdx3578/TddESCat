@@ -104,15 +104,17 @@ function sequence_step!(signature, slots, positions, output, action, offset)
     ports = [string(effect.family) for effect in output.effects]
     before = add_sequence_slot!(slots,positions,"SceneBefore","before",offset)
     after = add_sequence_slot!(slots,positions,"SceneAfter","after",offset)
-    pre = relation_atom!(signature,"step-inputs",[("RoleBefore","before") for _ in ports];slot=before.index)
-    post = relation_atom!(signature,"step-results",[("RoleAfter","after") for _ in ports];
+    pre = relation_atom!(signature,"step-inputs",[(effect_sort(effect.family,false),"before")
+        for effect in output.effects];slot=before.index)
+    post = relation_atom!(signature,"step-results",[(effect_sort(effect.family,true),"after")
+        for effect in output.effects];
         phase="after",slot=after.index)
     action_term = Literal("Integer",action["id"])
     effects = ConceptTerm[]
     role_slots = Tuple{Int,Int}[]
     for (i,effect) in enumerate(output.effects)
-        input = add_sequence_slot!(slots,positions,"RoleBefore","before",offset,i)
-        result = add_sequence_slot!(slots,positions,"RoleAfter","after",offset,i)
+        input = add_sequence_slot!(slots,positions,effect_sort(effect.family,false),"before",offset,i)
+        result = add_sequence_slot!(slots,positions,effect_sort(effect.family,true),"after",offset,i)
         push!(role_slots,(input.index,result.index))
         term = if effect.family == :selection
             binding = relative_click(effect.values,effect.after)
@@ -138,8 +140,12 @@ function shared_sequence_ports(left, right)
     for (i,outgoing) in enumerate(left.effects), (j,incoming) in enumerate(right.effects)
         incoming.family == :selection && continue
         (outgoing.family == incoming.family || outgoing.family == :selection && incoming.family == :translation) || continue
-        isempty(outgoing.after) && continue
-        outgoing.after == incoming.before || continue
+        if outgoing.family == :measurement
+            outgoing.context.instance == incoming.context.instance &&
+                outgoing.context.after_value == incoming.context.before_value || continue
+        else
+            !isempty(outgoing.after) && outgoing.after == incoming.before || continue
+        end
         push!(pairs,(i-1,j-1))
     end
     allunique(first.(pairs)) && allunique(last.(pairs)) || return nothing
@@ -176,15 +182,14 @@ function compile_sequence_corpus(episodes; observations=Dict{String,PublicEffect
     obligations = Dict{String,Any}[]
     boundaries = Dict{String,Any}[]
     values = Set(-64:64)
+    replay_effects!(observations,episodes)
     for events in episodes
         chained = confirmed_segments(events;close_revisits)
         append!(boundaries,chained.boundaries)
         for segment in chained.segments
             ready = []
             for (before,after) in segment
-                result = get!(observations,after.event["event_id"]) do
-                    observed_effects(before,after)
-                end
+                result = observations[after.event["event_id"]]
                 raw = sequence_evidence(before,after,result)
                 if !result.complete || !isempty(result.residual) || isempty(result.effects) ||
                         (result.action["id"] == 6 && !any(effect->effect.family == :selection,result.effects))
