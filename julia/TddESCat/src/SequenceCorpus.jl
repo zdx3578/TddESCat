@@ -2,7 +2,7 @@ function sequence_observation_key(obs)
     return semantic_hash([obs.levels_completed,obs.available_actions,JSON.json(last(obs.frames))])
 end
 
-function confirmed_segments(events; close_revisits=false, include_open=true)
+function confirmed_segments(events; close_revisits=false)
     segments = Vector{Tuple}[]
     pending = Tuple[]
     boundaries = Dict{String,Any}[]
@@ -47,8 +47,8 @@ function confirmed_segments(events; close_revisits=false, include_open=true)
         end
         previous = current
     end
-    include_open && !isempty(pending) && push!(segments,pending)
-    return (; segments,boundaries)
+    isempty(pending) || push!(segments,pending)
+    return (; segments,boundaries,pending)
 end
 
 function compile_evidence_sequences(directory, destination)
@@ -177,7 +177,7 @@ function compile_sequence_corpus(episodes; observations=Dict{String,PublicEffect
     boundaries = Dict{String,Any}[]
     values = Set(-64:64)
     for events in episodes
-        chained = confirmed_segments(events;close_revisits,include_open)
+        chained = confirmed_segments(events;close_revisits)
         append!(boundaries,chained.boundaries)
         for segment in chained.segments
             ready = []
@@ -203,7 +203,9 @@ function compile_sequence_corpus(episodes; observations=Dict{String,PublicEffect
                 end
                 push!(ready,(; before,after,result,raw))
             end
-            isempty(ready) || push!(partitions,ready)
+            if (include_open || segment !== chained.pending) && !isempty(ready)
+                push!(partitions,ready)
+            end
         end
     end
     signature = typed_motion_signature(((i,0) for i in values))

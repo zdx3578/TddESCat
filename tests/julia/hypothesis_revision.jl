@@ -206,6 +206,12 @@ end
     @test corpus.confirmed_program_actions == 2
     @test [step["frame_count"] for step in only(corpus.scopes)["steps"]] == [3,3]
     @test only(corpus.scopes)["events"] == ["trace-2","trace-3"]
+    @test isempty(TS.compile_sequence_corpus([[initial,first,last]];include_open=false).programs)
+
+    unresolved = snapshot(4,1,[c,a,c])
+    online = TS.compile_sequence_corpus([[initial,first,last,unresolved]];include_open=false)
+    @test only(online.scopes)["events"] == ["trace-2","trace-3"]
+    @test only(online.obligations)["event_ref"] == "trace-4"
 
     transient = snapshot(2,1,[a,b,a])
     effects = TS.observed_effects(initial,transient)
