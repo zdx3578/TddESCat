@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "source_agent_config": "agent.toml",
+  "history_lengths": [1, 2, 4],
+  "diagnostic_events": [
+    "c000000107",
+    "c000000109",
+    "c000000110",
+    "c000000111"
+  ],
+  "prefix_diagnostics": [
+    {
+      "scope_after": "c000000107",
+      "evaluate": "c000000110"
+    }
+  ]
+}

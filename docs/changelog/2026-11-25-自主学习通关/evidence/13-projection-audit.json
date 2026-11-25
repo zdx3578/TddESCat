@@ -1,0 +1,528 @@
+{
+  "source_commit": "19e9cf31de1e555da7f93928c8151780c77054c2",
+  "scope": "Independent finite projection-condition replay; recorded quantity inputs and local support remain trusted inputs, not a full interpreter proof.",
+  "runs": {
+    "optimized": {
+      "audit_scope": "Read-only finite projection-prefix audit, not a proof of the full interpreter.\n\nRecorded quantity inputs and local-support labels are reused. This audit does not\nindependently reconstruct the object interpreter, mechanism hashes or meters.",
+      "history_lengths": [
+        1,
+        2,
+        4
+      ],
+      "projection_count": 112,
+      "errors": [],
+      "conditioned_nonempty": 3,
+      "chain": [
+        {
+          "command": "c000000107",
+          "contract": "projection-f1c8523f95e7b22f10d30d5cb6de873f3ba2bbedf5b8f704d455891edf69ae54",
+          "status": "witnessed_base",
+          "outcome": "f06cfebff4821501a1689e1a9a22c1e008655ab5374938285e21644e692d1d0d",
+          "matching": false,
+          "local_supported": true,
+          "base_equals_projected": true,
+          "correction_cells": 5,
+          "prior_trials": 6,
+          "conditions": []
+        },
+        {
+          "command": "c000000109",
+          "contract": "projection-f1c8523f95e7b22f10d30d5cb6de873f3ba2bbedf5b8f704d455891edf69ae54",
+          "status": "unproved_projection_scope",
+          "outcome": "f06cfebff4821501a1689e1a9a22c1e008655ab5374938285e21644e692d1d0d",
+          "matching": false,
+          "local_supported": true,
+          "base_equals_projected": true,
+          "correction_cells": 5,
+          "prior_trials": 7,
+          "conditions": [
+            {
+              "feature": [
+                "pixel",
+                [
+                  50,
+                  47
+                ]
+              ],
+              "input": 9,
+              "repetitions": 1,
+              "predicted": "f06cfebff4821501a1689e1a9a22c1e008655ab5374938285e21644e692d1d0d"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  51,
+                  46
+                ]
+              ],
+              "input": 12,
+              "repetitions": 1,
+              "predicted": "f06cfebff4821501a1689e1a9a22c1e008655ab5374938285e21644e692d1d0d"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  51,
+                  47
+                ]
+              ],
+              "input": 9,
+              "repetitions": 1,
+              "predicted": "f06cfebff4821501a1689e1a9a22c1e008655ab5374938285e21644e692d1d0d"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  51,
+                  48
+                ]
+              ],
+              "input": 9,
+              "repetitions": 1,
+              "predicted": "f06cfebff4821501a1689e1a9a22c1e008655ab5374938285e21644e692d1d0d"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  52,
+                  47
+                ]
+              ],
+              "input": 9,
+              "repetitions": 1,
+              "predicted": "f06cfebff4821501a1689e1a9a22c1e008655ab5374938285e21644e692d1d0d"
+            }
+          ]
+        },
+        {
+          "command": "c000000110",
+          "contract": "projection-f1c8523f95e7b22f10d30d5cb6de873f3ba2bbedf5b8f704d455891edf69ae54",
+          "status": "conditioned_projection",
+          "outcome": "unchanged",
+          "matching": true,
+          "local_supported": true,
+          "base_equals_projected": true,
+          "correction_cells": 0,
+          "prior_trials": 8,
+          "conditions": [
+            {
+              "feature": [
+                "pixel",
+                [
+                  50,
+                  47
+                ]
+              ],
+              "input": 1,
+              "repetitions": 6,
+              "predicted": "unchanged"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  51,
+                  46
+                ]
+              ],
+              "input": 0,
+              "repetitions": 6,
+              "predicted": "unchanged"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  51,
+                  47
+                ]
+              ],
+              "input": 0,
+              "repetitions": 6,
+              "predicted": "unchanged"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  51,
+                  48
+                ]
+              ],
+              "input": 1,
+              "repetitions": 6,
+              "predicted": "unchanged"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  52,
+                  47
+                ]
+              ],
+              "input": 0,
+              "repetitions": 6,
+              "predicted": "unchanged"
+            }
+          ],
+          "prior_scope_diagnostics": [
+            {
+              "scope_after": "c000000107",
+              "applicability": [
+                "conditioned_projection",
+                "unchanged"
+              ]
+            }
+          ]
+        },
+        {
+          "command": "c000000111",
+          "contract": "projection-f1c8523f95e7b22f10d30d5cb6de873f3ba2bbedf5b8f704d455891edf69ae54",
+          "status": "conditioned_projection",
+          "outcome": "unchanged",
+          "matching": true,
+          "local_supported": true,
+          "base_equals_projected": true,
+          "correction_cells": 0,
+          "prior_trials": 9,
+          "conditions": [
+            {
+              "feature": [
+                "pixel",
+                [
+                  50,
+                  47
+                ]
+              ],
+              "input": 1,
+              "repetitions": 7,
+              "predicted": "unchanged"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  51,
+                  46
+                ]
+              ],
+              "input": 0,
+              "repetitions": 7,
+              "predicted": "unchanged"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  51,
+                  47
+                ]
+              ],
+              "input": 0,
+              "repetitions": 7,
+              "predicted": "unchanged"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  51,
+                  48
+                ]
+              ],
+              "input": 1,
+              "repetitions": 7,
+              "predicted": "unchanged"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  52,
+                  47
+                ]
+              ],
+              "input": 0,
+              "repetitions": 7,
+              "predicted": "unchanged"
+            }
+          ]
+        }
+      ],
+      "config_sha256": "5ebbed4881e1a8b86080bab549271bfc5e9e75947d7620a87638b58a5b8a8ab1",
+      "source_history_lengths": [
+        0,
+        1,
+        2,
+        4
+      ],
+      "input_run": "relation-goals-optimized-r04"
+    },
+    "official": {
+      "audit_scope": "Read-only finite projection-prefix audit, not a proof of the full interpreter.\n\nRecorded quantity inputs and local-support labels are reused. This audit does not\nindependently reconstruct the object interpreter, mechanism hashes or meters.",
+      "history_lengths": [
+        1,
+        2,
+        4
+      ],
+      "projection_count": 103,
+      "errors": [],
+      "conditioned_nonempty": 0,
+      "chain": [
+        {
+          "command": "c000000107",
+          "contract": "projection-f1c8523f95e7b22f10d30d5cb6de873f3ba2bbedf5b8f704d455891edf69ae54",
+          "status": "witnessed_base",
+          "outcome": "f06cfebff4821501a1689e1a9a22c1e008655ab5374938285e21644e692d1d0d",
+          "matching": false,
+          "local_supported": true,
+          "base_equals_projected": true,
+          "correction_cells": 5,
+          "prior_trials": 6,
+          "conditions": []
+        },
+        {
+          "command": "c000000109",
+          "contract": "projection-f1c8523f95e7b22f10d30d5cb6de873f3ba2bbedf5b8f704d455891edf69ae54",
+          "status": "unproved_projection_scope",
+          "outcome": "f06cfebff4821501a1689e1a9a22c1e008655ab5374938285e21644e692d1d0d",
+          "matching": false,
+          "local_supported": true,
+          "base_equals_projected": true,
+          "correction_cells": 5,
+          "prior_trials": 7,
+          "conditions": [
+            {
+              "feature": [
+                "pixel",
+                [
+                  50,
+                  47
+                ]
+              ],
+              "input": 9,
+              "repetitions": 1,
+              "predicted": "f06cfebff4821501a1689e1a9a22c1e008655ab5374938285e21644e692d1d0d"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  51,
+                  46
+                ]
+              ],
+              "input": 12,
+              "repetitions": 1,
+              "predicted": "f06cfebff4821501a1689e1a9a22c1e008655ab5374938285e21644e692d1d0d"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  51,
+                  47
+                ]
+              ],
+              "input": 9,
+              "repetitions": 1,
+              "predicted": "f06cfebff4821501a1689e1a9a22c1e008655ab5374938285e21644e692d1d0d"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  51,
+                  48
+                ]
+              ],
+              "input": 9,
+              "repetitions": 1,
+              "predicted": "f06cfebff4821501a1689e1a9a22c1e008655ab5374938285e21644e692d1d0d"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  52,
+                  47
+                ]
+              ],
+              "input": 9,
+              "repetitions": 1,
+              "predicted": "f06cfebff4821501a1689e1a9a22c1e008655ab5374938285e21644e692d1d0d"
+            }
+          ]
+        },
+        {
+          "command": "c000000110",
+          "contract": "projection-f1c8523f95e7b22f10d30d5cb6de873f3ba2bbedf5b8f704d455891edf69ae54",
+          "status": "conditioned_projection",
+          "outcome": "unchanged",
+          "matching": true,
+          "local_supported": true,
+          "base_equals_projected": true,
+          "correction_cells": 0,
+          "prior_trials": 8,
+          "conditions": [
+            {
+              "feature": [
+                "pixel",
+                [
+                  50,
+                  47
+                ]
+              ],
+              "input": 1,
+              "repetitions": 6,
+              "predicted": "unchanged"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  51,
+                  46
+                ]
+              ],
+              "input": 0,
+              "repetitions": 6,
+              "predicted": "unchanged"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  51,
+                  47
+                ]
+              ],
+              "input": 0,
+              "repetitions": 6,
+              "predicted": "unchanged"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  51,
+                  48
+                ]
+              ],
+              "input": 1,
+              "repetitions": 6,
+              "predicted": "unchanged"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  52,
+                  47
+                ]
+              ],
+              "input": 0,
+              "repetitions": 6,
+              "predicted": "unchanged"
+            }
+          ],
+          "prior_scope_diagnostics": [
+            {
+              "scope_after": "c000000107",
+              "applicability": [
+                "conditioned_projection",
+                "unchanged"
+              ]
+            }
+          ]
+        },
+        {
+          "command": "c000000111",
+          "contract": "projection-f1c8523f95e7b22f10d30d5cb6de873f3ba2bbedf5b8f704d455891edf69ae54",
+          "status": "conditioned_projection",
+          "outcome": "unchanged",
+          "matching": true,
+          "local_supported": true,
+          "base_equals_projected": true,
+          "correction_cells": 0,
+          "prior_trials": 9,
+          "conditions": [
+            {
+              "feature": [
+                "pixel",
+                [
+                  50,
+                  47
+                ]
+              ],
+              "input": 1,
+              "repetitions": 7,
+              "predicted": "unchanged"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  51,
+                  46
+                ]
+              ],
+              "input": 0,
+              "repetitions": 7,
+              "predicted": "unchanged"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  51,
+                  47
+                ]
+              ],
+              "input": 0,
+              "repetitions": 7,
+              "predicted": "unchanged"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  51,
+                  48
+                ]
+              ],
+              "input": 1,
+              "repetitions": 7,
+              "predicted": "unchanged"
+            },
+            {
+              "feature": [
+                "pixel",
+                [
+                  52,
+                  47
+                ]
+              ],
+              "input": 0,
+              "repetitions": 7,
+              "predicted": "unchanged"
+            }
+          ]
+        }
+      ],
+      "config_sha256": "5ebbed4881e1a8b86080bab549271bfc5e9e75947d7620a87638b58a5b8a8ab1",
+      "source_history_lengths": [
+        0,
+        1,
+        2,
+        4
+      ],
+      "input_run": "relation-goals-official-r02"
+    }
+  }
+}

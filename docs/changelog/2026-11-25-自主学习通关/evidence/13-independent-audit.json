@@ -1,0 +1,585 @@
+{
+  "schema": 1,
+  "source_commit": "19e9cf31de1e555da7f93928c8151780c77054c2",
+  "source_sha256": {
+    "tests/bench/autonomous_audit.py": "4232c08f351f70d0a1cfc1ce392447545da06f72a7e5f0bdf0407b975844757a",
+    "tests/bench/measurement_audit.py": "9c3caaa33fa5f80ea526e7959811c728fe7c5a358bdf85824af36f6d4413c98e",
+    "tests/bench/program_audit.py": "95d11bda2f45f5492f7a9bb93f20ebbed6493b766913346d9fd389cf8d958eb3",
+    "tests/bench/check_real_public.py": "3537de39db08260636d9e4b8c9b446ffc9a2cfab4245288c5cf7e196385a65d1"
+  },
+  "audit_scope": {
+    "executed": [
+      "all artifact-index sizes and hashes",
+      "all public receipt hashes",
+      "current autonomous_report Python audit body",
+      "current audit_live_goal_programs",
+      "all response field comparison except guid",
+      "raw decision/check/cohort counting"
+    ],
+    "not_executed": [
+      "game",
+      "Julia replay",
+      "Julia proof expansion",
+      "Rust search",
+      "independent condition-fitting replay",
+      "fresh OS isolation probe",
+      "original worktree reconstruction"
+    ],
+    "replay_exit_is_stored_author_result": true,
+    "run_source_worktree_identity_to_source_commit_proved": false,
+    "local_assessments_supported_does_not_mean_whole_frame_supported": true
+  },
+  "runs": {
+    "optimized_r04": {
+      "index_entries": 8405,
+      "index_unique_paths": 8405,
+      "index_bytes": 103120980,
+      "index_errors": [],
+      "manifest": {
+        "schema_version": 1,
+        "suite_id": "autonomous-offline-win",
+        "run_id": "relation-goals-optimized-r04",
+        "git_commit": "7d519eb7d07adbac4cfa4e84faf35ce76f85ec84",
+        "worktree_sha256": "7274c4c8d341fe9c98baebc8e4ec9d70b9b525ff212b642676a2378e4d0104bb",
+        "config_sha256": "1042b988b2cb9a8e6ce2a14531af88bc97f0acbdceba1b7757055045e6fea853",
+        "locks": {
+          "python": "606a07ec1ecbd2282472e305c1b24f94107343ea491acef8969801b703d89540",
+          "julia": "0ec6da0595f34a8ef38d83105253b1733668929e66540aa61f9f9ec5d432bbc8",
+          "rust": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2"
+        },
+        "environment": "official_offline_http",
+        "isolation": "linux_namespaces",
+        "started_at": "2026-11-25T12:04:03.725516+00:00"
+      },
+      "events": 752,
+      "actions_by_id": {
+        "0": 8,
+        "1": 246,
+        "2": 213,
+        "3": 133,
+        "4": 152
+      },
+      "actions": 744,
+      "resets": 8,
+      "actual_frames": 1514,
+      "descriptor_frames": 1514,
+      "guids": [
+        "caa61b3f-6e9d-499b-b078-7d4e481f7efc"
+      ],
+      "final": {
+        "game_id": "ls20-9607627b",
+        "guid": "caa61b3f-6e9d-499b-b078-7d4e481f7efc",
+        "state": "WIN",
+        "levels_completed": 7,
+        "win_levels": 7
+      },
+      "python_autonomous_audit_passed": true,
+      "python_autonomous_audit_errors": [],
+      "stored_autonomous_report_differences": [],
+      "julia_replay_executed_by_reviewer": false,
+      "stored_replay_exit": 0,
+      "program_audit_errors": [],
+      "stored_program_report_differences": [],
+      "completed_programs": 10,
+      "completed_program_steps": 20,
+      "completed_program_ordinary_different": 14,
+      "completed_program_baseline_different": 0,
+      "program_dispositions": {
+        "completed": 10
+      },
+      "relation_program_uses": 0,
+      "program_cross_level": true,
+      "program_contracts": {
+        "observed_route_waypoint": 20
+      },
+      "program_step_lengths": {
+        "2": 20
+      },
+      "program_step_dependency_depths": {
+        "2": 18,
+        "1": 2
+      },
+      "decision_sources": {
+        "without_spatial_or_program": 1,
+        "direct_spatial": 723,
+        "program": 20
+      },
+      "full_baseline_different_commands": [],
+      "decision_reason_counts": {
+        "uncovered": 1,
+        "test_unbound_spatial_action": 43,
+        "experiment_on_unknown_visual_effect": 170,
+        "experiment_on_contact_relation": 111,
+        "experiment_at_learned_spatial_frontier": 42,
+        "revalidated_learned_program": 20,
+        "learned_visual_contact": 207,
+        "inspect_unseen_neighborhood": 150
+      },
+      "check_with_definition_refs": 461,
+      "supported_structural_consumption": 432,
+      "all_local_supported_with_nonempty_residual": 256,
+      "all_local_supported_dependency_depths": {
+        "1": 281,
+        "2": 151
+      },
+      "coverage_qualifications": {
+        "unresolved": 283,
+        "predicted_queries_only": 461
+      },
+      "nonempty_checks_assessment_counts": {
+        "[]": 283,
+        "['supported']": 432,
+        "['refuted', 'supported']": 11,
+        "['refuted']": 17,
+        "['supported', 'unknown']": 1
+      },
+      "consumed_definition_depths": {
+        "1": 297,
+        "2": 163,
+        "3": 1
+      },
+      "cohort_groups": 149,
+      "cohort_statuses": {
+        "search_complete": 57,
+        "unsubmitted": 92
+      },
+      "cohort_reported_counts": {
+        "search_incomplete": 0,
+        "unsubmitted": 92,
+        "search_complete": 57
+      },
+      "projection_status_matching_counts": [
+        {
+          "status": "witnessed_base",
+          "matching": true,
+          "local_supported": true,
+          "count": 31
+        },
+        {
+          "status": "witnessed_base",
+          "matching": false,
+          "local_supported": true,
+          "count": 8
+        },
+        {
+          "status": "unproved_projection_scope",
+          "matching": false,
+          "local_supported": true,
+          "count": 48
+        },
+        {
+          "status": "conditioned_projection",
+          "matching": true,
+          "local_supported": true,
+          "count": 13
+        },
+        {
+          "status": "witnessed_base",
+          "matching": false,
+          "local_supported": false,
+          "count": 1
+        },
+        {
+          "status": "unproved_projection_scope",
+          "matching": true,
+          "local_supported": true,
+          "count": 11
+        }
+      ],
+      "base_projection_mismatching_commands": [
+        "c000000101",
+        "c000000107",
+        "c000000123",
+        "c000000258",
+        "c000000271",
+        "c000000350",
+        "c000000446",
+        "c000000449",
+        "c000000503"
+      ],
+      "unindexed_files_count": 143,
+      "projection_claims": 112,
+      "projection_timeline_c107_to_c111": [
+        {
+          "command": "c000000107",
+          "reason": "experiment_on_contact_relation",
+          "status": "witnessed_base",
+          "contract": "projection-f1c8523f95e7b22f10d30d5cb6de873f3ba2bbedf5b8f704d455891edf69ae54",
+          "rule_training_event": "e-79968935f2001bcc-c000000027",
+          "condition_reads": [],
+          "matching": false,
+          "outcome": "f06cfebff4821501a1689e1a9a22c1e008655ab5374938285e21644e692d1d0d",
+          "local_supported": true,
+          "inside_writes": 5,
+          "outside_writes": 0,
+          "public_changes": [],
+          "program_feedback": null
+        },
+        {
+          "command": "c000000109",
+          "reason": "experiment_on_contact_relation",
+          "status": "unproved_projection_scope",
+          "contract": "projection-f1c8523f95e7b22f10d30d5cb6de873f3ba2bbedf5b8f704d455891edf69ae54",
+          "rule_training_event": "e-79968935f2001bcc-c000000027",
+          "condition_reads": [
+            "e-79968935f2001bcc-c000000085",
+            "e-79968935f2001bcc-c000000086",
+            "e-79968935f2001bcc-c000000087",
+            "e-79968935f2001bcc-c000000088",
+            "e-79968935f2001bcc-c000000089",
+            "e-79968935f2001bcc-c000000090",
+            "e-79968935f2001bcc-c000000104",
+            "e-79968935f2001bcc-c000000105",
+            "e-79968935f2001bcc-c000000106",
+            "e-79968935f2001bcc-c000000107"
+          ],
+          "matching": false,
+          "outcome": "f06cfebff4821501a1689e1a9a22c1e008655ab5374938285e21644e692d1d0d",
+          "local_supported": true,
+          "inside_writes": 5,
+          "outside_writes": 0,
+          "public_changes": [],
+          "program_feedback": null
+        },
+        {
+          "command": "c000000110",
+          "reason": "revalidated_learned_program",
+          "status": "conditioned_projection",
+          "contract": "projection-f1c8523f95e7b22f10d30d5cb6de873f3ba2bbedf5b8f704d455891edf69ae54",
+          "rule_training_event": "e-79968935f2001bcc-c000000027",
+          "condition_reads": [
+            "e-79968935f2001bcc-c000000085",
+            "e-79968935f2001bcc-c000000086",
+            "e-79968935f2001bcc-c000000087",
+            "e-79968935f2001bcc-c000000088",
+            "e-79968935f2001bcc-c000000089",
+            "e-79968935f2001bcc-c000000090",
+            "e-79968935f2001bcc-c000000104",
+            "e-79968935f2001bcc-c000000105",
+            "e-79968935f2001bcc-c000000106",
+            "e-79968935f2001bcc-c000000107",
+            "e-79968935f2001bcc-c000000108",
+            "e-79968935f2001bcc-c000000109"
+          ],
+          "matching": true,
+          "outcome": "unchanged",
+          "local_supported": true,
+          "inside_writes": 0,
+          "outside_writes": 0,
+          "public_changes": [],
+          "program_feedback": "advance"
+        },
+        {
+          "command": "c000000111",
+          "reason": "revalidated_learned_program",
+          "status": "conditioned_projection",
+          "contract": "projection-f1c8523f95e7b22f10d30d5cb6de873f3ba2bbedf5b8f704d455891edf69ae54",
+          "rule_training_event": "e-79968935f2001bcc-c000000027",
+          "condition_reads": [
+            "e-79968935f2001bcc-c000000085",
+            "e-79968935f2001bcc-c000000086",
+            "e-79968935f2001bcc-c000000087",
+            "e-79968935f2001bcc-c000000088",
+            "e-79968935f2001bcc-c000000089",
+            "e-79968935f2001bcc-c000000090",
+            "e-79968935f2001bcc-c000000104",
+            "e-79968935f2001bcc-c000000105",
+            "e-79968935f2001bcc-c000000106",
+            "e-79968935f2001bcc-c000000107",
+            "e-79968935f2001bcc-c000000108",
+            "e-79968935f2001bcc-c000000109",
+            "e-79968935f2001bcc-c000000110"
+          ],
+          "matching": true,
+          "outcome": "unchanged",
+          "local_supported": true,
+          "inside_writes": 0,
+          "outside_writes": 0,
+          "public_changes": [],
+          "program_feedback": "completed"
+        }
+      ],
+      "replay_ledger_matches_all_events_in_order": true
+    },
+    "official_r02": {
+      "index_entries": 8913,
+      "index_unique_paths": 8913,
+      "index_bytes": 114916335,
+      "index_errors": [],
+      "manifest": {
+        "schema_version": 1,
+        "suite_id": "autonomous-offline-win",
+        "run_id": "relation-goals-official-r02",
+        "git_commit": "7d519eb7d07adbac4cfa4e84faf35ce76f85ec84",
+        "worktree_sha256": "7afed768d43a33c02797ad98faf429befb62ef89d584b4df97a6ba2ea237bbeb",
+        "config_sha256": "1042b988b2cb9a8e6ce2a14531af88bc97f0acbdceba1b7757055045e6fea853",
+        "locks": {
+          "python": "606a07ec1ecbd2282472e305c1b24f94107343ea491acef8969801b703d89540",
+          "julia": "0ec6da0595f34a8ef38d83105253b1733668929e66540aa61f9f9ec5d432bbc8",
+          "rust": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2"
+        },
+        "environment": "official_offline_http",
+        "isolation": "linux_namespaces",
+        "started_at": "2026-11-25T11:43:19.421076+00:00"
+      },
+      "events": 752,
+      "actions_by_id": {
+        "0": 8,
+        "1": 246,
+        "2": 213,
+        "3": 133,
+        "4": 152
+      },
+      "actions": 744,
+      "resets": 8,
+      "actual_frames": 1514,
+      "descriptor_frames": 1514,
+      "guids": [
+        "9ba13cda-d349-4d6a-bae8-20f87e95985c"
+      ],
+      "final": {
+        "game_id": "ls20-9607627b",
+        "guid": "9ba13cda-d349-4d6a-bae8-20f87e95985c",
+        "state": "WIN",
+        "levels_completed": 7,
+        "win_levels": 7
+      },
+      "python_autonomous_audit_passed": true,
+      "python_autonomous_audit_errors": [],
+      "stored_autonomous_report_differences": [],
+      "julia_replay_executed_by_reviewer": false,
+      "stored_replay_exit": 0,
+      "program_audit_errors": [],
+      "stored_program_report_differences": [],
+      "completed_programs": 12,
+      "completed_program_steps": 24,
+      "completed_program_ordinary_different": 14,
+      "completed_program_baseline_different": 0,
+      "program_dispositions": {
+        "completed": 12
+      },
+      "relation_program_uses": 0,
+      "program_cross_level": true,
+      "program_contracts": {
+        "observed_route_waypoint": 24
+      },
+      "program_step_lengths": {
+        "2": 24
+      },
+      "program_step_dependency_depths": {
+        "2": 22,
+        "1": 2
+      },
+      "decision_sources": {
+        "without_spatial_or_program": 1,
+        "direct_spatial": 719,
+        "program": 24
+      },
+      "full_baseline_different_commands": [],
+      "decision_reason_counts": {
+        "uncovered": 1,
+        "test_unbound_spatial_action": 43,
+        "experiment_on_unknown_visual_effect": 170,
+        "experiment_on_contact_relation": 107,
+        "experiment_at_learned_spatial_frontier": 42,
+        "revalidated_learned_program": 24,
+        "learned_visual_contact": 207,
+        "inspect_unseen_neighborhood": 150
+      },
+      "check_with_definition_refs": 476,
+      "supported_structural_consumption": 442,
+      "all_local_supported_with_nonempty_residual": 257,
+      "all_local_supported_dependency_depths": {
+        "1": 280,
+        "2": 147,
+        "3": 15
+      },
+      "coverage_qualifications": {
+        "unresolved": 268,
+        "predicted_queries_only": 476
+      },
+      "nonempty_checks_assessment_counts": {
+        "[]": 268,
+        "['supported']": 442,
+        "['refuted', 'supported']": 13,
+        "['refuted']": 20,
+        "['supported', 'unknown']": 1
+      },
+      "consumed_definition_depths": {
+        "1": 297,
+        "2": 161,
+        "3": 18
+      },
+      "cohort_groups": 149,
+      "cohort_statuses": {
+        "search_complete": 74,
+        "search_incomplete": 5,
+        "unsubmitted": 70
+      },
+      "cohort_reported_counts": {
+        "search_incomplete": 5,
+        "unsubmitted": 70,
+        "search_complete": 74
+      },
+      "projection_status_matching_counts": [
+        {
+          "status": "witnessed_base",
+          "matching": true,
+          "local_supported": true,
+          "count": 30
+        },
+        {
+          "status": "witnessed_base",
+          "matching": false,
+          "local_supported": true,
+          "count": 8
+        },
+        {
+          "status": "unproved_projection_scope",
+          "matching": false,
+          "local_supported": true,
+          "count": 43
+        },
+        {
+          "status": "conditioned_projection",
+          "matching": true,
+          "local_supported": true,
+          "count": 10
+        },
+        {
+          "status": "witnessed_base",
+          "matching": false,
+          "local_supported": false,
+          "count": 1
+        },
+        {
+          "status": "unproved_projection_scope",
+          "matching": true,
+          "local_supported": true,
+          "count": 11
+        }
+      ],
+      "base_projection_mismatching_commands": [
+        "c000000101",
+        "c000000107",
+        "c000000123",
+        "c000000258",
+        "c000000271",
+        "c000000350",
+        "c000000446",
+        "c000000449",
+        "c000000503"
+      ],
+      "unindexed_files_count": 163,
+      "projection_claims": 103,
+      "projection_timeline_c107_to_c111": [
+        {
+          "command": "c000000107",
+          "reason": "experiment_on_contact_relation",
+          "status": "witnessed_base",
+          "contract": "projection-f1c8523f95e7b22f10d30d5cb6de873f3ba2bbedf5b8f704d455891edf69ae54",
+          "rule_training_event": "e-0e359922caa8edb9-c000000027",
+          "condition_reads": [],
+          "matching": false,
+          "outcome": "f06cfebff4821501a1689e1a9a22c1e008655ab5374938285e21644e692d1d0d",
+          "local_supported": true,
+          "inside_writes": 5,
+          "outside_writes": 0,
+          "public_changes": [],
+          "program_feedback": null
+        },
+        {
+          "command": "c000000109",
+          "reason": "experiment_on_contact_relation",
+          "status": "unproved_projection_scope",
+          "contract": "projection-f1c8523f95e7b22f10d30d5cb6de873f3ba2bbedf5b8f704d455891edf69ae54",
+          "rule_training_event": "e-0e359922caa8edb9-c000000027",
+          "condition_reads": [
+            "e-0e359922caa8edb9-c000000085",
+            "e-0e359922caa8edb9-c000000086",
+            "e-0e359922caa8edb9-c000000087",
+            "e-0e359922caa8edb9-c000000088",
+            "e-0e359922caa8edb9-c000000089",
+            "e-0e359922caa8edb9-c000000090",
+            "e-0e359922caa8edb9-c000000104",
+            "e-0e359922caa8edb9-c000000105",
+            "e-0e359922caa8edb9-c000000106",
+            "e-0e359922caa8edb9-c000000107"
+          ],
+          "matching": false,
+          "outcome": "f06cfebff4821501a1689e1a9a22c1e008655ab5374938285e21644e692d1d0d",
+          "local_supported": true,
+          "inside_writes": 5,
+          "outside_writes": 0,
+          "public_changes": [],
+          "program_feedback": null
+        },
+        {
+          "command": "c000000110",
+          "reason": "revalidated_learned_program",
+          "status": "conditioned_projection",
+          "contract": "projection-f1c8523f95e7b22f10d30d5cb6de873f3ba2bbedf5b8f704d455891edf69ae54",
+          "rule_training_event": "e-0e359922caa8edb9-c000000027",
+          "condition_reads": [
+            "e-0e359922caa8edb9-c000000085",
+            "e-0e359922caa8edb9-c000000086",
+            "e-0e359922caa8edb9-c000000087",
+            "e-0e359922caa8edb9-c000000088",
+            "e-0e359922caa8edb9-c000000089",
+            "e-0e359922caa8edb9-c000000090",
+            "e-0e359922caa8edb9-c000000104",
+            "e-0e359922caa8edb9-c000000105",
+            "e-0e359922caa8edb9-c000000106",
+            "e-0e359922caa8edb9-c000000107",
+            "e-0e359922caa8edb9-c000000108",
+            "e-0e359922caa8edb9-c000000109"
+          ],
+          "matching": true,
+          "outcome": "unchanged",
+          "local_supported": true,
+          "inside_writes": 0,
+          "outside_writes": 0,
+          "public_changes": [],
+          "program_feedback": "advance"
+        },
+        {
+          "command": "c000000111",
+          "reason": "revalidated_learned_program",
+          "status": "conditioned_projection",
+          "contract": "projection-f1c8523f95e7b22f10d30d5cb6de873f3ba2bbedf5b8f704d455891edf69ae54",
+          "rule_training_event": "e-0e359922caa8edb9-c000000027",
+          "condition_reads": [
+            "e-0e359922caa8edb9-c000000085",
+            "e-0e359922caa8edb9-c000000086",
+            "e-0e359922caa8edb9-c000000087",
+            "e-0e359922caa8edb9-c000000088",
+            "e-0e359922caa8edb9-c000000089",
+            "e-0e359922caa8edb9-c000000090",
+            "e-0e359922caa8edb9-c000000104",
+            "e-0e359922caa8edb9-c000000105",
+            "e-0e359922caa8edb9-c000000106",
+            "e-0e359922caa8edb9-c000000107",
+            "e-0e359922caa8edb9-c000000108",
+            "e-0e359922caa8edb9-c000000109",
+            "e-0e359922caa8edb9-c000000110"
+          ],
+          "matching": true,
+          "outcome": "unchanged",
+          "local_supported": true,
+          "inside_writes": 0,
+          "outside_writes": 0,
+          "public_changes": [],
+          "program_feedback": "completed"
+        }
+      ],
+      "replay_ledger_matches_all_events_in_order": true
+    }
+  },
+  "comparison": {
+    "events_compared": 752,
+    "all_response_fields_except_guid_compared": true,
+    "differences": [],
+    "frames_compared": 1514,
+    "guids_equal": false
+  }
+}
