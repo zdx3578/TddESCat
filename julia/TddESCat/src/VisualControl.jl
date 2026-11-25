@@ -94,6 +94,7 @@ function begin_visual_attempt!(control)
     empty!(control.matched)
     empty!(control.spent)
     control.scene.tick = 0
+    control.scene.confirmed_actions = 0
     control.continuation = nothing
 end
 
@@ -167,7 +168,7 @@ function scene_survey(control, spatial, obs, decision)
     best = nothing
     rank = (0,0,0)
     reached = Dict{Tuple{Pixel,Tuple},Int}((here,state[3])=>charge)
-    edges = Dict{Tuple{Pixel,Int},Union{Nothing,NamedTuple}}()
+    edges = Dict{Tuple{Pixel,Int,Bool},Union{Nothing,NamedTuple}}()
     for row in agenda
         p,left,used = row.state
         if p ∉ scene.viewpoints && !isempty(scene.viewpoints)
@@ -181,8 +182,10 @@ function scene_survey(control, spatial, obs, decision)
         left > 0 || continue
         for id in actions
             delta,sources = motions[id]
-            edge = get!(edges,(p,id)) do
-                projected_motion(control,spatial,frame,p,id,delta,here,floor,targets)
+            current = row.depth == 0
+            edge = get!(edges,(p,id,current)) do
+                projected_motion(control,spatial,frame,p,id,delta,here,floor,targets;
+                    current,previous_action=obs.action["id"])
             end
             isnothing(edge) && continue
             q = edge.point
@@ -225,11 +228,11 @@ function autonomous_visual_plan(control,spatial,obs,decision,event)
 end
 
 function observe_visual!(control, spatial, before, after, move, effects)
-    isnothing(move) && return
     a,b = last(before.observation.frames),last(after.observation.frames)
     here = locate_role(a,spatial.role)
-    there = move.after
-    if isnothing(control.resource)
+    there = isnothing(move) ? locate_role(b,spatial.role) : move.after
+    moved = !isnothing(move) && here != there
+    if isnothing(control.resource) && !isempty(spatial.role)
         if isempty(control.counters)
             append!(control.counters,rectangular_fields(a,role_size(spatial.role)...))
         end
@@ -239,30 +242,47 @@ function observe_visual!(control, spatial, before, after, move, effects)
             push!(control.reads,effects.event_id)
         end
     end
-    here == there && return
-    control.scene.tick += 1
-    move.first_landing != move.after && observe_boundary_motion!(control.boundary_rules,spatial,a,move)
-    patch = Tuple(footprint(a,spatial.role,there))
+
+    control.scene.confirmed_actions += 1
+    if moved
+        control.scene.tick += 1
+        move.first_landing != move.after && observe_boundary_motion!(control.boundary_rules,spatial,a,move)
+    end
+    patch = moved ? Tuple(footprint(a,spatial.role,there)) : ()
+    counter = nothing
     if !isnothing(control.resource)
         old,new = read_counter(a,control.resource),read_counter(b,control.resource)
-        if new > old > 0
+        counter = (field=control.resource,before=old,after=new)
+        if moved && new > old > 0
             control.refill[patch] = effects.event_id
             push!(control.spent,there)
-        elseif new < old && control.rate == 0
+        elseif moved && new < old && control.rate == 0
             control.rate = old-new
             push!(control.reads,effects.event_id)
         end
     end
-    first_view = there ∉ control.scene.viewpoints
-    observe_scene!(control.scene,spatial,b,there,effects.event_id)
-    if isnothing(control.field) || isempty(control.targets)
-        bind_visual_fields!(control,spatial,a,here,effects.before_id)
+
+    if moved
+        first_view = there ∉ control.scene.viewpoints
+        observe_scene!(control.scene,spatial,b,there,effects.event_id)
+        if isnothing(control.field) || isempty(control.targets)
+            bind_visual_fields!(control,spatial,a,here,effects.before_id)
+        end
+        first_view && bind_visual_fields!(control,spatial,b,there,effects.event_id)
     end
-    first_view && bind_visual_fields!(control,spatial,b,there,effects.event_id)
-    isnothing(control.field) && return
-    old,new = visual_value(a,control.field),visual_value(b,control.field)
-    (isnothing(old) || isnothing(new)) && return
-    push!(control.contacts,VisualContact(there,control.scene.tick,patch,VisualTransition(old,new,effects.event_id)))
+    signal = nothing
+    if !isnothing(control.field)
+        old = visual_value(a,control.field)
+        trace = [visual_value(frame,control.field) for frame in after.observation.frames]
+        signal = (field=control.field,before=old,trace)
+        if moved && !isnothing(old) && !isnothing(last(trace))
+            push!(control.contacts,VisualContact(there,control.scene.tick,patch,
+                VisualTransition(old,last(trace),effects.event_id)))
+        end
+    end
+    return (before_ref=effects.before_id,event_ref=effects.event_id,
+        motion=isnothing(move) ? :unbound : moved ? :moved : :stationary,
+        counter,signal,action_count=control.scene.confirmed_actions,movement_count=control.scene.tick)
 end
 
 function observe_visual_contact!(control, spatial, before, after)
@@ -426,13 +446,13 @@ function take_visual_step!(control, here; checked=String[])
 end
 
 function revalidate_visual_step!(control, spatial, frame, here, signal, charge, motions,
-        floor, targets, clock, transitions, fitted, level, event)
+        floor, targets, clock, transitions, fitted, level, event, previous_action)
     isnothing(control.continuation) && return nothing
     step = first(control.continuation.steps)
     if step.from == here && step.signal_before == signal && charge >= step.minimum_charge &&
             haskey(motions,step.action)
         delta = first(motions[step.action])
-        motion = projected_motion(control,spatial,frame,here,step.action,delta,here,floor,targets)
+        motion = projected_motion(control,spatial,frame,here,step.action,delta,here,floor,targets;current=true,previous_action)
         if !isnothing(motion) && motion.point == step.to
             tile = scene_tile(control.scene,spatial,frame,step.to,here)
             plain = Tuple(fill(floor,length(spatial.role)))
@@ -487,15 +507,17 @@ function experiment_relevance(samples, current, sites, fitted)
     return score
 end
 
-function projected_motion(control, spatial, frame, from, action, delta, here, floor, targets)
+function projected_motion(control, spatial, frame, from, action, delta, here, floor, targets;
+        current=false, previous_action=0)
     entry = from .+ delta
-    observations = get(spatial.trials,(from,action),ObservedMove[])
-    accepted = filter(m->m.after != from,observations)
-    if !isempty(accepted) && allequal(m.after for m in accepted)
-        m = first(accepted)
-        return (point=m.after,reads=[m.event])
+    evidence = motion_evidence(spatial,from,action,frame,previous_action;current)
+    if evidence.status in (:witnessed,:conditional_motion)
+        return (point=evidence.point,reads=evidence.reads)
+    elseif evidence.status in (:conflict,:conditional_stop)
+        return nothing
+    elseif evidence.status == :stopped && entry ∉ targets
+        return nothing
     end
-    !isempty(observations) && isempty(accepted) && entry ∉ targets && return nothing
     effect = boundary_projection(control.boundary_rules,spatial,frame,entry)
     (isnothing(effect) || effect.offset == (0,0)) && return (point=entry,reads=String[])
     reads = [effect.event]
@@ -540,12 +562,12 @@ function visual_plan(control, spatial, obs, decision, event)
     fitted = fit_contact_guards(control.contact_samples)
     level = obs.levels_completed
     continued = revalidate_visual_step!(control,spatial,frame,here,signal,charge,motions,
-        floor,targets,clock,transitions,fitted,level,event)
+        floor,targets,clock,transitions,fitted,level,event,obs.action["id"])
     isnothing(continued) || return continued
     initial = VisualRouteState(here,signal,charge,Tuple(sort!(collect(control.spent))),
         mod(control.scene.tick,clock.period))
     cache = Dict{Pixel,NamedTuple}()
-    edges = Dict{Tuple{Pixel,Int},Union{Nothing,NamedTuple}}()
+    edges = Dict{Tuple{Pixel,Int,Bool},Union{Nothing,NamedTuple}}()
     predictions = Dict{Tuple{Tuple,VisualValue},Union{Nothing,NamedTuple}}()
     contacts = Dict{Tuple{Pixel,VisualValue},NamedTuple}()
     route = [VisualRouteLink(initial,0,0,String[],true,0)]
@@ -563,8 +585,10 @@ function visual_plan(control, spatial, obs, decision, event)
         s.charge > 0 || continue
         for id in action_ids
             delta,sources = motions[id]
-            edge = get!(edges,(s.point,id)) do
-                projected_motion(control,spatial,frame,s.point,id,delta,here,floor,targets)
+            current = row.parent == 0
+            edge = get!(edges,(s.point,id,current)) do
+                projected_motion(control,spatial,frame,s.point,id,delta,here,floor,targets;
+                    current,previous_action=obs.action["id"])
             end
             isnothing(edge) && continue
             destination = edge.point

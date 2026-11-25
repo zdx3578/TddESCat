@@ -4,6 +4,14 @@ struct ObservedMove
     event::String
 end
 
+struct MotionContext
+    before::String
+    frame::Matrix{UInt8}
+    previous_action::Int
+end
+
+const MotionVariable = Union{Pixel,Symbol}
+
 mutable struct SpatialLearning
     role::MotionShape
     role_reads::Vector{String}
@@ -12,9 +20,11 @@ mutable struct SpatialLearning
     trials::Dict{Tuple{Pixel,Int},Vector{ObservedMove}}
     layouts::Dict{Pixel,Vector{UInt8}}
     floors::Dict{UInt8,Int}
+    motion_contexts::Dict{String,MotionContext}
+    conditions::Dict{Tuple{Pixel,Int},Dict{MotionVariable,FiniteRelation{Int,Pixel}}}
 end
 
-SpatialLearning() = SpatialLearning(ColorCell[],String[],Dict(),Dict(),Dict(),Dict(),Dict())
+SpatialLearning() = SpatialLearning(ColorCell[],String[],Dict(),Dict(),Dict(),Dict(),Dict(),Dict(),Dict())
 
 function locate_role(frame, role)
     isempty(role) && return nothing
@@ -82,6 +92,57 @@ function dominant_pixel(patch)
     return argmax(pigment->count(==(pigment),patch),pixels)
 end
 
+function motion_value(variable, frame, previous_action)
+    variable == :previous_action && return previous_action
+    x,y = variable
+    return checkbounds(Bool,frame,y+1,x+1) ? Int(frame[y+1,x+1]) : nothing
+end
+
+function fit_motion_conditions(model, rows)
+    outcomes = Pixel[row.after for row in rows]
+    different = findfirst(!=(first(outcomes)),outcomes)
+    isnothing(different) && return Dict{MotionVariable,FiniteRelation{Int,Pixel}}()
+    contexts = [model.motion_contexts[row.event] for row in rows]
+    witnesses = [[context.before,row.event] for (context,row) in zip(contexts,rows)]
+    a,b = first(contexts),contexts[different]
+    variables = MotionVariable[]
+    a.previous_action != b.previous_action && push!(variables,:previous_action)
+    if size(a.frame) == size(b.frame)
+        for y in axes(a.frame,1), x in axes(a.frame,2)
+            a.frame[y,x] != b.frame[y,x] && push!(variables,(x-1,y-1))
+        end
+    end
+    candidates = Dict{MotionVariable,FiniteRelation{Int,Pixel}}()
+    for variable in variables
+        values = [motion_value(variable,ctx.frame,ctx.previous_action) for ctx in contexts]
+        any(isnothing,values) && continue
+        relation = empirical_relation(Int[v for v in values],outcomes,witnesses)
+        isnothing(relation) || (candidates[variable] = relation)
+    end
+    return candidates
+end
+
+function motion_evidence(model, origin, action, frame, previous_action; current)
+    key = (origin,action)
+    rows = get(model.trials,key,ObservedMove[])
+    isempty(rows) && return (status=:untested,point=nothing,reads=String[])
+    landings = Set(row.after for row in rows)
+    if length(landings) == 1
+        point = only(landings)
+        return (status=point == origin ? :stopped : :witnessed,point,reads=[first(rows).event])
+    end
+    reads = unique([ref for row in rows for ref in (model.motion_contexts[row.event].before,row.event)])
+    unknown = (status=:conflict,point=nothing,reads)
+    current || return unknown
+    candidates = get(model.conditions,key,nothing)
+    (isnothing(candidates) || isempty(candidates)) && return unknown
+    projected = [empirical_successor(relation,motion_value(variable,frame,previous_action))
+        for (variable,relation) in candidates]
+    (any(isnothing,projected) || !allequal(projected)) && return unknown
+    point = first(projected)
+    return (status=point == origin ? :conditional_stop : :conditional_motion,point,reads)
+end
+
 function observe_spatial!(model, before, after, effects)
     old_obs,new_obs = before.observation,after.observation
     old_obs.levels_completed == new_obs.levels_completed || return nothing
@@ -97,7 +158,7 @@ function observe_spatial!(model, before, after, effects)
     action = new_obs.action["id"]
     action == 6 && return nothing
     first_landing = landing
-    if origin != landing && length(new_obs.frames) > 1
+    if length(new_obs.frames) > 1
         for frame in new_obs.frames
             candidate = locate_role(frame,model.role)
             if !isnothing(candidate) && candidate != origin
@@ -107,7 +168,13 @@ function observe_spatial!(model, before, after, effects)
         end
     end
     move = ObservedMove(landing,first_landing,effects.event_id)
-    push!(get!(Vector{ObservedMove},model.trials,(origin,action)),move)
+    key = (origin,action)
+    rows = get!(Vector{ObservedMove},model.trials,key)
+    model.motion_contexts[move.event] = MotionContext(effects.before_id,a,old_obs.action["id"])
+    push!(rows,move)
+    if any(row->row.after != landing,rows)
+        model.conditions[key] = fit_motion_conditions(model,rows)
+    end
     model.visits[landing] = get(model.visits,landing,0)+1
     if origin != landing
         delta = first_landing .- origin
@@ -161,16 +228,29 @@ function spatial_experiment(model::SpatialLearning, obs, decision)
     best_rank = nothing
     for p in points
         for id in action_ids
-            measured = get(model.trials,(p,id),nothing)
-            if !isnothing(measured)
-                target = last(measured).after
-                if target ∉ visited && target != p && all(row->row.after == target,measured)
-                    parent[target] = (id,p,[row.event for row in measured])
+            observed = motion_evidence(model,p,id,frame,obs.action["id"];current=p == here)
+            if observed.status in (:witnessed,:conditional_motion)
+                target = observed.point
+                if target ∉ visited
+                    parent[target] = (id,p,observed.reads)
                     push!(visited,target)
                     push!(points,target)
                 end
                 continue
+            elseif observed.status == :conflict && p == here
+                # A new scope is an experiment. It supplies no projected successor.
+                rows = model.trials[(p,id)]
+                tested = any(rows) do row
+                    context = model.motion_contexts[row.event]
+                    context.previous_action == obs.action["id"] && context.frame == frame
+                end
+                if !tested
+                    return (id=id,reason="distinguish_motion_context",
+                        reads=unique([model.role_reads;observed.reads]),role=here,
+                        destination=nothing,frontier=here)
+                end
             end
+            observed.status == :untested || continue
             offset = measured_offset(model,id)
             isnothing(offset) && continue
             target = p .+ first(offset)

@@ -734,11 +734,22 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         spatial_feedback = nothing
         visual_feedback = nothing
         contact_feedback = nothing
+        visual_observation = nothing
+        motion_revision = nothing
         if !isnothing(spatial)
             contact_feedback = observe_visual_contact!(visual,spatial,entry,resulting)
             if obs.levels_completed == resulting.observation.levels_completed
                 spatial_feedback = observe_spatial!(spatial,entry,resulting,effects)
-                observe_visual!(visual,spatial,entry,resulting,spatial_feedback,effects)
+                visual_observation = observe_visual!(visual,spatial,entry,resulting,spatial_feedback,effects)
+                if !isnothing(spatial_feedback)
+                    origin = locate_role(sample.before,spatial.role)
+                    key = (origin,item.action["id"])
+                    if haskey(spatial.conditions,key)
+                        evidence = motion_evidence(spatial,origin,item.action["id"],sample.before,last(history);current=true)
+                        motion_revision = (origin,action=item.action["id"],status=evidence.status,
+                            reads=evidence.reads,variables=sort!(collect(keys(spatial.conditions[key]));by=repr))
+                    end
+                end
                 if !isnothing(visual.field) && !isnothing(get(something(spatial_choice,(;)),:expected,nothing))
                     actual = visual_value(last(resulting.observation.frames),visual.field)
                     if isnothing(spatial_feedback) || isnothing(actual)
@@ -817,7 +828,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 "actual"=>assessment.actual,"assessments"=>assessment.assessments,"revisions"=>revisions,
                 "evidence"=>public_effect_record(effects),"coverage"=>coverage_record(decision,item,effects,assessment),
                 "policy"=>policy_note,"program"=>program_note,"spatial_feedback"=>spatial_feedback,
-                "visual_feedback"=>visual_feedback,"contact_feedback"=>contact_feedback))
+                "visual_feedback"=>visual_feedback,"contact_feedback"=>contact_feedback,
+                "visual_observation"=>visual_observation,"motion_revision"=>motion_revision))
         attempts[action_key(item.action)] = get(attempts,action_key(item.action),0) + 1
         push!(history,item.action["id"])
         frozen || push!(pairs,(entry,resulting))

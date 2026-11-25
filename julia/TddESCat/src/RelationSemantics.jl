@@ -20,6 +20,23 @@ function post_image(relation::FiniteRelation, subset)
     return Set(y for (x,y) in keys(relation.evidence) if x in subset)
 end
 
+function empirical_relation(values::Vector{Int}, outcomes::Vector{T}, witnesses) where T
+    length(values) == length(outcomes) == length(witnesses) ||
+        throw(ArgumentError("Empirical relation requires paired observations"))
+    outputs = Dict{Int,T}()
+    for (value,outcome) in zip(values,outcomes)
+        get!(outputs,value,outcome) == outcome || return nothing
+    end
+    return finite_relation(values,outcomes,zip(values,outcomes,witnesses);complete=false)
+end
+
+function empirical_successor(relation::FiniteRelation, input)
+    input in relation.source || return nothing
+    outputs = post_image(relation,(input,))
+    length(outputs) == 1 || return nothing
+    return only(outputs)
+end
+
 function liberal_precondition(relation::FiniteRelation, goal)
     issubset(goal,relation.target) || throw(ArgumentError("Precondition goal is outside the relation range"))
     return setdiff(relation.source, Set(x for (x,y) in keys(relation.evidence) if y ∉ goal))

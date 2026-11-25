@@ -20,10 +20,11 @@ mutable struct SceneMemory
     read_views::Set{String}
     viewpoints::Set{Pixel}
     tick::Int
+    confirmed_actions::Int
     occlusion_ref::Union{Nothing,String}
 end
 
-SceneMemory() = SceneMemory(Dict(),Dict(),Set(),Set(),0,nothing)
+SceneMemory() = SceneMemory(Dict(),Dict(),Set(),Set(),0,0,nothing)
 
 function observe_scene!(scene, spatial, frame, here, event)
     event in scene.read_views && return
