@@ -34,10 +34,11 @@ end
     @test cold.reason == "experiment_on_contact_relation"
     @test cold.id == 2
     @test cold.contact.conditions.judgment == :unknown
+    facts = TS.contact_facts(control,0)
     denied = TS.ContactSample(0,(2,0),same,right,field,(1,0),2,:blocked,
-        "before-block","blocked",state.role,"right")
+        "before-block","blocked",state.role,"right",facts,"NOT_FINISHED")
     permitted = TS.ContactSample(0,(0,0),same,left,field,(1,0),3,:entered,
-        "before-entry","entered",state.role,"left")
+        "before-entry","entered",state.role,"left",facts,"NOT_FINISHED")
     append!(control.contact_samples,[denied,permitted])
     command = TS.visual_plan(control,state,observation,domain,"fresh")
     @test command.reason == "learned_visual_contact"
@@ -45,7 +46,7 @@ end
     @test command.executes_contact
     @test all(ref->ref in command.reads,["entered","blocked"])
     contradiction = TS.ContactSample(0,(0,0),same,left,field,(1,0),3,:blocked,
-        "before-counterexample","later-blocked",state.role,"left")
+        "before-counterexample","later-blocked",state.role,"left",facts,"NOT_FINISHED")
     push!(control.contact_samples,contradiction)
     @test isempty(TS.fit_contact_guards(control.contact_samples).rules)
     @test TS.contact_judgment(TS.fit_contact_guards(control.contact_samples),

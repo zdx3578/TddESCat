@@ -4,6 +4,13 @@ struct VisualSite
     event::String
 end
 
+struct ContactFacts
+    # These candidates were bound in the current instance. Visibility does not
+    # certify that the set contains every site in the environment.
+    remaining::Vector{Tuple{Pixel,VisualSite}}
+    previous_action::Int
+end
+
 struct ContactSample
     level::Int
     point::Pixel
@@ -17,6 +24,8 @@ struct ContactSample
     event::String
     role::MotionShape
     motion_event::String
+    facts::ContactFacts
+    public_state::String
 end
 
 const CONTACT_COMPARISONS = (:extent, :support, :pigment, :cardinality)
@@ -74,4 +83,49 @@ end
 function contact_observed(samples, level, point, context, value)
     return any(sample->sample.level == level && sample.point == point &&
         sample.context == context && sample.site.value == value,samples)
+end
+
+const PROGRESS_VARIABLES = (:remaining_sites, :action, :previous_action)
+
+function progress_value(variable, facts, action)
+    variable == :remaining_sites && return length(facts.remaining)
+    return variable == :action ? action : facts.previous_action
+end
+
+function progress_witnesses(sample)
+    return unique([sample.before;sample.event;[site.event for (_,site) in sample.facts.remaining]])
+end
+
+function fit_progress_relations(samples)
+    # A blocked move answers the admission question. An actual entry can
+    # distinguish advancement from completing only an intermediate step.
+    entries = filter(sample->sample.outcome in (:entered,:progress),samples)
+    outcomes = Bool[sample.outcome == :progress for sample in entries]
+    models = Pair{Symbol,FiniteRelation{Int,Bool}}[]
+    witnesses = progress_witnesses.(entries)
+    reads = sort!(unique!(reduce(vcat,witnesses;init=String[])))
+    if any(outcomes) && !all(outcomes)
+        for variable in PROGRESS_VARIABLES
+            values = [progress_value(variable,sample.facts,sample.action) for sample in entries]
+            relation = empirical_relation(values,outcomes,witnesses)
+            isnothing(relation) || push!(models,variable=>relation)
+        end
+    end
+    rules = [(variable=variable,rows=sort!(collect(keys(relation.evidence))))
+        for (variable,relation) in models]
+    model = isempty(models) ? nothing : "progress-" * semantic_hash(
+        [[string(row.variable),row.rows] for row in rules])
+    return (;models,rules,model,reads,samples=[sample.event for sample in entries])
+end
+
+function progress_conditions(fit, facts, action)
+    results = [empirical_successor(relation,progress_value(variable,facts,action))
+        for (variable,relation) in fit.models]
+    verdict = if isempty(results) || any(isnothing,results) || !allequal(results)
+        :unknown
+    else
+        first(results) ? :progress : :enter_only
+    end
+    return (judgment=verdict,facts,action,model=fit.model,rules=fit.rules,
+        sample_events=fit.samples,reads=unique([fit.reads;[site.event for (_,site) in facts.remaining]]))
 end

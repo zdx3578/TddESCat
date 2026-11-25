@@ -1,6 +1,8 @@
 """Independently check the public witnesses used by the contact controller."""
 
+from hashlib import sha256
 from itertools import product
+import json
 
 
 COMPARISONS = ("extent", "support", "pigment", "cardinality")
@@ -81,6 +83,118 @@ def signature(context, mark):
     return sum(value << i for i, value in enumerate(bits))
 
 
+def audit_site_geometry(point, field, role):
+    box = field["box"]
+    width = 1 + max(x for x, _, _ in role)
+    height = 1 + max(y for _, y, _ in role)
+    require(
+        [2 * point[0] + width, 2 * point[1] + height]
+        == [2 * box["x"] + box["width"], 2 * box["y"] + box["height"]],
+        "site_role_geometry",
+    )
+
+
+def audit_site_facts(facts, receipts, level, role=None):
+    points = set()
+    for point, site in facts["remaining"]:
+        require(tuple(point) not in points, "repeated_site_binding")
+        points.add(tuple(point))
+        receipt = receipts[site["event"]]
+        require(receipt["levels_completed"] == level, "site_instance")
+        require(
+            decode_value(receipt["frame"][-1], site["field"]) == site["value"],
+            "site_context_witness",
+        )
+        if role:
+            audit_site_geometry(point, site["field"], role)
+    return points
+
+
+def audit_progress_sample(sample, before, after, receipts):
+    facts = sample["facts"]
+    require(
+        facts["previous_action"] == before["action_input"]["id"], "progress_history"
+    )
+    require(sample["public_state"] == after["state"], "public_terminal_label")
+    points = audit_site_facts(facts, receipts, sample["level"], sample["role"])
+    require(tuple(sample["point"]) in points, "missing_contact_binding")
+    require(
+        [sample["point"], sample["site"]] in facts["remaining"],
+        "substituted_site_context",
+    )
+
+
+def progress_variables(row, action):
+    return {
+        "remaining_sites": len(row["remaining"]),
+        "action": action,
+        "previous_action": row["previous_action"],
+    }
+
+
+def audit_progress_plan(plan, samples, reads, receipts, *, executing, before, action):
+    progress = plan["progress"]
+    facts = progress["facts"]
+    points = audit_site_facts(facts, receipts, before["levels_completed"])
+    require(tuple(plan["point"]) in points, "missing_progress_target")
+    require(
+        [plan["point"], plan["site"]] in facts["remaining"], "wrong_progress_target"
+    )
+    if executing:
+        require(
+            facts["previous_action"] == before["action_input"]["id"], "progress_history"
+        )
+        require(progress["action"] == action, "progress_action")
+
+    entries = []
+    for ref in receipts:
+        sample = samples.get(ref)
+        if sample and sample["outcome"] in ("entered", "progress"):
+            entries.append(sample)
+        if ref == plan["selected_at"]:
+            break
+    require(
+        progress["sample_events"] == [entry["event"] for entry in entries],
+        "omitted_progress_evidence",
+    )
+    sources = {site["event"] for _, site in facts["remaining"]}
+    for entry in entries:
+        sources.update((entry["event"], entry["before"]))
+        sources.update(site["event"] for _, site in entry["facts"]["remaining"])
+    require(sources == set(progress["reads"]) <= reads, "progress_reads")
+
+    observed = {row["outcome"] == "progress" for row in entries}
+    candidates = []
+    inputs = progress_variables(facts, progress["action"])
+    votes = []
+    if observed == {False, True}:
+        for variable, value in inputs.items():
+            outcomes = {}
+            for entry in entries:
+                instant = progress_variables(entry["facts"], entry["action"])[variable]
+                outcome = entry["outcome"] == "progress"
+                if outcomes.setdefault(instant, outcome) != outcome:
+                    break
+            else:
+                rows = [[key, flag] for key, flag in sorted(outcomes.items())]
+                candidates.append({"variable": variable, "rows": rows})
+                votes.append(outcomes.get(value))
+    require(progress["rules"] == candidates, "progress_rules")
+    body = [[row["variable"], row["rows"]] for row in candidates]
+    model = None
+    if body:
+        model = (
+            "progress-"
+            + sha256(json.dumps(body, separators=(",", ":")).encode()).hexdigest()
+        )
+    require(progress["model"] == model, "progress_model_identity")
+    verdict = "unknown"
+    if votes and len(set(votes)) == 1 and votes[0] is not None:
+        verdict = "progress" if votes[0] else "enter_only"
+    require(progress["judgment"] == verdict, "progress_judgment")
+    return verdict
+
+
 def audit_contact_sample(sample, ref, before, after, receipts, parents):
     require(sample["event"] == ref and sample["before"] == parents[ref], "sample_event")
     require(sample["level"] == before["levels_completed"], "sample_level")
@@ -109,6 +223,7 @@ def audit_contact_sample(sample, ref, before, after, receipts, parents):
     point = tuple(o + b - a for o, a, b in zip(origin, source, landing, strict=True))
     require(list(point) == sample["point"], "projected_contact_point")
     site = sample["site"]
+    audit_site_geometry(sample["point"], site["field"], role)
     value = decode_value(before["frame"][-1], site["field"])
     require(value is not None and value == site["value"], "contact_value")
     require(

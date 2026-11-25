@@ -27,6 +27,8 @@ from tddesc_tools.run import (
 from tests.bench.autonomous_audit import (
     audit_contact_plan,
     audit_contact_sample,
+    audit_progress_plan,
+    audit_progress_sample,
     require,
 )
 
@@ -223,13 +225,23 @@ def autonomous_report(root, run):
                             executing=executing,
                             before=before_receipt,
                         )
+                        progress_judgment = audit_progress_plan(
+                            plan,
+                            contact_samples,
+                            reads,
+                            receipts,
+                            executing=executing,
+                            before=before_receipt,
+                            action=decision["action"]["id"],
+                        )
                         if executing:
                             reported = check.get("contact_feedback")
                             if reported:
                                 require(
                                     reported["point"] == plan["point"]
                                     and reported["site"] == plan["site"]
-                                    and reported["context"] == plan["context"],
+                                    and reported["context"] == plan["context"]
+                                    and reported["facts"] == plan["progress"]["facts"],
                                     "substituted_contact",
                                 )
                             contact_control.append(
@@ -237,6 +249,11 @@ def autonomous_report(root, run):
                                     "event": ref,
                                     "level": before + 1,
                                     "judgment": judgment,
+                                    "progress_judgment": progress_judgment,
+                                    "progress_model": plan["progress"]["model"],
+                                    "progress_training": plan["progress"][
+                                        "sample_events"
+                                    ],
                                     "contrasted": contrasted,
                                     "training": plan["conditions"]["sample_events"],
                                     "outcome": (
@@ -255,6 +272,7 @@ def autonomous_report(root, run):
                     audit_contact_sample(
                         sample, ref, before_receipt, receipt, receipts, parents
                     )
+                    audit_progress_sample(sample, before_receipt, receipt, receipts)
                     contact_samples[ref] = sample
                 if (
                     check["definition_refs"]

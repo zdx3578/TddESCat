@@ -285,6 +285,11 @@ function observe_visual!(control, spatial, before, after, move, effects)
         counter,signal,action_count=control.scene.confirmed_actions,movement_count=control.scene.tick)
 end
 
+function contact_facts(control, previous_action)
+    points = sort!([p for p in keys(control.targets) if p ∉ control.matched])
+    return ContactFacts([(point,control.targets[point]) for point in points],previous_action)
+end
+
 function observe_visual_contact!(control, spatial, before, after)
     isnothing(control.field) && return nothing
     before_obs, after_obs = before.observation,after.observation
@@ -314,10 +319,11 @@ function observe_visual_contact!(control, spatial, before, after)
     else
         return nothing
     end
+    facts = contact_facts(control,before_obs.action["id"])
     outcome == :blocked || push!(control.matched,point)
     sample = ContactSample(before_obs.levels_completed,point,context,site,control.field,origin,
         action,outcome,before.event["event_id"],after.event["event_id"],spatial.role,
-        first(last(offset)))
+        first(last(offset)),facts,after_obs.state)
     push!(control.contact_samples,sample)
     return sample
 end
@@ -446,13 +452,20 @@ function take_visual_step!(control, here; checked=String[])
 end
 
 function revalidate_visual_step!(control, spatial, frame, here, signal, charge, motions,
-        floor, targets, clock, transitions, fitted, level, event, previous_action)
+        floor, targets, clock, transitions, fitted, progress, facts, level, event)
     isnothing(control.continuation) && return nothing
     step = first(control.continuation.steps)
+    plan = control.continuation.contact_plan
+    if !isnothing(plan) && (plan.progress.model != progress.model ||
+            plan.progress.facts.remaining != facts.remaining)
+        control.continuation = nothing
+        return nothing
+    end
     if step.from == here && step.signal_before == signal && charge >= step.minimum_charge &&
             haskey(motions,step.action)
         delta = first(motions[step.action])
-        motion = projected_motion(control,spatial,frame,here,step.action,delta,here,floor,targets;current=true,previous_action)
+        motion = projected_motion(control,spatial,frame,here,step.action,delta,here,floor,targets;
+            current=true,previous_action=facts.previous_action)
         if !isnothing(motion) && motion.point == step.to
             tile = scene_tile(control.scene,spatial,frame,step.to,here)
             plain = Tuple(fill(floor,length(spatial.role)))
@@ -467,13 +480,15 @@ function revalidate_visual_step!(control, spatial, frame, here, signal, charge, 
                 planned_site = control.continuation.contact_plan.site
                 if site == planned_site && visual_value(frame,site.field) == site.value &&
                         judgment == step.contact && (!tested || judgment == :admitted)
-                    plan = control.continuation.contact_plan
-                    control.continuation = VisualContinuation(control.continuation.steps,
-                        control.continuation.reason,control.continuation.frontier,
-                        control.continuation.reads,merge(plan,(conditions=contact_conditions(fitted,signature),
-                            selected_at=event)),
-                        control.continuation.effect_gain)
-                    return take_visual_step!(control,here;checked=[reads;fitted.reads])
+                    completion = progress_conditions(progress,facts,step.action)
+                    if plan.progress.judgment == completion.judgment
+                        updated = merge(plan,(conditions=contact_conditions(fitted,signature),
+                            progress=completion,selected_at=event))
+                        control.continuation = VisualContinuation(control.continuation.steps,
+                            control.continuation.reason,control.continuation.frontier,
+                            control.continuation.reads,updated,control.continuation.effect_gain)
+                        return take_visual_step!(control,here;checked=[reads;fitted.reads;completion.reads])
+                    end
                 end
             elseif step.to ∉ targets && isnothing(step.contact)
                 inferred = visual_prediction(transitions,patch,signal)
@@ -558,11 +573,14 @@ function visual_plan(control, spatial, obs, decision, event)
     motions = Dict(id=>measured_offset(spatial,id) for id in action_ids)
     charge = isnothing(control.resource) ? typemax(Int) : read_counter(frame,control.resource)
     rate = isnothing(control.resource) ? 0 : max(1,control.rate)
-    targets = sort!([p for p in keys(control.targets) if p ∉ control.matched])
+    facts = contact_facts(control,obs.action["id"])
+    targets = first.(facts.remaining)
     fitted = fit_contact_guards(control.contact_samples)
+    progress = fit_progress_relations(control.contact_samples)
+    use_history = any(row->first(row) == :previous_action,progress.models)
     level = obs.levels_completed
     continued = revalidate_visual_step!(control,spatial,frame,here,signal,charge,motions,
-        floor,targets,clock,transitions,fitted,level,event,obs.action["id"])
+        floor,targets,clock,transitions,fitted,progress,facts,level,event)
     isnothing(continued) || return continued
     initial = VisualRouteState(here,signal,charge,Tuple(sort!(collect(control.spent))),
         mod(control.scene.tick,clock.period))
@@ -571,12 +589,13 @@ function visual_plan(control, spatial, obs, decision, event)
     predictions = Dict{Tuple{Tuple,VisualValue},Union{Nothing,NamedTuple}}()
     contacts = Dict{Tuple{Pixel,VisualValue},NamedTuple}()
     route = [VisualRouteLink(initial,0,0,String[],true,0)]
-    visited = Dict{Tuple{Pixel,VisualValue,Tuple,Int},Int}(
-        (here,signal,initial.spent,initial.phase)=>charge)
+    visited = Dict{Tuple{Pixel,VisualValue,Tuple,Int,Int},Int}(
+        (here,signal,initial.spent,initial.phase,use_history ? facts.previous_action : 0)=>charge)
     experiment = nothing
     best_score = nothing
     contact = nothing
     contact_rank = nothing
+    intermediate = nothing
     evidence = unique([event;spatial.role_reads;control.reads])
     goals = [control.targets[p].value for p in targets]
     effect_scores = Dict{Tuple{Tuple,VisualValue},Int}()
@@ -610,15 +629,24 @@ function visual_plan(control, spatial, obs, decision, event)
                 end
                 draft = (index=index,action=id,point=destination,reads=[reads;site.event;fitted.reads])
                 if observation.judgment == :admitted
+                    prior = current ? facts.previous_action : row.action
+                    completion = progress_conditions(progress,ContactFacts(facts.remaining,prior),id)
+                    draft = merge(draft,(reads=[draft.reads;completion.reads],))
                     plan = (point=destination,site=site,context=s.signal,field=control.field,
-                        conditions=contact_conditions(fitted,observation.signature),selected_at=event)
-                    return route_proposal(control,route,draft,evidence,here;contact_plan=plan)
+                        conditions=contact_conditions(fitted,observation.signature),selected_at=event,
+                        progress=completion)
+                    if isnothing(progress.model) || completion.judgment == :progress
+                        return route_proposal(control,route,draft,evidence,here;contact_plan=plan)
+                    end
+                    isnothing(intermediate) && (intermediate=(probe=draft,plan))
+                    continue
                 end
                 if !observation.tested
                     rank = (observation.judgment == :unknown,-row.depth,s.charge)
                     if isnothing(contact_rank) || rank > contact_rank
                         contact_rank = rank
-                        contact = (probe=draft,context=s.signal,site=site,signature=observation.signature)
+                        contact = (probe=draft,context=s.signal,site=site,signature=observation.signature,
+                            prior=current ? facts.previous_action : row.action)
                     end
                 end
                 continue
@@ -658,7 +686,7 @@ function visual_plan(control, spatial, obs, decision, event)
                 new_charge = max(capacity.width,capacity.height)
                 spent = extend_visual_set(spent,destination)
             end
-            key = (destination,prediction.value,spent,phase)
+            key = (destination,prediction.value,spent,phase,use_history ? id : 0)
             new_charge > get(visited,key,-1) || continue
             visited[key] = new_charge
             append!(reads,prediction.reads)
@@ -667,10 +695,15 @@ function visual_plan(control, spatial, obs, decision, event)
                 index,id,reads,predicted,row.depth+1))
         end
     end
+    if !isnothing(intermediate)
+        return route_proposal(control,route,intermediate.probe,evidence,here;contact_plan=intermediate.plan)
+    end
     if !isnothing(contact) && (contact_rank[1] || isnothing(experiment))
+        completion = progress_conditions(progress,ContactFacts(facts.remaining,contact.prior),contact.probe.action)
         plan = (point=contact.probe.point,site=contact.site,context=contact.context,field=control.field,
-            conditions=contact_conditions(fitted,contact.signature),selected_at=event)
-        return route_proposal(control,route,contact.probe,evidence,here;contact_plan=plan)
+            conditions=contact_conditions(fitted,contact.signature),selected_at=event,progress=completion)
+        probe = merge(contact.probe,(reads=[contact.probe.reads;completion.reads],))
+        return route_proposal(control,route,probe,evidence,here;contact_plan=plan)
     end
     isnothing(experiment) && return nothing
     return route_proposal(control,route,experiment,evidence,here;effect_gain=experiment.gain)

@@ -68,3 +68,69 @@ end
     @test probe.reason == "distinguish_motion_context"
     @test isnothing(probe.destination)
 end
+
+@testset "One learned progress relation rebinds to different first steps" begin
+    spatial = TS.SpatialLearning()
+    spatial.role = [(0,0,0x0c)]
+    spatial.role_reads = ["pose"]
+    spatial.offsets[2] = Dict((1,0)=>["right"])
+    spatial.offsets[3] = Dict((0,-1)=>["up"])
+    spatial.offsets[4] = Dict((-1,0)=>["left"])
+    spatial.floors[0x00] = 1
+    visual = TS.VisualControl()
+    field = TS.VisualField(Window(5,5,1,1),0x00,1)
+    value = TS.VisualValue(1,1,UInt64(1),0x02)
+    function bind(scene, player, sites)
+        frame = fill(0x00,6,6)
+        frame[6,6] = 0x02
+        frame[player[2]+1,player[1]+1] = 0x0c
+        visual.field = field
+        empty!(visual.targets)
+        for (x,y) in sites
+            frame[y+1,x+1] = 0x02
+            name = TS.VisualField(Window(x,y,1,1),0x00,1)
+            visual.targets[(x,y)] = TS.VisualSite(name,value,scene)
+        end
+        return frame
+    end
+    function contact(stem, action, hit, advances)
+        player = (2,2)
+        frame = bind(stem,player,((3,2),(2,1)))
+        initial = observed_step(stem,nothing,5,frame)
+        post = copy(frame)
+        post[player[2]+1,player[1]+1] = 0x00
+        post[hit[2]+1,hit[1]+1] = 0x0c
+        after = TS.PublicObservation("test-game","test-session",[post],"NOT_FINISHED",
+            Int(advances),2,Dict("id"=>action),[2,3,4,5],false)
+        return TS.observe_visual_contact!(visual,spatial,initial,
+            (event=Dict("event_id"=>stem * "-confirmed"),observation=after))
+    end
+
+    entry = contact("entry",2,(3,2),false)
+    @test entry.outcome == :entered
+    @test isnothing(TS.fit_progress_relations(visual.contact_samples).model)
+    TS.begin_visual_level!(visual,spatial)
+    progress = contact("advance",3,(2,1),true)
+    @test progress.outcome == :progress
+    @test progress.public_state == "NOT_FINISHED"
+    model = TS.fit_progress_relations(visual.contact_samples)
+    @test length(model.rules) == 1
+    @test only(model.rules).variable == :action
+    @test TS.progress_conditions(model,progress.facts,2).judgment == :enter_only
+    @test TS.progress_conditions(model,progress.facts,3).judgment == :progress
+    @test TS.progress_conditions(model,progress.facts,4).judgment == :unknown
+
+    domain = (ranked=[(action=Dict("id"=>id),) for id in (2,3,4)],)
+    for (scene,sites,expected) in [("fresh-a",((3,2),(2,1)),3),
+            ("fresh-b",((3,2),(1,1)),4)]
+        TS.begin_visual_level!(visual,spatial)
+        frame = bind(scene,(2,2),sites)
+        obs = observed_step(scene,nothing,5,frame).observation
+        proposal = TS.visual_plan(visual,spatial,obs,domain,scene)
+        @test proposal.id == expected
+        @test proposal.contact.progress.model == model.model
+        @test proposal.contact.progress.judgment == :progress
+        @test proposal.contact.progress.action == 3
+        @test Set(proposal.contact.progress.sample_events) == Set(["entry-confirmed","advance-confirmed"])
+    end
+end
