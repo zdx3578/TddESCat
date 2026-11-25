@@ -24,10 +24,11 @@ mutable struct OnlineKnowledge
     definition_depths::Dict{String,Int}
     programs::Vector{Any}
     observations::Dict{String,PublicEffects}
+    projections::ProjectionMemory
 end
 
 OnlineKnowledge() = OnlineKnowledge(JointMechanism[],ActiveMechanism[],PublicTrial[],0,Dict{String,Int}(),
-    Any[],Dict{String,PublicEffects}())
+    Any[],Dict{String,PublicEffects}(),ProjectionMemory())
 
 function prior_trials(config)
     directory = isnothing(config.learning) ? nothing : get(config.learning,"prior_evidence",nothing)
@@ -172,7 +173,10 @@ function frozen_knowledge_digest(knowledge)
     programs = [(p.publication,p.definition,p.depth,p.sources,p.steps,p.shared,p.available_after)
         for p in knowledge.programs]
     depths = [(id,knowledge.definition_depths[id]) for id in sort!(collect(keys(knowledge.definition_depths)))]
-    return content_hash(JSON.json([interpretations,[trial.sample.event_id for trial in knowledge.trials],programs,depths]))
+    projections = sort!([(id,scope.version,[row.event for row in scope.trials])
+        for (id,scope) in knowledge.projections.scopes];by=first)
+    return content_hash(JSON.json([interpretations,[trial.sample.event_id for trial in knowledge.trials],
+        programs,depths,projections]))
 end
 
 function archive_trial!(knowledge, trial, limits)
@@ -339,18 +343,23 @@ function ranked_public_actions(knowledge, observation, history, attempts, max_ac
             agreed ? "published_joint_effects" : "competing_predictions"
         chosen = agreed ? first(supports) : nothing
         projection = nothing
+        projection_contract = nothing
+        projection_probe = nothing
         if composing && !isnothing(chosen)
             agreed = all(other->issubset(keys(other.expected),keys(chosen.expected)),supports)
             if agreed
-                evaluated = compatible_frame_projection(supports,chosen.expected,values.frame)
+                evaluated = compatible_frame_projection(supports,chosen.expected,values.frame;
+                    memory=knowledge.projections,history)
+                projection_probe = evaluated.probe
                 if evaluated.conflict
                     agreed = false
                     reason = "competing_frame_projections"
                 elseif isnothing(evaluated.choice)
                     agreed = false
-                    reason = "unproved_frame_projection"
+                    reason = isnothing(projection_probe) ? "unproved_frame_projection" : last(projection_probe).status
                 else
                     chosen,projection = evaluated.choice,evaluated.frame
+                    projection_contract = evaluated.contract
                 end
             else
                 reason = "uncombined_effect_scopes"
@@ -382,7 +391,8 @@ function ranked_public_actions(knowledge, observation, history, attempts, max_ac
         elseif isnothing(chosen) && action["id"] == 6 && last(history) == 6
             priority += 1
         end
-        push!(judged,(; action, chosen, reason, rejected, follow, experiment,projection,relation_reads,
+        push!(judged,(; action, chosen, reason, rejected, follow, experiment,projection,projection_contract,
+            projection_probe,relation_reads,
             rank=(priority,trial_count)))
     end
     sort!(judged;by=row->row.rank,alg=Base.Sort.MergeSort)
@@ -582,7 +592,8 @@ function collect_online_job!(knowledge,config,rec,job,status,publications,progra
             available_after=rec.before_ref)
         push!(program_jobs,assessment)
         haskey(assessment,"publication") && push!(publications,assessment["publication"])
-        if haskey(assessment,"cohort") && !isempty(get(assessment,"programs",[]))
+        if haskey(assessment,"cohort") && assessment["search_complete"] &&
+                !isempty(get(assessment,"programs",[]))
             push!(completed_cohorts,assessment["cohort"])
         end
     end
@@ -714,7 +725,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                     cursor = ProgramCursor(program,1,Any[])
                     candidate = eligible(cursor)
                     isnothing(candidate) && continue
-                    key = (contract,state,active_id(candidate.next.chosen.model))
+                    projected = candidate.next.projection_contract
+                    revision = isnothing(projected) ? active_id(candidate.next.chosen.model) : projected.version
+                    key = (contract,state,revision)
                     key in program_attempts && continue
                     push!(program_attempts,key)
                     program_cursor = cursor
@@ -774,6 +787,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             if !isnothing(program_forecast)
                 for step in program_forecast.path
                     append!(plan_reads,recovery_reads(rec,step.item.chosen.model))
+                    append!(plan_reads,step.item.projection_contract.reads)
                 end
                 if !isnothing(program_forecast.continuation)
                     rules = Set(step["rule"] for step in program_forecast.continuation)
@@ -782,6 +796,17 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                     end
                 end
             end
+        end
+        projected = item.projection_contract
+        projection_choice = item.chosen
+        if isnothing(projected) && !isnothing(item.projection_probe)
+            projection_choice,projected = item.projection_probe
+        elseif isnothing(projected) && !isnothing(projection_choice) &&
+                (composing || !isnothing(spatial) || programs_pending)
+            projected = projected_contract(knowledge.projections,projection_choice,last(obs.frames),history)
+        end
+        if !isnothing(projected)
+            append!(plan_reads,[projected.training;projected.reads])
         end
         prediction = predict_public(rec,item;plan_reads)
         if !isnothing(spatial_choice)
@@ -827,6 +852,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         isnothing(experiment) || (decision_record["experiment_obligation"] = experiment)
         isnothing(visual) || (decision_record["site_surveys"] = take_site_surveys!(visual))
         isnothing(program_note) || (decision_record["program"] = program_note)
+        if !isnothing(projected)
+            decision_record["projection"] = projection_record(projected,last(obs.frames))
+        end
         isnothing(inflight) || (decision_record["pending_learning_job"] = basename(inflight.job))
         if !isnothing(item.chosen)
             model = item.chosen.model
@@ -902,10 +930,14 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         end
         assessment = isnothing(item.chosen) ? (actual=Dict(),assessments=Dict()) :
             measure_joint((model=item.chosen.model.rule,fragments=item.chosen.fragments),sample.after)
+        projection_feedback = if !isnothing(projected)
+            local_feedback = projection_choice === item.chosen ? assessment :
+                measure_joint((model=projection_choice.model.rule,fragments=projection_choice.fragments),sample.after)
+            check_projection!(knowledge.projections,projected,sample.before,sample.after,effects,
+                local_feedback,limits.history_lengths;frozen)
+        end
         if !isnothing(program_cursor)
-            unproved = !isnothing(program_forecast) &&
-                (sample.after != first(program_forecast.path).frame ||
-                 any(!=("response_trace"),keys(effects.public_delta)))
+            unproved = !isnothing(program_forecast) && !projection_feedback.matching
             response = unproved ? "goal_projection_refuted" : program_feedback!(program_cursor,item,assessment,effects)
             if response == "advance" && !isnothing(program_forecast) && length(program_forecast.path) == 1
                 response = "completed"
@@ -913,7 +945,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             end
             program_note["feedback"] = response
             if response != "advance"
-                if response != "completed"
+                if response ∉ ("completed","goal_projection_refuted")
                     failed = program_cursor.program.steps[program_cursor.next_step]
                     push!(refuted_steps,program_step_key(failed))
                 end
@@ -971,7 +1003,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 "expected"=>isnothing(item.chosen) ? Dict() : item.chosen.expected,
                 "actual"=>assessment.actual,"assessments"=>assessment.assessments,"revisions"=>revisions,
                 "evidence"=>public_effect_record(effects),"coverage"=>coverage_record(decision,item,effects,assessment),
-                "policy"=>policy_note,"program"=>program_note,"spatial_feedback"=>spatial_feedback,
+                "policy"=>policy_note,"program"=>program_note,"projection"=>projection_feedback,
+                "spatial_feedback"=>spatial_feedback,
                 "visual_feedback"=>visual_feedback,"contact_feedback"=>contact_feedback,
                 "site_surveys"=>isnothing(visual) ? [] : take_site_surveys!(visual),
                 "visual_observation"=>visual_observation,"motion_revision"=>motion_revision))
@@ -1032,7 +1065,10 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             push!(program_jobs,searched)
             haskey(searched,"publication") && push!(publications,searched["publication"])
         end
-        sequence = merge(compiled,(search=isempty(program_jobs) ? nothing : last(program_jobs),jobs=program_jobs))
+        cohorts = program_cohort_ledger(rec.store,corpus)
+        atomic_json(store_path(rec.store,"learning","program-cohorts.json"),cohorts)
+        sequence = merge(compiled,(search=isempty(program_jobs) ? nothing : last(program_jobs),jobs=program_jobs,
+            unsubmitted_cohorts=cohorts["unsubmitted"]))
     end
     after_version = frozen ? frozen_knowledge_digest(knowledge) : nothing
     after_version == frozen_version || error("Frozen evaluation changed the mechanism")
@@ -1042,10 +1078,13 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             (isnothing(frozen_publication) ? nothing : frozen_publication.publication) ||
             error("Frozen evaluation changed the publication")
     end
+    projection_scopes = frozen ? length(knowledge.projections.scopes) :
+        persist_projection_scopes!(rec.store,knowledge.projections)
     outcome = (; actions=count, publications, state=rec.observation.state, models=length(knowledge.active),
         levels_completed=rec.observation.levels_completed, win_levels=rec.observation.win_levels,
         frozen_before=frozen_version, frozen_after=after_version, consumed_definition_depth=consumed_depth,
-        pending_learning_events=final.pending,pending_program_jobs=pending_program_jobs(rec.store),sequence)
+        pending_learning_events=final.pending,pending_program_jobs=pending_program_jobs(rec.store),
+        projection_scopes,sequence)
     composing || return outcome
     truth = isnothing(goal) ? unknown_truth : goal_truth(goal,last(rec.observation.frames))
     return merge(outcome,(goal=truth == proven ? "observed" : truth == disproven ? "not_reached" : "unknown",))
@@ -1090,6 +1129,9 @@ function recover_learning!(store, config, repo_root)
         recover_program_jobs!(knowledge,config,store,repo_root,records,cutoff;published_only=true)
         return (;pending=summarize_learning!(store),programs=pending_program_jobs(store))
     end
+    replay_projection_feedback!(knowledge.projections,store_path(store),sources,
+        knowledge.observations,mechanism_limits(config).history_lengths)
+    persist_projection_scopes!(store,knowledge.projections)
     by_event = Dict(pair[2].event["event_id"]=>pair for pair in pairs)
     attempted = Set{String}()
     for job in jobs

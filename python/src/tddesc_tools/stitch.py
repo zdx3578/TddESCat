@@ -63,7 +63,7 @@ def build_identity(root, binary):
     return pin
 
 
-def effective_memory(unit, environment):
+def worker_cgroup(unit, environment):
     try:
         result = subprocess.run(
             ["systemctl", "--user", "show", "--property=ControlGroup", "--value", unit],
@@ -74,10 +74,10 @@ def effective_memory(unit, environment):
             timeout=5,
         )
     except (OSError, subprocess.TimeoutExpired):
-        return None, False
+        return None, None
     control = result.stdout.strip()
     if result.returncode or not control.startswith("/"):
-        return None, False
+        return None, None
     root = Path("/sys/fs/cgroup")
     group = root / control.lstrip("/")
     limits = []
@@ -90,7 +90,22 @@ def effective_memory(unit, environment):
             continue
         if value != "max":
             limits.append(int(value))
-    return min(limits, default=None), group.is_dir()
+    return min(limits, default=None), group if group.is_dir() else None
+
+
+def memory_snapshot(group):
+    if group is None:
+        return None
+    try:
+        events = (group / "memory.events").read_text().splitlines()
+        counters = {key: int(value) for key, value in map(str.split, events)}
+    except FileNotFoundError:
+        return None
+    try:
+        peak = int((group / "memory.peak").read_text())
+    except FileNotFoundError:
+        peak = None
+    return {"events": counters, "peak_bytes": peak}
 
 
 def run_worker(
@@ -179,25 +194,29 @@ def run_worker(
     log = output.with_name(output.name + ".worker.log")
     environment = os.environ.copy()
     environment.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-    resource_limit, observed = None, False
+    resource_limit, group, measured = None, None, None
     with log.open("xb") as stream:
         with subprocess.Popen(
             command, stdout=stream, stderr=subprocess.STDOUT, env=environment
         ) as worker:
             try:
                 for _ in range(8):
-                    resource_limit, observed = effective_memory(unit, environment)
-                    if observed or worker.poll() is not None:
+                    resource_limit, group = worker_cgroup(unit, environment)
+                    if group is not None or worker.poll() is not None:
                         break
                     sleep(0.02)
                 exit_record = output / "worker-exit.txt"
                 while worker.poll() is None and not exit_record.is_file():
+                    measured = memory_snapshot(group) or measured
                     sleep(0.02)
+                ending = memory_snapshot(group)
+                measured = ending or measured
                 if exit_record.is_file():
                     # The launcher writes this only after waiting on the actual
                     # child. The systemd reporting client can remain blocked after
                     # the child exits, even though its output is already durable.
                     exit_code = int(exit_record.read_text(encoding="ascii").strip())
+                    (output / ".supervisor-sampled").touch()
                     try:
                         worker.wait(timeout=0.3)
                     except subprocess.TimeoutExpired:
@@ -225,7 +244,17 @@ def run_worker(
             "schema_version": 2,
             "explicit_memory_bytes": hard_memory,
             "observed_cgroup_memory_bytes": resource_limit,
-            "cgroup_observed": observed,
+            "cgroup_observed": group is not None,
+            "cgroup_memory": measured,
+            "cgroup_sample_after_exit_record": bool(ending and exit_record.is_file()),
+            "process_exit_code": exit_code,
+            "termination_reason": (
+                "cgroup_oom_kill"
+                if exit_code and measured and measured["events"].get("oom_kill", 0)
+                else "worker_exit"
+                if exit_code in (0, 10, 20, 21, 22)
+                else "unclassified_worker_exit"
+            ),
             "host_memory_bytes": os.sysconf("SC_PAGE_SIZE")
             * os.sysconf("SC_PHYS_PAGES"),
             "runtime_deadline": None,

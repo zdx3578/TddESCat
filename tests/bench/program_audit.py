@@ -18,6 +18,67 @@ def load(file):
     return json.loads(file.read_bytes())
 
 
+def replay_writes(before, writes, digest):
+    result = [row[:] for row in before]
+    distinct = set()
+    for x, y, old, new in writes:
+        require(
+            0 <= y < len(before)
+            and 0 <= x < len(before[y])
+            and before[y][x] == old
+            and (x, y) not in distinct,
+            "projection_input_pixel",
+        )
+        distinct.add((x, y))
+        result[y][x] = new
+    require(frame_sha(result) == digest, "projection_digest")
+    return result
+
+
+def audit_projection_record(claim, feedback, before, response, events, event):
+    first = before["frame"][-1]
+    actual = response["frame"][-1]
+    expected = replay_writes(
+        first, claim["projected_writes"], claim["projected_sha256"]
+    )
+    replay_writes(first, claim["base_writes"], claim["base_sha256"])
+    require(
+        feedback["contract"] == claim["contract"]
+        and feedback["version"] == claim["version"]
+        and feedback["observed_sha256"] == frame_sha(actual)
+        and all(
+            events[ref][0]["sequence"] < event["sequence"]
+            for ref in [claim["rule_training_event"], *claim["condition_reads"]]
+        ),
+        "projection_witness",
+    )
+    valid = len(expected) == len(actual) and len(expected[0]) == len(actual[0])
+    delta = (
+        [
+            [x, y, old, new]
+            for y, (a, b) in enumerate(zip(expected, actual, strict=True))
+            for x, (old, new) in enumerate(zip(a, b, strict=True))
+            if old != new
+        ]
+        if valid
+        else []
+    )
+    writes = set(map(tuple, claim["writes"]))
+    changed = any(
+        before.get(key) != response.get(key)
+        for key in ("state", "levels_completed", "win_levels", "available_actions")
+    )
+    require(
+        feedback["dimensions_match"] == valid
+        and feedback["inside_writes"]
+        == [row for row in delta if tuple(row[:2]) in writes]
+        and feedback["outside_writes"]
+        == [row for row in delta if tuple(row[:2]) not in writes]
+        and feedback["matching"] == (valid and not delta and not changed),
+        "projection_observed_difference",
+    )
+
+
 def audit_live_goal_programs(public):
     events = receipts(public)
     meters = replay_meters(events)
@@ -26,11 +87,15 @@ def audit_live_goal_programs(public):
         for path in (public / "learning").glob("job-*/program-publication.json")
         if (data := load(path))["available_after"] is not None
     }
-    uses, pending, errors = [], [], []
+    uses, pending, errors, dispositions = [], [], [], []
     by_definition = defaultdict(set)
     audited = {}
     for ref, (event, response) in events.items():
         if not response["action_input"]["id"]:
+            if pending:
+                dispositions.append(
+                    {"first": pending[0]["event"], "last": ref, "status": "reset"}
+                )
             pending = []
             continue
         command = event["command_ref"]
@@ -40,15 +105,36 @@ def audit_live_goal_programs(public):
             continue
         check = load(path)
         program = check.get("program")
-        if not program or program.get("feedback") not in ("advance", "completed"):
-            pending = []
-            continue
         try:
+            decision = load(public / "decisions" / (command + ".json"))
+            before_response = events[event["before_ref"]][1]
+            if (claim := decision.get("projection")) is not None:
+                audit_projection_record(
+                    claim, check["projection"], before_response, response, events, event
+                )
+            if not program:
+                require(not pending, "program_continuation_without_disposition")
+                continue
+            feedback = program["feedback"]
+            if feedback == "withdrawn_before_unproved_step":
+                require(
+                    pending
+                    and pending[-1]["definition"] == program["definition"]
+                    and pending[-1]["event"] == event["before_ref"]
+                    and program["index"] == len(pending) + 1
+                    and program["withdrawn_suffix"]
+                    == list(range(program["index"], program["length"] + 1)),
+                    "program_withdrawn_before_step",
+                )
+                dispositions.append(
+                    {"first": pending[0]["event"], "last": ref, "status": feedback}
+                )
+                pending = []
+                continue
             proof = program["goal"]
             require(
                 proof["contract"] == "observed_route_waypoint", "program_goal_contract"
             )
-            decision = load(public / "decisions" / (command + ".json"))
             require(
                 decision["reason"] == "revalidated_learned_program",
                 "program_choice_reason",
@@ -127,15 +213,15 @@ def audit_live_goal_programs(public):
             expected = proof["steps"][0]
             require(
                 expected["action"] == check["action"]
-                and expected["frame_sha256"] == frame_sha(response["frame"][-1])
                 and expected["queries"] == check["expected"],
                 "program_projected_successor",
             )
-            require(
-                check["assessments"]
-                and set(check["assessments"].values()) == {"supported"},
-                "program_feedback",
-            )
+            if claim is not None:
+                require(
+                    claim["status"] in ("witnessed_base", "conditioned_projection")
+                    and claim["projected_sha256"] == expected["frame_sha256"],
+                    "program_projection_applicable",
+                )
             verify_step(check["evidence"], meters[ref])
             meter_refs = sorted(
                 k.removeprefix("measurement-")
@@ -143,8 +229,6 @@ def audit_live_goal_programs(public):
                 if k.startswith("measurement-")
             )
             require(set(meter_refs) <= meters[ref].keys(), "program_measurement_effect")
-            if program["index"] == 1:
-                pending = []
             require(
                 program["index"] == len(pending) + 1, "program_steps_not_contiguous"
             )
@@ -165,7 +249,52 @@ def audit_live_goal_programs(public):
                     "measurements": meter_refs,
                 }
             )
-            if program["feedback"] == "completed":
+            exact = expected["frame_sha256"] == frame_sha(response["frame"][-1])
+            supported = set(check["assessments"].values()) == {"supported"}
+            if feedback in ("advance", "completed"):
+                require(exact and supported, "program_feedback")
+            else:
+                require(
+                    feedback
+                    in (
+                        "goal_projection_refuted",
+                        "effect_refuted_or_unknown",
+                        "post_queries_unresolved",
+                        "output_binding_unproved",
+                    )
+                    and program["withdrawn_suffix"]
+                    == list(range(program["index"] + 1, program["length"] + 1)),
+                    "program_failed_step_disposition",
+                )
+                if feedback == "goal_projection_refuted":
+                    require(
+                        not exact
+                        or claim is not None
+                        and not check["projection"]["matching"],
+                        "program_projection_refutation",
+                    )
+                elif feedback == "effect_refuted_or_unknown":
+                    require(not supported, "program_effect_refutation")
+                elif feedback == "post_queries_unresolved":
+                    require(
+                        not check["evidence"]["complete"]
+                        or check["evidence"]["residual"],
+                        "program_unresolved_post_queries",
+                    )
+                dispositions.append(
+                    {
+                        "first": pending[0]["event"],
+                        "last": ref,
+                        "status": feedback,
+                        "withdrawn_suffix": program["withdrawn_suffix"],
+                    }
+                )
+                pending = []
+                continue
+            if feedback == "completed":
+                dispositions.append(
+                    {"first": pending[0]["event"], "last": ref, "status": feedback}
+                )
                 require(
                     locate_role(response["frame"][-1], proof["role"])
                     == tuple(proof["target"])
@@ -184,9 +313,18 @@ def audit_live_goal_programs(public):
         except (AssertionError, OSError, KeyError, TypeError, ValueError) as error:
             errors.append({"event": ref, "error": str(error)})
             pending = []
+    if pending:
+        dispositions.append(
+            {
+                "first": pending[0]["event"],
+                "last": pending[-1]["event"],
+                "status": "end_of_confirmed_evidence",
+            }
+        )
     return {
         "uses": uses,
         "errors": errors,
+        "dispositions": dispositions,
         "ordinary_choice_changed": any(
             step["selected"] != step["ordinary"]
             for use in uses

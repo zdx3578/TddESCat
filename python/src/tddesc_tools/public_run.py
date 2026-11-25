@@ -172,6 +172,8 @@ def process_jobs(
                 )
         except Exception as exc:
             failure = f"{type(exc).__name__}: {exc}"
+        resource = job / "output/worker-policy.json"
+        telemetry = json.loads(resource.read_bytes()) if resource.is_file() else {}
         atomic_json(
             job / "worker-status.json",
             {
@@ -181,6 +183,9 @@ def process_jobs(
                 "binary_sha256": worker_sha,
                 "policy_sha256": policy_sha,
                 "hard_memory_bytes": hard_memory,
+                "process_exit_code": telemetry.get("process_exit_code"),
+                "termination_reason": telemetry.get("termination_reason"),
+                "cgroup_memory": telemetry.get("cgroup_memory"),
             },
         )
 

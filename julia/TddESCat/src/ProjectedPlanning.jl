@@ -31,54 +31,35 @@ function goal_truth(goal::ObservedGoal, frame)
     return nearby ? proven : disproven
 end
 
-function project_frame(choice, before)
-    rule = choice.model.rule
-    patch = rule.patch
-    (isnothing(patch) || !choice.model.condition.complete) && return nothing
-    size(before) == patch.shape || return nothing
-    moved = filter(part -> part.family == :translation, choice.fragments)
-    shift = (0,0)
-    if !isempty(moved)
-        offsets = [part.value .- source for (part,source) in zip(moved,rule.anchors)]
-        length(offsets) == length(moved) == length(rule.anchors) || return nothing
-        allequal(offsets) || return nothing
-        shift = first(moved).value
-    end
-    target = copy(before)
-    touched = Set{Pixel}()
-    for (changes,(dx,dy)) in ((patch.moving,shift),(patch.fixed,(0,0)))
-        for (u,v,old,new) in changes
-            x,y = u+dx,v+dy
-            checkbounds(Bool,before,y+1,x+1) && before[y+1,x+1] == old || return nothing
-            (x,y) ∉ touched || return nothing
-            push!(touched,(x,y))
-            target[y+1,x+1] = new
-        end
-    end
-    for part in choice.fragments
-        part.family == :measurement || continue
-        affected = meter_pixels(part.binding,part.basis,part.expected)
-        isdisjoint(touched,affected) && render_meter!(target,part.binding,part.expected) || return nothing
-        union!(touched,affected)
-    end
-    observed = measure_joint((model=rule,fragments=choice.fragments),target)
-    !isempty(observed.assessments) && all(==("supported"),values(observed.assessments)) || return nothing
-    return target
+function project_frame(choice,before)
+    patch = projection_patch(choice,before)
+    return isnothing(patch) ? nothing : patch.frame
 end
 
-function compatible_frame_projection(supports, expected, frame)
+function compatible_frame_projection(supports,expected,frame;memory=ProjectionMemory(),history=Int[])
     matched = nothing
+    probe = nothing
+    unresolved = false
     for choice in supports
         choice.expected == expected || continue
-        predicted = project_frame(choice,frame)
-        isnothing(predicted) && continue
+        contract = projected_contract(memory,choice,frame,history)
+        isnothing(contract) && continue
+        if !projection_allowed(contract)
+            isnothing(probe) && (probe = (choice,contract))
+            unresolved = true
+            continue
+        end
         if isnothing(matched)
-            matched = (choice=choice,frame=predicted,conflict=false)
-        elseif predicted != matched.frame
-            return (choice=nothing,frame=nothing,conflict=true)
+            matched = (choice,contract)
+        elseif contract.frame != last(matched).frame
+            return (choice=nothing,frame=nothing,contract=nothing,probe=nothing,conflict=true)
         end
     end
-    return isnothing(matched) ? (choice=nothing,frame=nothing,conflict=false) : matched
+    if unresolved || isnothing(matched)
+        return (choice=nothing,frame=nothing,contract=nothing,probe,conflict=false)
+    end
+    choice,contract = matched
+    return (;choice,frame=contract.frame,contract,probe=(choice,contract),conflict=false)
 end
 
 function projected_program_ports(choice,frame)

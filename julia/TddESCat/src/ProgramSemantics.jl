@@ -139,15 +139,12 @@ function program_corpus_key(corpus)
     return semantic_hash(JSON.parse(JSON.json([corpus.programs,corpus.slots,corpus.scopes])))
 end
 
-function next_program_corpus(complete,events,observations,submitted,learned)
-    any(step->any(effect->effect["family"] == "measurement",step["effects"]),
-        Iterators.flatten(scope["steps"] for scope in complete.scopes)) || return complete
+function program_cohorts(complete)
     cohorts = Dict{String,Vector{Tuple{Int,Int,Int}}}()
     for (index,scope) in enumerate(complete.scopes)
         contracts = program_step_key.(scope["steps"])
         for start in eachindex(contracts), stop in start+1:length(contracts)
             key = semantic_hash([contracts[start:stop],scope["shared"][start:stop-1]])
-            key in learned && continue
             members = get!(Vector{Tuple{Int,Int,Int}},cohorts,key)
             if isempty(members) || last(members)[1] != index || last(members)[3] < start
                 push!(members,(index,start,stop))
@@ -159,8 +156,15 @@ function next_program_corpus(complete,events,observations,submitted,learned)
         _,lo,hi = first(last(row))
         (hi-lo,-length(last(row)),first(row))
     end)
+    return eligible
+end
+
+function next_program_corpus(complete,events,observations,submitted,learned)
+    any(step->any(effect->effect["family"] == "measurement",step["effects"]),
+        Iterators.flatten(scope["steps"] for scope in complete.scopes)) || return complete
     by_ref = Dict(item.event["event_id"]=>item for item in events)
-    for (key,members) in eligible
+    for (key,members) in program_cohorts(complete)
+        key in learned && continue
         episodes = []
         for (index,lo,hi) in members
             rows = complete.scopes[index]["steps"][lo:hi]
@@ -172,6 +176,41 @@ function next_program_corpus(complete,events,observations,submitted,learned)
         return merge(corpus,(cohort=key,))
     end
     return nothing
+end
+
+function program_cohort_ledger(store,corpus)
+    attempts = Dict{String,Vector{Dict{String,Any}}}()
+    for job in learning_jobs(store)
+        input = joinpath(job,"program-submission.json")
+        isfile(input) || continue
+        submission = read_json(input)
+        result = joinpath(job,"assessment.json")
+        assessment = isfile(result) ? read_json(result) : Dict()
+        key = get(submission,"cohort",get(assessment,"cohort",nothing))
+        isnothing(key) && continue
+        push!(get!(Vector{Dict{String,Any}},attempts,key),Dict(
+            "job"=>basename(job),"snapshot"=>submission["snapshot"],
+            "source_events"=>submission["evidence"],
+            "search_complete"=>get(assessment,"search_complete",false),
+            "publication"=>get(assessment,"publication",nothing),
+            "result"=>get(assessment,"result","submitted"),
+            "termination"=>get(get(assessment,"status",Dict()),"termination_reason",
+                get(assessment,"termination_reason",nothing))))
+    end
+    rows = []
+    for (id,intervals) in program_cohorts(corpus)
+        members = [corpus.scopes[scope]["events"][lo:hi] for (scope,lo,hi) in intervals]
+        jobs = get(attempts,id,[])
+        seen = Set(ref for job in jobs for ref in job["source_events"])
+        status = isempty(jobs) ? "unsubmitted" :
+            last(jobs)["search_complete"] ? "search_complete" : "search_incomplete"
+        push!(rows,Dict("id"=>id,"steps"=>length(first(members)),"members"=>members,
+            "status"=>status,"new_members"=>[refs for refs in members if !issubset(refs,seen)],
+            "attempts"=>jobs))
+    end
+    return Dict("groups"=>rows,"unsubmitted"=>count(row->row["status"] == "unsubmitted",rows),
+        "search_incomplete"=>count(row->row["status"] == "search_incomplete",rows),
+        "search_complete"=>count(row->row["status"] == "search_complete",rows))
 end
 
 function prepare_program_learning!(knowledge,config,store,repo_root,corpus;retry_of=nothing)
@@ -194,7 +233,8 @@ function prepare_program_learning!(knowledge,config,store,repo_root,corpus;retry
         engine_identity=settings["engine_identity"],input_scope_complete=isempty(corpus.obligations),
         intent="program",consumer="program-semantics",obligation_refs=refs)
     atomic_json(joinpath(job,"program-submission.json"),Dict(
-        "snapshot"=>snapshot,"key"=>key,"retry_of"=>retry_of,"evidence"=>refs))
+        "snapshot"=>snapshot,"key"=>key,"retry_of"=>retry_of,"evidence"=>refs,
+        "cohort"=>get(corpus,:cohort,nothing)))
     return (;job,manifest,snapshot,corpus,key)
 end
 

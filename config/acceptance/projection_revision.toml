@@ -1,0 +1,5 @@
+schema_version = 1
+kind = "projection_revision"
+output_name = "projection-revision"
+environment_config = "../bench_server.toml"
+judge_config = "../bench_scenarios.toml"

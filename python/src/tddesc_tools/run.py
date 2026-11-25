@@ -54,6 +54,7 @@ KIND_IDS = {
     "trace_learning": ("learned_intermediate_response",),
     "measurement_learning": ("measurement_public_feedback",),
     "measurement_goal": ("measurement_goal_execution", "program_publication_recovery"),
+    "projection_revision": ("public_projection_revision",),
 }
 MODULES = {
     "protocol": "tests.protocol.test_faults",
@@ -87,6 +88,7 @@ MODULES = {
     "trace_learning": "tests.bench.check_trace_learning",
     "measurement_learning": "tests.bench.check_measurement",
     "measurement_goal": "tests.bench.check_meter_goal",
+    "projection_revision": "tests.bench.check_projection_revision",
     "stitch_growth": "tests.bench.check_kernel",
 }
 
@@ -287,7 +289,9 @@ def run_task(root, config_path, task, run_dir, runtime):
         "association_background",
         "sequence_learning",
         "measurement_learning",
+        "projection_revision",
         "measurement_goal",
+        "projection_revision",
     )
     offline_arc = kind in ("arc_offline", "autonomous_offline", "arc_public25")
     isolated = (
