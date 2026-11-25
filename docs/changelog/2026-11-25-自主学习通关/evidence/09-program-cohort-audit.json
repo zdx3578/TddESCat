@@ -1,0 +1,7047 @@
+{
+  "review_source_commit": "1c921de7ab8458a378a487a66145528e272d1ff8",
+  "run_manifest": {
+    "schema_version": 1,
+    "suite_id": "autonomous-offline-win",
+    "run_id": "measurement-program-official-r04",
+    "git_commit": "f4f5588a1bc1401b6fa6ba34b85deda2e77809c7",
+    "worktree_sha256": "73447939d3763221ef0c7e88c50de17ad9eeb2c3e729e3e87102fe4eab7444ea",
+    "config_sha256": "1042b988b2cb9a8e6ce2a14531af88bc97f0acbdceba1b7757055045e6fea853",
+    "locks": {
+      "python": "606a07ec1ecbd2282472e305c1b24f94107343ea491acef8969801b703d89540",
+      "julia": "0ec6da0595f34a8ef38d83105253b1733668929e66540aa61f9f9ec5d432bbc8",
+      "rust": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2"
+    },
+    "environment": "official_offline_http",
+    "isolation": "linux_namespaces",
+    "started_at": "2026-11-25T09:42:15.731255+00:00"
+  },
+  "input_corpus_sha256": "4cbc9e8c1686d8ada37433524b83edbf6995d5440ebf109477b5f027a9c19d24",
+  "summary": {
+    "compiled_segments": 25,
+    "compiled_unique_actions": 260,
+    "all_interval_pattern_types": 1426,
+    "eligible_repeated_cohorts": 149,
+    "submitted_cohorts": 79,
+    "submitted_snapshots": 79,
+    "submitted_jobs": 79,
+    "learned_cohorts": 74,
+    "submitted_unlearned_cohorts": 5,
+    "eligible_unsubmitted_cohorts": 70,
+    "unsubmitted_by_length": {
+      "4": 19,
+      "5": 21,
+      "6": 16,
+      "7": 10,
+      "8": 3,
+      "9": 1
+    },
+    "submitted_jobs_by_length": {
+      "2": 34,
+      "3": 36,
+      "4": 9
+    },
+    "all_submitted_cohort_and_snapshot_hashes_match": true,
+    "partial_publication_cohorts": []
+  },
+  "jobs": [
+    {
+      "job": "job-000002",
+      "cohort": "3dedaabb5c9d679020efca92c7814b73663632b966e6cf18a1f9b16b3ec50e09",
+      "snapshot": "1bfa2e72ead34f47ebaa7f8b3449bc5eec57b38aef52939f96efdaec4f8e7e4f",
+      "length": 2,
+      "occurrences": 3,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000004",
+      "cohort": "0871d5d6d1ebb1da33370863ea64065553f6f9244a64c9de9613ac4595dc9904",
+      "snapshot": "a066ec098589433b821d98fc84280efecf46da46d5b9b80f8eacb4c25a3585a2",
+      "length": 2,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000006",
+      "cohort": "ba288b810b7035e7b6ac96cdccdd4a6c3f5f9817e11def1ac36e54839b009c7b",
+      "snapshot": "62fa43d2449755503071d1e6b67a3c2459ede20a5d2ecc495e233cc146da2873",
+      "length": 2,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000008",
+      "cohort": "8761b91486969c12f693d497cca16a2170c83b074588362ca21b6a3061aadb8a",
+      "snapshot": "eccdb1a034a9619481cf41993c7b0c59540a47cfa3bf2fbb578d0fe0d8caace4",
+      "length": 2,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000010",
+      "cohort": "a1060dd0d22a361b9b350ed13dd575c1c973dbab6cf191c7ace42cfcfac4c7d2",
+      "snapshot": "70c4269238499e03fb4824a15ccbc7bcda40bc825c3fe43e0b68b4d079299d9c",
+      "length": 2,
+      "occurrences": 3,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000012",
+      "cohort": "34809b49b1bf79f2929b5065dc99bd5481872251d37f9802a16448e2d8620e27",
+      "snapshot": "db1ebd6791edbd483956387c71154eed483081e1530364d9f116bbb782fb80ac",
+      "length": 2,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000015",
+      "cohort": "14f4db427db0ee9c5524871f351f4840b1830a90530337e6f06af73d2bb4756d",
+      "snapshot": "ae411f10d7047806ff9103c0109545e5ddb228c796efe25413fb3b3e5f1a6df9",
+      "length": 2,
+      "occurrences": 3,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000017",
+      "cohort": "feca14efae533476b5ddf1382e159bbdb9311cb16ef46af8c6c6bfc86e6a8ea0",
+      "snapshot": "6272baf11fcac258b517ad80e9241b128010c5bd8bae1abd4cc077c1179a2fd1",
+      "length": 2,
+      "occurrences": 3,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000019",
+      "cohort": "89aa71dc5729bdc13cbc052d1f3eb280bbde298714249c61708a27210a17ee93",
+      "snapshot": "c40324c653fce9ab4ffc345fbc0b588106d04a383221ebe164123ec4e5abcf19",
+      "length": 2,
+      "occurrences": 4,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000021",
+      "cohort": "adb1fbd84b0423e91777869d57b5cb4ebb571f09c362f305e7092450e65329d6",
+      "snapshot": "6e725803a4a67e74a49820040c2f9a605f505cc84f00e85dc176c070204fcc3e",
+      "length": 2,
+      "occurrences": 4,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000023",
+      "cohort": "673ea27a616256eedf002797b7501fe93615918f695f00fa87bea13d060cf7b6",
+      "snapshot": "31db834a3b89af59e515cfd2b6bdcb53cba4aa4e006734322e67b0c02abdc369",
+      "length": 2,
+      "occurrences": 4,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000025",
+      "cohort": "24db398dc27206fc3d0dee8e38dcde9e6834567666d51a0b77596a64f2eb45a2",
+      "snapshot": "de8cd9a7dd1bc7433a090135549611012c5149c1528e8f608a760007bb33ae1c",
+      "length": 2,
+      "occurrences": 3,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000027",
+      "cohort": "c081077bd6bc65c72f59c35cd9cd85730aa115c2889f9fefee9428ddd1b3f85e",
+      "snapshot": "70560a0217758f8e38b933dc411636155d2c51e52f2c6f16972c123f1b88451d",
+      "length": 2,
+      "occurrences": 3,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000029",
+      "cohort": "23449de782ca738d4baf8498d50ed57b52e1cd46940d58fc8ad3a9019f98dd92",
+      "snapshot": "350e17de00b164c94cff82cafaf4994c72804994a94a2fe35bd6ce39dd78e6db",
+      "length": 2,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000031",
+      "cohort": "a21fb9274b5f482757b908c2ca7ddb518f1b01dbc5e4349d942107055eaccd42",
+      "snapshot": "624ec57265418365ae6c8c9ff7b221b7915b7f395648fddea8a315da4d83a372",
+      "length": 2,
+      "occurrences": 3,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000034",
+      "cohort": "5c67744facf92c143faaa1110a3cd080de3ed3cd6c088f494d15d05fb3b89199",
+      "snapshot": "34175a991401338cb8ae0da2a9d6e3be17dc876a296ce9f44f2ce376507a736c",
+      "length": 2,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000037",
+      "cohort": "843389cf3760c5ca69b3df7d2a8865ef32cf3a4c60aecf4a2f7c9b47fc3826bf",
+      "snapshot": "c96381f82709e06447f12f04bd79dcb162d765e1f243086e25e5b1baf7cc4b42",
+      "length": 2,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000041",
+      "cohort": "985deaeca9c6378786ca343d708942b4e08094611e209120c495b8209f82e5aa",
+      "snapshot": "99938c1b55f5050665f0b1da2a31bd40f14c3f96fca176a17e5a4e7acc804044",
+      "length": 2,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000044",
+      "cohort": "6eea17cbffd5d2ef5d8d0dd09b1d57e584670f1c938642b171ebf0116938c6f0",
+      "snapshot": "33fc5054d9fcb2b1bd727506b066bcd6f9fc94ffb0775979a8e2b8f25a32336c",
+      "length": 2,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000046",
+      "cohort": "1c82dc884439db5387f329f3a46e3afeabe690603bcc55a583ecdcd39ae8e5c3",
+      "snapshot": "24b85362163d5a2e413f215bdbd937d4a5d55ce6c5d9de055dff0f277b04d9fc",
+      "length": 2,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000048",
+      "cohort": "a1778de8ec218a54d8d18d75f05d72d2f235dad471aa999ff0e93fbe7d58a4fc",
+      "snapshot": "6063b10226c7bc689398d8ba80258f8f6ca4102828f3f8fd7514d2062e2363f1",
+      "length": 2,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000050",
+      "cohort": "b131ea07f4f70c1cdeda398249cf87c6e83af12a1a7b4ab1ecacdc434e93fb2b",
+      "snapshot": "93e78f20503861a7b42aab2c056441d32638c6c2b9ccccca8e70beb0895bccbc",
+      "length": 2,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000052",
+      "cohort": "95c8745327e9165807fa6af6d1461ffcfc197cbd73b93fc3c8dbfa9d4836a5b7",
+      "snapshot": "b2d92fc2c7543d9726d8243574b71674f60f1fb7a859fd005bf7e128d94f4f2a",
+      "length": 2,
+      "occurrences": 3,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000054",
+      "cohort": "5fe8fbedaab3885c3dd1779a78938362c2fe0ec7f5cea94679654756e65e65e8",
+      "snapshot": "b71773661f8728c455cf9cb49daf75bf197690307bd9e7bb67e894fa2cb1bc96",
+      "length": 2,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000056",
+      "cohort": "8bac6ba9fa8095f737c1c86a87a3d34af1bd81853f9b7e04899292c915fb5c26",
+      "snapshot": "44f6e868be447b536684b33d4763dfe750e79f0c37510a10d7139a1acd593e46",
+      "length": 2,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000058",
+      "cohort": "e013e20969ae42e261e38111a3ceacfa65f1a9f1485fcf7555be2314143a0d10",
+      "snapshot": "7c49fe74f3b2950e78914f5941654bea0863b0bde9cea212aee1129a4c36f662",
+      "length": 2,
+      "occurrences": 3,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000060",
+      "cohort": "9a8f9d66a7595fa85620cbcc11e885ec224fbaa739651432459b673c41d324ee",
+      "snapshot": "8f8284186d973d2903992c1cb6ef3d99c34696fdd761dff2e288460d04ce3a74",
+      "length": 2,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000062",
+      "cohort": "66a2859b023e8e6e0059d2b421ca89d51d0d17f64a5d016cc33250eb043cd976",
+      "snapshot": "8253c437af1edb7ec42ff7449a684f81a6a4a3009ed0f46bc4d6e692b557d803",
+      "length": 2,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000064",
+      "cohort": "4127b7ea7572a9a6c6bc25e664d61a00666be6196b26c9758148f197dcdc0615",
+      "snapshot": "2feec43f1b58bdc21a1e469031721c45a53211a7ee6d039681ef292568e0d30c",
+      "length": 2,
+      "occurrences": 2,
+      "search_complete": false,
+      "result": "worker_incomplete",
+      "has_programs": false,
+      "worker_code": 23
+    },
+    {
+      "job": "job-000066",
+      "cohort": "8f2ec02cfd2d1ac3928522782583f5bab7871773e8908c3bb114aee844e082cd",
+      "snapshot": "8e202ab404a9950d90086debe637c60e6257fca6da3884bff301770624b15989",
+      "length": 2,
+      "occurrences": 2,
+      "search_complete": false,
+      "result": "worker_incomplete",
+      "has_programs": false,
+      "worker_code": 23
+    },
+    {
+      "job": "job-000068",
+      "cohort": "12d8c813ec573ce0a1456a650a781e37de273c2124a28a76dd03847fa1028a0c",
+      "snapshot": "7cae3b13b4f463f61072e668f0df115f82965d7fa7398848f1cd8aee27d8d570",
+      "length": 2,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000071",
+      "cohort": "92c57f7edd954cf1ad64f9a85d00c0a5ee99f3fbd339b5a3ac7f163063cbbd91",
+      "snapshot": "3afb4cd57271b0f10d07007c9f327df3dd4a5cdd8f1ff708a340df3a23aae563",
+      "length": 2,
+      "occurrences": 2,
+      "search_complete": false,
+      "result": "worker_incomplete",
+      "has_programs": false,
+      "worker_code": 23
+    },
+    {
+      "job": "job-000073",
+      "cohort": "d38ec32678decb6acde34e7bb4b48048f2738e775cebb993e9f18923bff5e6dd",
+      "snapshot": "8d4c06677bee994a390eece197be2167419b2cbc4868f15a9cd84da8bff7a920",
+      "length": 2,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000077",
+      "cohort": "f60c3b7eb13a9dbd8a41a836bb0a42525f122d3c394d87a31c028299802e6fff",
+      "snapshot": "059859e9838d69b652d8c69b1d2d64b46803a3a3717f817aee8f060cc4fce9d2",
+      "length": 2,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000080",
+      "cohort": "76fcc468fba0a6b2eb16b9a568c4a7d746ce286933ea27159d51fb61f5d3adfc",
+      "snapshot": "317feba2f917e5660e6b4c3cbd1712145f3e249497f172a94d2138e5662146dc",
+      "length": 3,
+      "occurrences": 14,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000082",
+      "cohort": "2dbc87d6ef0acb6c374a26524b784f48e2b8777cf0b1b64c0a4101d6f45dcdb9",
+      "snapshot": "749ade0315c8f2496216fbb3874bd92c92cce5e8479be74f15489138f72ec2e4",
+      "length": 3,
+      "occurrences": 6,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000084",
+      "cohort": "782369d6ef7ffcd90c4864483c2bb534bcd5d35e1998ed783a80a3800d170877",
+      "snapshot": "67748fe8ccff3868ac618ea8d68ccab941d3e04280c62c94534f9be919cf6445",
+      "length": 3,
+      "occurrences": 5,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000086",
+      "cohort": "a68fe4aedcde0bcca626980a32f76fce594d3d777cb53c11b513216559c85a38",
+      "snapshot": "01141d6effd3f112e3be55a465aebc83c101a0fa0347d97b56a5868efd80b354",
+      "length": 3,
+      "occurrences": 5,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000088",
+      "cohort": "d2a883dd1789384204cc1a4ca4ad8769ba97a47cced0dcb171986fda3744d9fd",
+      "snapshot": "c37d6cfb9d91d28553ef9d4f5a2a2db92d074070d12bcd9e323493fd54cb1f17",
+      "length": 3,
+      "occurrences": 5,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000090",
+      "cohort": "45aa73ff689585ddf51c28cc0c32a8fed6530a1635e8bc91f82c548892713ee1",
+      "snapshot": "974c0fb55cad1e238174396d8903db170c868b197be7b8a073fb5d16f0fe1dee",
+      "length": 3,
+      "occurrences": 4,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000092",
+      "cohort": "dc7d3d79b977a318aa7fe65cb4b22a7e4133a62e47b9c2c953bfcf8621d48b18",
+      "snapshot": "b3b2846ea236b450622be228540dc20114c4630f798f1a5427befff323eeee67",
+      "length": 3,
+      "occurrences": 4,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000094",
+      "cohort": "ed93519353ac2214a799317a821845613b4d5af601792e5793d835f80fb2badc",
+      "snapshot": "5dc06be97f0ecc41ca7be122b5418441ed6b50f544ac830e62243aa7eee4ba4b",
+      "length": 3,
+      "occurrences": 4,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000096",
+      "cohort": "28edd7a3904617d333acc20f2f797e319847e83bb483078516ecff40d4266b83",
+      "snapshot": "fdbc6e4e236b39b5a23d801c97a8ae26b68c7f56705ea1d67ccaa74d7ec10c60",
+      "length": 3,
+      "occurrences": 3,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000098",
+      "cohort": "32cfa9e86b048236e3a0b36c19e80b22f45aad681047a7b5dbdc0a2d18431935",
+      "snapshot": "1a1a8c3914c8aafe7cfd985631cae632adf3b728eb15426de7f8ed4fa922cdc3",
+      "length": 3,
+      "occurrences": 3,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000100",
+      "cohort": "425acf94dcee52d7038c6020e78e0a2cb050778d3dc20dae38ffcf008692379a",
+      "snapshot": "fa7b0f8f59af6c74340170d34a97456f9bdf9bf4f7467cce995573faa036baa4",
+      "length": 3,
+      "occurrences": 3,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000102",
+      "cohort": "d3c68283550a1ebb5bc3a2fbe05877b3a4f293652119307ecd95ddfe0deb20c6",
+      "snapshot": "df8dabb96eeebfb7d1961969c0efe1e55e16db7549259824d0697bf3a8c9a3cd",
+      "length": 3,
+      "occurrences": 3,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000104",
+      "cohort": "d4addf888a3ef67b50376d781905437b0e031aa3c16acbf6675f99a16abf64f2",
+      "snapshot": "3c87eb0410cb9265195cd2b99021faaf230d76f30b28c72f6712e58b3ca00d4f",
+      "length": 3,
+      "occurrences": 3,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000106",
+      "cohort": "e62fa89908ded095290a1eadf0ca73e70a9082d0c4a2251e2034533cccfb07b0",
+      "snapshot": "9f6b2e87ff5b2d40d1826e322cbdcd53c2336b21e8b4a82e51c6bfe1df8a2eb5",
+      "length": 3,
+      "occurrences": 3,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000108",
+      "cohort": "fc9a5326600be724ddf062209a39f78ca238fa2f835bba444715572f83d74c38",
+      "snapshot": "256cc2251fd7c431992342b27ed2ba3d39e5136c348bf53c610a2abef21579f2",
+      "length": 3,
+      "occurrences": 3,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000110",
+      "cohort": "03d5f31b6084e709db945253a3d559497052f9a37ac002051ceb17659776111e",
+      "snapshot": "393a04d5747cad53614a3a7ecca5b4d740908916fc06390582b260e6ab568eb2",
+      "length": 3,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000112",
+      "cohort": "09e3f8cdf4d3a62b7220e9ce1bd036b35228e0e9c0a7950aec9fd88a8086f33f",
+      "snapshot": "5a7803ad2d006206147df71a1a5f84341bb6fc5ec22297d0e0bdd711a725af8b",
+      "length": 3,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000114",
+      "cohort": "0afc8ae06eb66e63dbec2eff23a74e51d32c7ed5a672061f425f93739fb09ab8",
+      "snapshot": "ec726625e1fe9d41b3585fcee00311cf3c90c62b6b6262cdf79e7a08b4115b49",
+      "length": 3,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000117",
+      "cohort": "0f7e73a2d484fb6ab180d42d5eda8c7688c3817ce9e6d8bf85c273e9805c9873",
+      "snapshot": "8d811482d87c6225ab4c5af48a9a8b31356e72a8cb8dee95cc8f251eae700457",
+      "length": 3,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000121",
+      "cohort": "1db632018acbaf4d401fbdf3895872107ca74009cefcc28fa3b324ea664b7580",
+      "snapshot": "742f4244f7663d27c4b1716b7d5cf470540c6e43bdb1091342430a1fd37c5b3e",
+      "length": 3,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000124",
+      "cohort": "26ac6ebe1ea7cda75f8207052d9e9a2959bff9467a1a354a39a6cf1097952180",
+      "snapshot": "d29a0a6e3dbb15d4de45ba2d811de42b189ffe723a7f1d9dc096774dd2a99ed3",
+      "length": 3,
+      "occurrences": 2,
+      "search_complete": false,
+      "result": "worker_incomplete",
+      "has_programs": false,
+      "worker_code": 23
+    },
+    {
+      "job": "job-000126",
+      "cohort": "36451701a6c998efea7b7cd6eb72feefabc8e0a17ee554ccf16a50b528f4582c",
+      "snapshot": "36497e82d7f3e20490ea5fe2d5a76ccdd8b598db1f685001b235875c82962b25",
+      "length": 3,
+      "occurrences": 2,
+      "search_complete": false,
+      "result": "worker_incomplete",
+      "has_programs": false,
+      "worker_code": 23
+    },
+    {
+      "job": "job-000128",
+      "cohort": "4715f62be07f1f5998438c3a8497011c8206110c8fcff9f11d32bdf575ac8076",
+      "snapshot": "c7ca802d2e41a90d90b3bb608183a7dbfbe9c2f18956410eee6e20491d828c47",
+      "length": 3,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000130",
+      "cohort": "472709080965bb1ba55c11c020624bdcc2592ea0c2dc4f16ad8ca8c33be91dd2",
+      "snapshot": "c7237ba3e7d13ae734ec097b237a1b0ec9eb73deb1a69af8c48fab560c741dba",
+      "length": 3,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000132",
+      "cohort": "49cc9f350449bebeccfc673b43e89bbd5d11a7482623381a5064b2af1f412ceb",
+      "snapshot": "460528c5a659ff6a703de261bbd221ab24cba65bbfd151710e64c8211d93411c",
+      "length": 3,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000134",
+      "cohort": "4c983d85d9b97174a082e80510fbf817bc010a87614bf8144f60b38a45af95c1",
+      "snapshot": "2af9ff9514a388ebd9fd72711c3d4e58e10791cc24bb3a07fc70253af09ed41a",
+      "length": 3,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000136",
+      "cohort": "54e5a090a7cca21de62d300b02dcacec2dc26f42d92cfe90a65109c2444d1af5",
+      "snapshot": "9568f441a2ae640155e928215616e7cdab9d594c5709a75aad947696d086671e",
+      "length": 3,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000138",
+      "cohort": "5effadbb738e75566f7d3eeddf3bfd658535ce410763c7382e208abeb135e919",
+      "snapshot": "cc309199894ad77ace09b49be348dd42d0f8f4d7cf05246a23d008b551ab2059",
+      "length": 3,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000140",
+      "cohort": "6025656aaea6e88fda24e954dee6a89a7aa9001736d8bae4b62329c6c58283b6",
+      "snapshot": "f02df101e51fdcfabc4671d01cc0019dd99705568e986bb8534b3546c3772fd3",
+      "length": 3,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000142",
+      "cohort": "78f08b916a7a5470d073085f7c6ad811ad6e4e0f8aff667b2ba78e578e42ce2d",
+      "snapshot": "2cf8e4bf62991a82b3d770cb88c738b02897773035eea0092ec8b6828a759bd4",
+      "length": 3,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000144",
+      "cohort": "a8ee5d16ea3682cfa86c04ae2a4a08181fa77dcb36c0dbe8044b4b39d59db04d",
+      "snapshot": "d3932effe18638eaf834b9d972ea47d5a1702bd3a1946ce268fc4ad8e24765d6",
+      "length": 3,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000146",
+      "cohort": "b5eb11116798d0fd3e638ebc748cfa1f3d31dbee5079837edc4dc1ac6d44a37e",
+      "snapshot": "b97cebe56bff5cccd81a0a6bc1f6a2eaa58533d97a1cbea83004d03cbe8cb0ff",
+      "length": 3,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000148",
+      "cohort": "bbbb9e9bbd62a05108e120b28b01e94b859454671e8d65f33bab8bfd20c761e1",
+      "snapshot": "43dbcfc2af96fba4348745dbe2be86328699303df143af796d5929b1bb78f939",
+      "length": 3,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000150",
+      "cohort": "c759ea46359dbb0839c20391ae4702eef4e2dfb4a140e6cf635a20bec1d0d660",
+      "snapshot": "15a06300e7c29d0bf89cb94e6c8159c25d321ec2a0747c9b4444e26ae933dc52",
+      "length": 3,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000152",
+      "cohort": "d91ede1f71b328e96d2943bfb7acd8000f5f155a919662b10a9b0a267b7b0fa3",
+      "snapshot": "9fe3178ab8f863c390ba076845c74e799de48de15334e39e9fc57a9c9c68e544",
+      "length": 3,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000154",
+      "cohort": "fb696c9e9fe1cc78a545c6553b6856ef2228cfb3b32d742d5f0005eae25d7be9",
+      "snapshot": "ff870677385ef0c174c46a62cb0a80056637ad8c47bd0bb23012f5caa1923ace",
+      "length": 3,
+      "occurrences": 2,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000156",
+      "cohort": "1cb68040d72b94b624a9cff19fc4b7f940a6373d433f1529f8c9527c7d5d0ef5",
+      "snapshot": "df61eb4d875aa058fd9c043f912dd11d30dc0280969846d5a6326a909bc82335",
+      "length": 4,
+      "occurrences": 7,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000158",
+      "cohort": "3141f3e88b3286b23ab04c41a3f5a5aba6ee136fe0fc3c74feff8409ce0b5f69",
+      "snapshot": "a15a2b9bebce15abea84834bdb2c51e22a8744a4da7fec95a16c73d833732b8d",
+      "length": 4,
+      "occurrences": 4,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000160",
+      "cohort": "da38ad8b0881e87dd1198a25e0f08131b81942e8a3b15bc1464c97207a51d243",
+      "snapshot": "46b5951bf1438b632e569bb851f6dfa8d32c516bd4b6bd02e8e377687e76c396",
+      "length": 4,
+      "occurrences": 4,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000162",
+      "cohort": "0516c9eacfe1880567bafbfd5d42d748b408083b6bc54b320722426caad3828b",
+      "snapshot": "c18701cc468eced887e1ab19eb33934eafa1719416e06ff3802bb6e6dae7cda8",
+      "length": 4,
+      "occurrences": 3,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000164",
+      "cohort": "31fc499a470eaa36d0b386fea98c344bff406bec7772ec06d271f208b937c1cb",
+      "snapshot": "7f110773270d4ef7f714b2ddc7359217b823d8398830941f6dbb3b8004b72068",
+      "length": 4,
+      "occurrences": 3,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000166",
+      "cohort": "448e57a52385e3825ca249a6d8dc503d56c85eb05445eabc4b77dd18283e3897",
+      "snapshot": "90d4637aa6d1f4eeb2456cbb2c2b70145cad5fff96d323d129271577cbcc07af",
+      "length": 4,
+      "occurrences": 3,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000168",
+      "cohort": "45e655b84b2369aebb5a395cec53c91ec0968ad4867ca1e573af14d59e5ec7d8",
+      "snapshot": "961cfbf346b2af18a5d8a4bec4dd734e459a75afbaf5f0560f17991b4dfb5fc9",
+      "length": 4,
+      "occurrences": 3,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000170",
+      "cohort": "bed7f3f18570f02b2fb1654c8f2ad7cc06c315500394b5480d4d761a6d572a7b",
+      "snapshot": "bd253cc6f486fbc14f5302859bbdb7eb115e0a0047479f4b0f3f38981c9a1c01",
+      "length": 4,
+      "occurrences": 3,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    },
+    {
+      "job": "job-000172",
+      "cohort": "cf3f2dd3561cd152d080339b3d4166b855a360680cd5d2e30369f62da3a53134",
+      "snapshot": "4cc50411f4bd33b28b9cff3e9a4265009510e9d321a909be9d28c7ec1a4a23cd",
+      "length": 4,
+      "occurrences": 3,
+      "search_complete": true,
+      "result": "published",
+      "has_programs": true,
+      "worker_code": 0
+    }
+  ],
+  "eligible_cohorts": [
+    {
+      "cohort": "03d5f31b6084e709db945253a3d559497052f9a37ac002051ceb17659776111e",
+      "length": 3,
+      "members": [
+        {
+          "scope": 4,
+          "start": 14,
+          "stop": 16,
+          "events": [
+            "e-359bba0efa69e219-c000000040",
+            "e-359bba0efa69e219-c000000041",
+            "e-359bba0efa69e219-c000000042"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 12,
+          "stop": 14,
+          "events": [
+            "e-359bba0efa69e219-c000000120",
+            "e-359bba0efa69e219-c000000121",
+            "e-359bba0efa69e219-c000000122"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000110"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "0516c9eacfe1880567bafbfd5d42d748b408083b6bc54b320722426caad3828b",
+      "length": 4,
+      "members": [
+        {
+          "scope": 4,
+          "start": 10,
+          "stop": 13,
+          "events": [
+            "e-359bba0efa69e219-c000000036",
+            "e-359bba0efa69e219-c000000037",
+            "e-359bba0efa69e219-c000000038",
+            "e-359bba0efa69e219-c000000039"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 5,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000113",
+            "e-359bba0efa69e219-c000000114",
+            "e-359bba0efa69e219-c000000115",
+            "e-359bba0efa69e219-c000000116"
+          ]
+        },
+        {
+          "scope": 12,
+          "start": 1,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000161",
+            "e-359bba0efa69e219-c000000162",
+            "e-359bba0efa69e219-c000000163",
+            "e-359bba0efa69e219-c000000164"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000162"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "053b5b8779d167643753c939d82aaf5f656cb8a5819d57ddab0bc1ba7616ca68",
+      "length": 4,
+      "members": [
+        {
+          "scope": 4,
+          "start": 13,
+          "stop": 16,
+          "events": [
+            "e-359bba0efa69e219-c000000039",
+            "e-359bba0efa69e219-c000000040",
+            "e-359bba0efa69e219-c000000041",
+            "e-359bba0efa69e219-c000000042"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 11,
+          "stop": 14,
+          "events": [
+            "e-359bba0efa69e219-c000000119",
+            "e-359bba0efa69e219-c000000120",
+            "e-359bba0efa69e219-c000000121",
+            "e-359bba0efa69e219-c000000122"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "077c3434ace8a50377e2fae7a5285b2d3d4f167f9abca731d534e1fb80cca7a7",
+      "length": 5,
+      "members": [
+        {
+          "scope": 4,
+          "start": 6,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000032",
+            "e-359bba0efa69e219-c000000033",
+            "e-359bba0efa69e219-c000000034",
+            "e-359bba0efa69e219-c000000035",
+            "e-359bba0efa69e219-c000000036"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 1,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000084",
+            "e-359bba0efa69e219-c000000085",
+            "e-359bba0efa69e219-c000000086",
+            "e-359bba0efa69e219-c000000087",
+            "e-359bba0efa69e219-c000000088"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "0871d5d6d1ebb1da33370863ea64065553f6f9244a64c9de9613ac4595dc9904",
+      "length": 2,
+      "members": [
+        {
+          "scope": 1,
+          "start": 4,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000006",
+            "e-359bba0efa69e219-c000000007"
+          ]
+        },
+        {
+          "scope": 3,
+          "start": 4,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000023",
+            "e-359bba0efa69e219-c000000024"
+          ]
+        },
+        {
+          "scope": 25,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000305",
+            "e-359bba0efa69e219-c000000306"
+          ]
+        },
+        {
+          "scope": 25,
+          "start": 8,
+          "stop": 9,
+          "events": [
+            "e-359bba0efa69e219-c000000312",
+            "e-359bba0efa69e219-c000000313"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000004"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "09e3f8cdf4d3a62b7220e9ce1bd036b35228e0e9c0a7950aec9fd88a8086f33f",
+      "length": 3,
+      "members": [
+        {
+          "scope": 5,
+          "start": 7,
+          "stop": 9,
+          "events": [
+            "e-359bba0efa69e219-c000000065",
+            "e-359bba0efa69e219-c000000066",
+            "e-359bba0efa69e219-c000000067"
+          ]
+        },
+        {
+          "scope": 11,
+          "start": 5,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000146",
+            "e-359bba0efa69e219-c000000147",
+            "e-359bba0efa69e219-c000000148"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000112"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "0afc8ae06eb66e63dbec2eff23a74e51d32c7ed5a672061f425f93739fb09ab8",
+      "length": 3,
+      "members": [
+        {
+          "scope": 4,
+          "start": 25,
+          "stop": 27,
+          "events": [
+            "e-359bba0efa69e219-c000000051",
+            "e-359bba0efa69e219-c000000052",
+            "e-359bba0efa69e219-c000000053"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 10,
+          "stop": 12,
+          "events": [
+            "e-359bba0efa69e219-c000000093",
+            "e-359bba0efa69e219-c000000094",
+            "e-359bba0efa69e219-c000000095"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000114"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "0e0edd8427bb6543222c08886a4f7f98867fe5ed9801e808273dcf3bfdc48d87",
+      "length": 4,
+      "members": [
+        {
+          "scope": 4,
+          "start": 25,
+          "stop": 28,
+          "events": [
+            "e-359bba0efa69e219-c000000051",
+            "e-359bba0efa69e219-c000000052",
+            "e-359bba0efa69e219-c000000053",
+            "e-359bba0efa69e219-c000000054"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 10,
+          "stop": 13,
+          "events": [
+            "e-359bba0efa69e219-c000000093",
+            "e-359bba0efa69e219-c000000094",
+            "e-359bba0efa69e219-c000000095",
+            "e-359bba0efa69e219-c000000096"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "0f3507e99377c15fc0a31571e34e92100288dd999ec18297d356d0949c0788e6",
+      "length": 4,
+      "members": [
+        {
+          "scope": 19,
+          "start": 1,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000255",
+            "e-359bba0efa69e219-c000000256",
+            "e-359bba0efa69e219-c000000257",
+            "e-359bba0efa69e219-c000000258"
+          ]
+        },
+        {
+          "scope": 23,
+          "start": 1,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000287",
+            "e-359bba0efa69e219-c000000288",
+            "e-359bba0efa69e219-c000000289",
+            "e-359bba0efa69e219-c000000290"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "0f7e73a2d484fb6ab180d42d5eda8c7688c3817ce9e6d8bf85c273e9805c9873",
+      "length": 3,
+      "members": [
+        {
+          "scope": 17,
+          "start": 15,
+          "stop": 17,
+          "events": [
+            "e-359bba0efa69e219-c000000246",
+            "e-359bba0efa69e219-c000000247",
+            "e-359bba0efa69e219-c000000248"
+          ]
+        },
+        {
+          "scope": 21,
+          "start": 4,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000278",
+            "e-359bba0efa69e219-c000000279",
+            "e-359bba0efa69e219-c000000280"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000117"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "12d8c813ec573ce0a1456a650a781e37de273c2124a28a76dd03847fa1028a0c",
+      "length": 2,
+      "members": [
+        {
+          "scope": 3,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000020",
+            "e-359bba0efa69e219-c000000021"
+          ]
+        },
+        {
+          "scope": 25,
+          "start": 5,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000309",
+            "e-359bba0efa69e219-c000000310"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000068"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "14f4db427db0ee9c5524871f351f4840b1830a90530337e6f06af73d2bb4756d",
+      "length": 2,
+      "members": [
+        {
+          "scope": 4,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000027",
+            "e-359bba0efa69e219-c000000028"
+          ]
+        },
+        {
+          "scope": 5,
+          "start": 6,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000064",
+            "e-359bba0efa69e219-c000000065"
+          ]
+        },
+        {
+          "scope": 5,
+          "start": 12,
+          "stop": 13,
+          "events": [
+            "e-359bba0efa69e219-c000000070",
+            "e-359bba0efa69e219-c000000071"
+          ]
+        },
+        {
+          "scope": 6,
+          "start": 6,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000080",
+            "e-359bba0efa69e219-c000000081"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000129",
+            "e-359bba0efa69e219-c000000130"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000015"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "19df5d13f274d58f757daf6291235c7af8dc06230f67ecbb7e8d7b8df53fb716",
+      "length": 7,
+      "members": [
+        {
+          "scope": 4,
+          "start": 6,
+          "stop": 12,
+          "events": [
+            "e-359bba0efa69e219-c000000032",
+            "e-359bba0efa69e219-c000000033",
+            "e-359bba0efa69e219-c000000034",
+            "e-359bba0efa69e219-c000000035",
+            "e-359bba0efa69e219-c000000036",
+            "e-359bba0efa69e219-c000000037",
+            "e-359bba0efa69e219-c000000038"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 1,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000084",
+            "e-359bba0efa69e219-c000000085",
+            "e-359bba0efa69e219-c000000086",
+            "e-359bba0efa69e219-c000000087",
+            "e-359bba0efa69e219-c000000088",
+            "e-359bba0efa69e219-c000000089",
+            "e-359bba0efa69e219-c000000090"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "1a80007a8e405a43283ff1f15774b4a1d0ec1fbb6f61afc3b967e1a49d69dda4",
+      "length": 7,
+      "members": [
+        {
+          "scope": 4,
+          "start": 23,
+          "stop": 29,
+          "events": [
+            "e-359bba0efa69e219-c000000049",
+            "e-359bba0efa69e219-c000000050",
+            "e-359bba0efa69e219-c000000051",
+            "e-359bba0efa69e219-c000000052",
+            "e-359bba0efa69e219-c000000053",
+            "e-359bba0efa69e219-c000000054",
+            "e-359bba0efa69e219-c000000055"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 8,
+          "stop": 14,
+          "events": [
+            "e-359bba0efa69e219-c000000091",
+            "e-359bba0efa69e219-c000000092",
+            "e-359bba0efa69e219-c000000093",
+            "e-359bba0efa69e219-c000000094",
+            "e-359bba0efa69e219-c000000095",
+            "e-359bba0efa69e219-c000000096",
+            "e-359bba0efa69e219-c000000097"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "1c82dc884439db5387f329f3a46e3afeabe690603bcc55a583ecdcd39ae8e5c3",
+      "length": 2,
+      "members": [
+        {
+          "scope": 14,
+          "start": 9,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000185",
+            "e-359bba0efa69e219-c000000186"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 11,
+          "stop": 12,
+          "events": [
+            "e-359bba0efa69e219-c000000209",
+            "e-359bba0efa69e219-c000000210"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000046"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "1cb68040d72b94b624a9cff19fc4b7f940a6373d433f1529f8c9527c7d5d0ef5",
+      "length": 4,
+      "members": [
+        {
+          "scope": 4,
+          "start": 8,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000034",
+            "e-359bba0efa69e219-c000000035",
+            "e-359bba0efa69e219-c000000036",
+            "e-359bba0efa69e219-c000000037"
+          ]
+        },
+        {
+          "scope": 6,
+          "start": 1,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000075",
+            "e-359bba0efa69e219-c000000076",
+            "e-359bba0efa69e219-c000000077",
+            "e-359bba0efa69e219-c000000078"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 3,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000086",
+            "e-359bba0efa69e219-c000000087",
+            "e-359bba0efa69e219-c000000088",
+            "e-359bba0efa69e219-c000000089"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 1,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000109",
+            "e-359bba0efa69e219-c000000110",
+            "e-359bba0efa69e219-c000000111",
+            "e-359bba0efa69e219-c000000112"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 6,
+          "stop": 9,
+          "events": [
+            "e-359bba0efa69e219-c000000134",
+            "e-359bba0efa69e219-c000000135",
+            "e-359bba0efa69e219-c000000136",
+            "e-359bba0efa69e219-c000000137"
+          ]
+        },
+        {
+          "scope": 13,
+          "start": 1,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000169",
+            "e-359bba0efa69e219-c000000170",
+            "e-359bba0efa69e219-c000000171",
+            "e-359bba0efa69e219-c000000172"
+          ]
+        },
+        {
+          "scope": 15,
+          "start": 1,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000191",
+            "e-359bba0efa69e219-c000000192",
+            "e-359bba0efa69e219-c000000193",
+            "e-359bba0efa69e219-c000000194"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000156"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "1db632018acbaf4d401fbdf3895872107ca74009cefcc28fa3b324ea664b7580",
+      "length": 3,
+      "members": [
+        {
+          "scope": 4,
+          "start": 26,
+          "stop": 28,
+          "events": [
+            "e-359bba0efa69e219-c000000052",
+            "e-359bba0efa69e219-c000000053",
+            "e-359bba0efa69e219-c000000054"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 11,
+          "stop": 13,
+          "events": [
+            "e-359bba0efa69e219-c000000094",
+            "e-359bba0efa69e219-c000000095",
+            "e-359bba0efa69e219-c000000096"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000121"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "1ed66ee6c135f5d5373e9fad74e1d2924054c4b54c8e50b3661435094d661efb",
+      "length": 4,
+      "members": [
+        {
+          "scope": 14,
+          "start": 7,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000183",
+            "e-359bba0efa69e219-c000000184",
+            "e-359bba0efa69e219-c000000185",
+            "e-359bba0efa69e219-c000000186"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 9,
+          "stop": 12,
+          "events": [
+            "e-359bba0efa69e219-c000000207",
+            "e-359bba0efa69e219-c000000208",
+            "e-359bba0efa69e219-c000000209",
+            "e-359bba0efa69e219-c000000210"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "216f293b5392f81eaf60329c8a821c7c0511afcfa72433ec08e162c85c284202",
+      "length": 8,
+      "members": [
+        {
+          "scope": 4,
+          "start": 24,
+          "stop": 31,
+          "events": [
+            "e-359bba0efa69e219-c000000050",
+            "e-359bba0efa69e219-c000000051",
+            "e-359bba0efa69e219-c000000052",
+            "e-359bba0efa69e219-c000000053",
+            "e-359bba0efa69e219-c000000054",
+            "e-359bba0efa69e219-c000000055",
+            "e-359bba0efa69e219-c000000056",
+            "e-359bba0efa69e219-c000000057"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 9,
+          "stop": 16,
+          "events": [
+            "e-359bba0efa69e219-c000000092",
+            "e-359bba0efa69e219-c000000093",
+            "e-359bba0efa69e219-c000000094",
+            "e-359bba0efa69e219-c000000095",
+            "e-359bba0efa69e219-c000000096",
+            "e-359bba0efa69e219-c000000097",
+            "e-359bba0efa69e219-c000000098",
+            "e-359bba0efa69e219-c000000099"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "23449de782ca738d4baf8498d50ed57b52e1cd46940d58fc8ad3a9019f98dd92",
+      "length": 2,
+      "members": [
+        {
+          "scope": 4,
+          "start": 15,
+          "stop": 16,
+          "events": [
+            "e-359bba0efa69e219-c000000041",
+            "e-359bba0efa69e219-c000000042"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 13,
+          "stop": 14,
+          "events": [
+            "e-359bba0efa69e219-c000000121",
+            "e-359bba0efa69e219-c000000122"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 8,
+          "stop": 9,
+          "events": [
+            "e-359bba0efa69e219-c000000206",
+            "e-359bba0efa69e219-c000000207"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000029"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "23670660e1a459477cb86ec5597c3fe024ce68c15b3e93179a2cf29c49e899f2",
+      "length": 7,
+      "members": [
+        {
+          "scope": 9,
+          "start": 5,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000113",
+            "e-359bba0efa69e219-c000000114",
+            "e-359bba0efa69e219-c000000115",
+            "e-359bba0efa69e219-c000000116",
+            "e-359bba0efa69e219-c000000117",
+            "e-359bba0efa69e219-c000000118",
+            "e-359bba0efa69e219-c000000119"
+          ]
+        },
+        {
+          "scope": 12,
+          "start": 1,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000161",
+            "e-359bba0efa69e219-c000000162",
+            "e-359bba0efa69e219-c000000163",
+            "e-359bba0efa69e219-c000000164",
+            "e-359bba0efa69e219-c000000165",
+            "e-359bba0efa69e219-c000000166",
+            "e-359bba0efa69e219-c000000167"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "24db398dc27206fc3d0dee8e38dcde9e6834567666d51a0b77596a64f2eb45a2",
+      "length": 2,
+      "members": [
+        {
+          "scope": 4,
+          "start": 25,
+          "stop": 26,
+          "events": [
+            "e-359bba0efa69e219-c000000051",
+            "e-359bba0efa69e219-c000000052"
+          ]
+        },
+        {
+          "scope": 5,
+          "start": 8,
+          "stop": 9,
+          "events": [
+            "e-359bba0efa69e219-c000000066",
+            "e-359bba0efa69e219-c000000067"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 10,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000093",
+            "e-359bba0efa69e219-c000000094"
+          ]
+        },
+        {
+          "scope": 11,
+          "start": 6,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000147",
+            "e-359bba0efa69e219-c000000148"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000025"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "26ac6ebe1ea7cda75f8207052d9e9a2959bff9467a1a354a39a6cf1097952180",
+      "length": 3,
+      "members": [
+        {
+          "scope": 19,
+          "start": 2,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000256",
+            "e-359bba0efa69e219-c000000257",
+            "e-359bba0efa69e219-c000000258"
+          ]
+        },
+        {
+          "scope": 23,
+          "start": 2,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000288",
+            "e-359bba0efa69e219-c000000289",
+            "e-359bba0efa69e219-c000000290"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000124"
+      ],
+      "status": "submitted_unlearned"
+    },
+    {
+      "cohort": "28edd7a3904617d333acc20f2f797e319847e83bb483078516ecff40d4266b83",
+      "length": 3,
+      "members": [
+        {
+          "scope": 11,
+          "start": 1,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000142",
+            "e-359bba0efa69e219-c000000143",
+            "e-359bba0efa69e219-c000000144"
+          ]
+        },
+        {
+          "scope": 14,
+          "start": 1,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000177",
+            "e-359bba0efa69e219-c000000178",
+            "e-359bba0efa69e219-c000000179"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 1,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000199",
+            "e-359bba0efa69e219-c000000200",
+            "e-359bba0efa69e219-c000000201"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000096"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "2dbc87d6ef0acb6c374a26524b784f48e2b8777cf0b1b64c0a4101d6f45dcdb9",
+      "length": 3,
+      "members": [
+        {
+          "scope": 4,
+          "start": 27,
+          "stop": 29,
+          "events": [
+            "e-359bba0efa69e219-c000000053",
+            "e-359bba0efa69e219-c000000054",
+            "e-359bba0efa69e219-c000000055"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 12,
+          "stop": 14,
+          "events": [
+            "e-359bba0efa69e219-c000000095",
+            "e-359bba0efa69e219-c000000096",
+            "e-359bba0efa69e219-c000000097"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 16,
+          "stop": 18,
+          "events": [
+            "e-359bba0efa69e219-c000000124",
+            "e-359bba0efa69e219-c000000125",
+            "e-359bba0efa69e219-c000000126"
+          ]
+        },
+        {
+          "scope": 14,
+          "start": 2,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000178",
+            "e-359bba0efa69e219-c000000179",
+            "e-359bba0efa69e219-c000000180"
+          ]
+        },
+        {
+          "scope": 14,
+          "start": 5,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000181",
+            "e-359bba0efa69e219-c000000182",
+            "e-359bba0efa69e219-c000000183"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 5,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000203",
+            "e-359bba0efa69e219-c000000204",
+            "e-359bba0efa69e219-c000000205"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000082"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "2f1659f6e8a96f4292281af42cd0aed943eab3bf6cb9d9f17a95f67c70df51c5",
+      "length": 6,
+      "members": [
+        {
+          "scope": 4,
+          "start": 7,
+          "stop": 12,
+          "events": [
+            "e-359bba0efa69e219-c000000033",
+            "e-359bba0efa69e219-c000000034",
+            "e-359bba0efa69e219-c000000035",
+            "e-359bba0efa69e219-c000000036",
+            "e-359bba0efa69e219-c000000037",
+            "e-359bba0efa69e219-c000000038"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 2,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000085",
+            "e-359bba0efa69e219-c000000086",
+            "e-359bba0efa69e219-c000000087",
+            "e-359bba0efa69e219-c000000088",
+            "e-359bba0efa69e219-c000000089",
+            "e-359bba0efa69e219-c000000090"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "30b320f437f2db1e58fb1fd994d67431f40507b886dd38e92ab59d8b6c75643c",
+      "length": 4,
+      "members": [
+        {
+          "scope": 1,
+          "start": 5,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000007",
+            "e-359bba0efa69e219-c000000008",
+            "e-359bba0efa69e219-c000000009",
+            "e-359bba0efa69e219-c000000010"
+          ]
+        },
+        {
+          "scope": 25,
+          "start": 2,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000306",
+            "e-359bba0efa69e219-c000000307",
+            "e-359bba0efa69e219-c000000308",
+            "e-359bba0efa69e219-c000000309"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "3141f3e88b3286b23ab04c41a3f5a5aba6ee136fe0fc3c74feff8409ce0b5f69",
+      "length": 4,
+      "members": [
+        {
+          "scope": 4,
+          "start": 7,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000033",
+            "e-359bba0efa69e219-c000000034",
+            "e-359bba0efa69e219-c000000035",
+            "e-359bba0efa69e219-c000000036"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 2,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000085",
+            "e-359bba0efa69e219-c000000086",
+            "e-359bba0efa69e219-c000000087",
+            "e-359bba0efa69e219-c000000088"
+          ]
+        },
+        {
+          "scope": 11,
+          "start": 10,
+          "stop": 13,
+          "events": [
+            "e-359bba0efa69e219-c000000151",
+            "e-359bba0efa69e219-c000000152",
+            "e-359bba0efa69e219-c000000153",
+            "e-359bba0efa69e219-c000000154"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 24,
+          "stop": 27,
+          "events": [
+            "e-359bba0efa69e219-c000000222",
+            "e-359bba0efa69e219-c000000223",
+            "e-359bba0efa69e219-c000000224",
+            "e-359bba0efa69e219-c000000225"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000158"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "31fc499a470eaa36d0b386fea98c344bff406bec7772ec06d271f208b937c1cb",
+      "length": 4,
+      "members": [
+        {
+          "scope": 5,
+          "start": 9,
+          "stop": 12,
+          "events": [
+            "e-359bba0efa69e219-c000000067",
+            "e-359bba0efa69e219-c000000068",
+            "e-359bba0efa69e219-c000000069",
+            "e-359bba0efa69e219-c000000070"
+          ]
+        },
+        {
+          "scope": 11,
+          "start": 9,
+          "stop": 12,
+          "events": [
+            "e-359bba0efa69e219-c000000150",
+            "e-359bba0efa69e219-c000000151",
+            "e-359bba0efa69e219-c000000152",
+            "e-359bba0efa69e219-c000000153"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 23,
+          "stop": 26,
+          "events": [
+            "e-359bba0efa69e219-c000000221",
+            "e-359bba0efa69e219-c000000222",
+            "e-359bba0efa69e219-c000000223",
+            "e-359bba0efa69e219-c000000224"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000164"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "32cfa9e86b048236e3a0b36c19e80b22f45aad681047a7b5dbdc0a2d18431935",
+      "length": 3,
+      "members": [
+        {
+          "scope": 4,
+          "start": 12,
+          "stop": 14,
+          "events": [
+            "e-359bba0efa69e219-c000000038",
+            "e-359bba0efa69e219-c000000039",
+            "e-359bba0efa69e219-c000000040"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 7,
+          "stop": 9,
+          "events": [
+            "e-359bba0efa69e219-c000000115",
+            "e-359bba0efa69e219-c000000116",
+            "e-359bba0efa69e219-c000000117"
+          ]
+        },
+        {
+          "scope": 12,
+          "start": 3,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000163",
+            "e-359bba0efa69e219-c000000164",
+            "e-359bba0efa69e219-c000000165"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000098"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "34809b49b1bf79f2929b5065dc99bd5481872251d37f9802a16448e2d8620e27",
+      "length": 2,
+      "members": [
+        {
+          "scope": 4,
+          "start": 27,
+          "stop": 28,
+          "events": [
+            "e-359bba0efa69e219-c000000053",
+            "e-359bba0efa69e219-c000000054"
+          ]
+        },
+        {
+          "scope": 4,
+          "start": 29,
+          "stop": 30,
+          "events": [
+            "e-359bba0efa69e219-c000000055",
+            "e-359bba0efa69e219-c000000056"
+          ]
+        },
+        {
+          "scope": 5,
+          "start": 7,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000065",
+            "e-359bba0efa69e219-c000000066"
+          ]
+        },
+        {
+          "scope": 5,
+          "start": 13,
+          "stop": 14,
+          "events": [
+            "e-359bba0efa69e219-c000000071",
+            "e-359bba0efa69e219-c000000072"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 12,
+          "stop": 13,
+          "events": [
+            "e-359bba0efa69e219-c000000095",
+            "e-359bba0efa69e219-c000000096"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 14,
+          "stop": 15,
+          "events": [
+            "e-359bba0efa69e219-c000000097",
+            "e-359bba0efa69e219-c000000098"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 16,
+          "stop": 17,
+          "events": [
+            "e-359bba0efa69e219-c000000124",
+            "e-359bba0efa69e219-c000000125"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 18,
+          "stop": 19,
+          "events": [
+            "e-359bba0efa69e219-c000000126",
+            "e-359bba0efa69e219-c000000127"
+          ]
+        },
+        {
+          "scope": 11,
+          "start": 2,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000143",
+            "e-359bba0efa69e219-c000000144"
+          ]
+        },
+        {
+          "scope": 11,
+          "start": 5,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000146",
+            "e-359bba0efa69e219-c000000147"
+          ]
+        },
+        {
+          "scope": 14,
+          "start": 2,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000178",
+            "e-359bba0efa69e219-c000000179"
+          ]
+        },
+        {
+          "scope": 14,
+          "start": 4,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000180",
+            "e-359bba0efa69e219-c000000181"
+          ]
+        },
+        {
+          "scope": 14,
+          "start": 6,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000182",
+            "e-359bba0efa69e219-c000000183"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 2,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000200",
+            "e-359bba0efa69e219-c000000201"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 5,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000203",
+            "e-359bba0efa69e219-c000000204"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 9,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000207",
+            "e-359bba0efa69e219-c000000208"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000012"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "34bd392667daa027f0224ae1b8b253a8d7e04e95335fa2db924df3c3a87e8fcd",
+      "length": 8,
+      "members": [
+        {
+          "scope": 4,
+          "start": 23,
+          "stop": 30,
+          "events": [
+            "e-359bba0efa69e219-c000000049",
+            "e-359bba0efa69e219-c000000050",
+            "e-359bba0efa69e219-c000000051",
+            "e-359bba0efa69e219-c000000052",
+            "e-359bba0efa69e219-c000000053",
+            "e-359bba0efa69e219-c000000054",
+            "e-359bba0efa69e219-c000000055",
+            "e-359bba0efa69e219-c000000056"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 8,
+          "stop": 15,
+          "events": [
+            "e-359bba0efa69e219-c000000091",
+            "e-359bba0efa69e219-c000000092",
+            "e-359bba0efa69e219-c000000093",
+            "e-359bba0efa69e219-c000000094",
+            "e-359bba0efa69e219-c000000095",
+            "e-359bba0efa69e219-c000000096",
+            "e-359bba0efa69e219-c000000097",
+            "e-359bba0efa69e219-c000000098"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "36451701a6c998efea7b7cd6eb72feefabc8e0a17ee554ccf16a50b528f4582c",
+      "length": 3,
+      "members": [
+        {
+          "scope": 19,
+          "start": 1,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000255",
+            "e-359bba0efa69e219-c000000256",
+            "e-359bba0efa69e219-c000000257"
+          ]
+        },
+        {
+          "scope": 23,
+          "start": 1,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000287",
+            "e-359bba0efa69e219-c000000288",
+            "e-359bba0efa69e219-c000000289"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000126"
+      ],
+      "status": "submitted_unlearned"
+    },
+    {
+      "cohort": "3ab569ce483945a41988229ae938953ea78b677fcd381ef818dce2069bbdd881",
+      "length": 5,
+      "members": [
+        {
+          "scope": 9,
+          "start": 7,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000115",
+            "e-359bba0efa69e219-c000000116",
+            "e-359bba0efa69e219-c000000117",
+            "e-359bba0efa69e219-c000000118",
+            "e-359bba0efa69e219-c000000119"
+          ]
+        },
+        {
+          "scope": 12,
+          "start": 3,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000163",
+            "e-359bba0efa69e219-c000000164",
+            "e-359bba0efa69e219-c000000165",
+            "e-359bba0efa69e219-c000000166",
+            "e-359bba0efa69e219-c000000167"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "3bf822ce10ad32136baae5e3667453777e8f8e6031b3fd19996de930cc54527c",
+      "length": 7,
+      "members": [
+        {
+          "scope": 4,
+          "start": 25,
+          "stop": 31,
+          "events": [
+            "e-359bba0efa69e219-c000000051",
+            "e-359bba0efa69e219-c000000052",
+            "e-359bba0efa69e219-c000000053",
+            "e-359bba0efa69e219-c000000054",
+            "e-359bba0efa69e219-c000000055",
+            "e-359bba0efa69e219-c000000056",
+            "e-359bba0efa69e219-c000000057"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 10,
+          "stop": 16,
+          "events": [
+            "e-359bba0efa69e219-c000000093",
+            "e-359bba0efa69e219-c000000094",
+            "e-359bba0efa69e219-c000000095",
+            "e-359bba0efa69e219-c000000096",
+            "e-359bba0efa69e219-c000000097",
+            "e-359bba0efa69e219-c000000098",
+            "e-359bba0efa69e219-c000000099"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "3dca5e70d83a2b36c6a356a19944004a5e42852f228ab141cf3c341692641265",
+      "length": 5,
+      "members": [
+        {
+          "scope": 4,
+          "start": 26,
+          "stop": 30,
+          "events": [
+            "e-359bba0efa69e219-c000000052",
+            "e-359bba0efa69e219-c000000053",
+            "e-359bba0efa69e219-c000000054",
+            "e-359bba0efa69e219-c000000055",
+            "e-359bba0efa69e219-c000000056"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 11,
+          "stop": 15,
+          "events": [
+            "e-359bba0efa69e219-c000000094",
+            "e-359bba0efa69e219-c000000095",
+            "e-359bba0efa69e219-c000000096",
+            "e-359bba0efa69e219-c000000097",
+            "e-359bba0efa69e219-c000000098"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "3dedaabb5c9d679020efca92c7814b73663632b966e6cf18a1f9b16b3ec50e09",
+      "length": 2,
+      "members": [
+        {
+          "scope": 1,
+          "start": 5,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000007",
+            "e-359bba0efa69e219-c000000008"
+          ]
+        },
+        {
+          "scope": 1,
+          "start": 7,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000009",
+            "e-359bba0efa69e219-c000000010"
+          ]
+        },
+        {
+          "scope": 1,
+          "start": 9,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000011",
+            "e-359bba0efa69e219-c000000012"
+          ]
+        },
+        {
+          "scope": 3,
+          "start": 5,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000024",
+            "e-359bba0efa69e219-c000000025"
+          ]
+        },
+        {
+          "scope": 25,
+          "start": 2,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000306",
+            "e-359bba0efa69e219-c000000307"
+          ]
+        },
+        {
+          "scope": 25,
+          "start": 4,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000308",
+            "e-359bba0efa69e219-c000000309"
+          ]
+        },
+        {
+          "scope": 25,
+          "start": 9,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000313",
+            "e-359bba0efa69e219-c000000314"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000002"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "4127b7ea7572a9a6c6bc25e664d61a00666be6196b26c9758148f197dcdc0615",
+      "length": 2,
+      "members": [
+        {
+          "scope": 19,
+          "start": 3,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000257",
+            "e-359bba0efa69e219-c000000258"
+          ]
+        },
+        {
+          "scope": 23,
+          "start": 3,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000289",
+            "e-359bba0efa69e219-c000000290"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000064"
+      ],
+      "status": "submitted_unlearned"
+    },
+    {
+      "cohort": "41ffb50affcf8e45a0b87aad1770bc5b834c22b8e9a1a0850b4d13384d786dc5",
+      "length": 4,
+      "members": [
+        {
+          "scope": 4,
+          "start": 3,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000029",
+            "e-359bba0efa69e219-c000000030",
+            "e-359bba0efa69e219-c000000031",
+            "e-359bba0efa69e219-c000000032"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 3,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000131",
+            "e-359bba0efa69e219-c000000132",
+            "e-359bba0efa69e219-c000000133",
+            "e-359bba0efa69e219-c000000134"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "425acf94dcee52d7038c6020e78e0a2cb050778d3dc20dae38ffcf008692379a",
+      "length": 3,
+      "members": [
+        {
+          "scope": 2,
+          "start": 1,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000014",
+            "e-359bba0efa69e219-c000000015",
+            "e-359bba0efa69e219-c000000016"
+          ]
+        },
+        {
+          "scope": 18,
+          "start": 1,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000250",
+            "e-359bba0efa69e219-c000000251",
+            "e-359bba0efa69e219-c000000252"
+          ]
+        },
+        {
+          "scope": 22,
+          "start": 1,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000282",
+            "e-359bba0efa69e219-c000000283",
+            "e-359bba0efa69e219-c000000284"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000100"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "448e57a52385e3825ca249a6d8dc503d56c85eb05445eabc4b77dd18283e3897",
+      "length": 4,
+      "members": [
+        {
+          "scope": 4,
+          "start": 11,
+          "stop": 14,
+          "events": [
+            "e-359bba0efa69e219-c000000037",
+            "e-359bba0efa69e219-c000000038",
+            "e-359bba0efa69e219-c000000039",
+            "e-359bba0efa69e219-c000000040"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 6,
+          "stop": 9,
+          "events": [
+            "e-359bba0efa69e219-c000000114",
+            "e-359bba0efa69e219-c000000115",
+            "e-359bba0efa69e219-c000000116",
+            "e-359bba0efa69e219-c000000117"
+          ]
+        },
+        {
+          "scope": 12,
+          "start": 2,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000162",
+            "e-359bba0efa69e219-c000000163",
+            "e-359bba0efa69e219-c000000164",
+            "e-359bba0efa69e219-c000000165"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000166"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "45aa73ff689585ddf51c28cc0c32a8fed6530a1635e8bc91f82c548892713ee1",
+      "length": 3,
+      "members": [
+        {
+          "scope": 4,
+          "start": 11,
+          "stop": 13,
+          "events": [
+            "e-359bba0efa69e219-c000000037",
+            "e-359bba0efa69e219-c000000038",
+            "e-359bba0efa69e219-c000000039"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 6,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000114",
+            "e-359bba0efa69e219-c000000115",
+            "e-359bba0efa69e219-c000000116"
+          ]
+        },
+        {
+          "scope": 12,
+          "start": 2,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000162",
+            "e-359bba0efa69e219-c000000163",
+            "e-359bba0efa69e219-c000000164"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 13,
+          "stop": 15,
+          "events": [
+            "e-359bba0efa69e219-c000000211",
+            "e-359bba0efa69e219-c000000212",
+            "e-359bba0efa69e219-c000000213"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000090"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "45e655b84b2369aebb5a395cec53c91ec0968ad4867ca1e573af14d59e5ec7d8",
+      "length": 4,
+      "members": [
+        {
+          "scope": 2,
+          "start": 1,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000014",
+            "e-359bba0efa69e219-c000000015",
+            "e-359bba0efa69e219-c000000016",
+            "e-359bba0efa69e219-c000000017"
+          ]
+        },
+        {
+          "scope": 18,
+          "start": 1,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000250",
+            "e-359bba0efa69e219-c000000251",
+            "e-359bba0efa69e219-c000000252",
+            "e-359bba0efa69e219-c000000253"
+          ]
+        },
+        {
+          "scope": 22,
+          "start": 1,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000282",
+            "e-359bba0efa69e219-c000000283",
+            "e-359bba0efa69e219-c000000284",
+            "e-359bba0efa69e219-c000000285"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000168"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "4715f62be07f1f5998438c3a8497011c8206110c8fcff9f11d32bdf575ac8076",
+      "length": 3,
+      "members": [
+        {
+          "scope": 4,
+          "start": 3,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000029",
+            "e-359bba0efa69e219-c000000030",
+            "e-359bba0efa69e219-c000000031"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 3,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000131",
+            "e-359bba0efa69e219-c000000132",
+            "e-359bba0efa69e219-c000000133"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000128"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "472709080965bb1ba55c11c020624bdcc2592ea0c2dc4f16ad8ca8c33be91dd2",
+      "length": 3,
+      "members": [
+        {
+          "scope": 4,
+          "start": 24,
+          "stop": 26,
+          "events": [
+            "e-359bba0efa69e219-c000000050",
+            "e-359bba0efa69e219-c000000051",
+            "e-359bba0efa69e219-c000000052"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 9,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000092",
+            "e-359bba0efa69e219-c000000093",
+            "e-359bba0efa69e219-c000000094"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000130"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "4987a748238c11653e6ab4ebb7c2a70e53d1b54a7ecc7cfa5949bf5a6e95af69",
+      "length": 5,
+      "members": [
+        {
+          "scope": 4,
+          "start": 1,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000027",
+            "e-359bba0efa69e219-c000000028",
+            "e-359bba0efa69e219-c000000029",
+            "e-359bba0efa69e219-c000000030",
+            "e-359bba0efa69e219-c000000031"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 1,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000129",
+            "e-359bba0efa69e219-c000000130",
+            "e-359bba0efa69e219-c000000131",
+            "e-359bba0efa69e219-c000000132",
+            "e-359bba0efa69e219-c000000133"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "49cc9f350449bebeccfc673b43e89bbd5d11a7482623381a5064b2af1f412ceb",
+      "length": 3,
+      "members": [
+        {
+          "scope": 14,
+          "start": 8,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000184",
+            "e-359bba0efa69e219-c000000185",
+            "e-359bba0efa69e219-c000000186"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 10,
+          "stop": 12,
+          "events": [
+            "e-359bba0efa69e219-c000000208",
+            "e-359bba0efa69e219-c000000209",
+            "e-359bba0efa69e219-c000000210"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000132"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "4ab3a62ba0dbb83a28da05c7c246036a4bbaa8663587e62f9b1ba9b67c17c0d1",
+      "length": 5,
+      "members": [
+        {
+          "scope": 4,
+          "start": 19,
+          "stop": 23,
+          "events": [
+            "e-359bba0efa69e219-c000000045",
+            "e-359bba0efa69e219-c000000046",
+            "e-359bba0efa69e219-c000000047",
+            "e-359bba0efa69e219-c000000048",
+            "e-359bba0efa69e219-c000000049"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 18,
+          "stop": 22,
+          "events": [
+            "e-359bba0efa69e219-c000000216",
+            "e-359bba0efa69e219-c000000217",
+            "e-359bba0efa69e219-c000000218",
+            "e-359bba0efa69e219-c000000219",
+            "e-359bba0efa69e219-c000000220"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "4af51093f13b3f0254b5967cc32e652962756e966ed074c21ba856bc0148ab4e",
+      "length": 5,
+      "members": [
+        {
+          "scope": 4,
+          "start": 27,
+          "stop": 31,
+          "events": [
+            "e-359bba0efa69e219-c000000053",
+            "e-359bba0efa69e219-c000000054",
+            "e-359bba0efa69e219-c000000055",
+            "e-359bba0efa69e219-c000000056",
+            "e-359bba0efa69e219-c000000057"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 12,
+          "stop": 16,
+          "events": [
+            "e-359bba0efa69e219-c000000095",
+            "e-359bba0efa69e219-c000000096",
+            "e-359bba0efa69e219-c000000097",
+            "e-359bba0efa69e219-c000000098",
+            "e-359bba0efa69e219-c000000099"
+          ]
+        },
+        {
+          "scope": 14,
+          "start": 2,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000178",
+            "e-359bba0efa69e219-c000000179",
+            "e-359bba0efa69e219-c000000180",
+            "e-359bba0efa69e219-c000000181",
+            "e-359bba0efa69e219-c000000182"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "4c983d85d9b97174a082e80510fbf817bc010a87614bf8144f60b38a45af95c1",
+      "length": 3,
+      "members": [
+        {
+          "scope": 4,
+          "start": 23,
+          "stop": 25,
+          "events": [
+            "e-359bba0efa69e219-c000000049",
+            "e-359bba0efa69e219-c000000050",
+            "e-359bba0efa69e219-c000000051"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 8,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000091",
+            "e-359bba0efa69e219-c000000092",
+            "e-359bba0efa69e219-c000000093"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000134"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "4fa89442fcabd20b0e5e9db9309c0f193e22c499d13e0ce53a0b8df576817745",
+      "length": 6,
+      "members": [
+        {
+          "scope": 4,
+          "start": 26,
+          "stop": 31,
+          "events": [
+            "e-359bba0efa69e219-c000000052",
+            "e-359bba0efa69e219-c000000053",
+            "e-359bba0efa69e219-c000000054",
+            "e-359bba0efa69e219-c000000055",
+            "e-359bba0efa69e219-c000000056",
+            "e-359bba0efa69e219-c000000057"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 11,
+          "stop": 16,
+          "events": [
+            "e-359bba0efa69e219-c000000094",
+            "e-359bba0efa69e219-c000000095",
+            "e-359bba0efa69e219-c000000096",
+            "e-359bba0efa69e219-c000000097",
+            "e-359bba0efa69e219-c000000098",
+            "e-359bba0efa69e219-c000000099"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "5102d7f02b425535ff66323d5e6f0e96fda149dc183a34a982bd4ba80790fc3a",
+      "length": 4,
+      "members": [
+        {
+          "scope": 1,
+          "start": 4,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000006",
+            "e-359bba0efa69e219-c000000007",
+            "e-359bba0efa69e219-c000000008",
+            "e-359bba0efa69e219-c000000009"
+          ]
+        },
+        {
+          "scope": 25,
+          "start": 1,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000305",
+            "e-359bba0efa69e219-c000000306",
+            "e-359bba0efa69e219-c000000307",
+            "e-359bba0efa69e219-c000000308"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "52733df63dd891c07997014804be5656aa0c2fa3703ba08beddf4b962b1b48be",
+      "length": 7,
+      "members": [
+        {
+          "scope": 4,
+          "start": 9,
+          "stop": 15,
+          "events": [
+            "e-359bba0efa69e219-c000000035",
+            "e-359bba0efa69e219-c000000036",
+            "e-359bba0efa69e219-c000000037",
+            "e-359bba0efa69e219-c000000038",
+            "e-359bba0efa69e219-c000000039",
+            "e-359bba0efa69e219-c000000040",
+            "e-359bba0efa69e219-c000000041"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 4,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000112",
+            "e-359bba0efa69e219-c000000113",
+            "e-359bba0efa69e219-c000000114",
+            "e-359bba0efa69e219-c000000115",
+            "e-359bba0efa69e219-c000000116",
+            "e-359bba0efa69e219-c000000117",
+            "e-359bba0efa69e219-c000000118"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "5454ea45aeaa2a7cfe69949c3c8d79946197d9573b27d9f737a125c6df945823",
+      "length": 4,
+      "members": [
+        {
+          "scope": 11,
+          "start": 8,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000149",
+            "e-359bba0efa69e219-c000000150",
+            "e-359bba0efa69e219-c000000151",
+            "e-359bba0efa69e219-c000000152"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 22,
+          "stop": 25,
+          "events": [
+            "e-359bba0efa69e219-c000000220",
+            "e-359bba0efa69e219-c000000221",
+            "e-359bba0efa69e219-c000000222",
+            "e-359bba0efa69e219-c000000223"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "54e5a090a7cca21de62d300b02dcacec2dc26f42d92cfe90a65109c2444d1af5",
+      "length": 3,
+      "members": [
+        {
+          "scope": 4,
+          "start": 2,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000028",
+            "e-359bba0efa69e219-c000000029",
+            "e-359bba0efa69e219-c000000030"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 2,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000130",
+            "e-359bba0efa69e219-c000000131",
+            "e-359bba0efa69e219-c000000132"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000136"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "55bb443386f6ec0094790a54f64b1284682510127573a354259955f3d592068b",
+      "length": 7,
+      "members": [
+        {
+          "scope": 4,
+          "start": 18,
+          "stop": 24,
+          "events": [
+            "e-359bba0efa69e219-c000000044",
+            "e-359bba0efa69e219-c000000045",
+            "e-359bba0efa69e219-c000000046",
+            "e-359bba0efa69e219-c000000047",
+            "e-359bba0efa69e219-c000000048",
+            "e-359bba0efa69e219-c000000049",
+            "e-359bba0efa69e219-c000000050"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 17,
+          "stop": 23,
+          "events": [
+            "e-359bba0efa69e219-c000000215",
+            "e-359bba0efa69e219-c000000216",
+            "e-359bba0efa69e219-c000000217",
+            "e-359bba0efa69e219-c000000218",
+            "e-359bba0efa69e219-c000000219",
+            "e-359bba0efa69e219-c000000220",
+            "e-359bba0efa69e219-c000000221"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "59d6bd010e4e841bb7ce6cd670daee1482f89bc49ba5cc8acd621756a09c8053",
+      "length": 7,
+      "members": [
+        {
+          "scope": 4,
+          "start": 24,
+          "stop": 30,
+          "events": [
+            "e-359bba0efa69e219-c000000050",
+            "e-359bba0efa69e219-c000000051",
+            "e-359bba0efa69e219-c000000052",
+            "e-359bba0efa69e219-c000000053",
+            "e-359bba0efa69e219-c000000054",
+            "e-359bba0efa69e219-c000000055",
+            "e-359bba0efa69e219-c000000056"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 9,
+          "stop": 15,
+          "events": [
+            "e-359bba0efa69e219-c000000092",
+            "e-359bba0efa69e219-c000000093",
+            "e-359bba0efa69e219-c000000094",
+            "e-359bba0efa69e219-c000000095",
+            "e-359bba0efa69e219-c000000096",
+            "e-359bba0efa69e219-c000000097",
+            "e-359bba0efa69e219-c000000098"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "5c67744facf92c143faaa1110a3cd080de3ed3cd6c088f494d15d05fb3b89199",
+      "length": 2,
+      "members": [
+        {
+          "scope": 4,
+          "start": 5,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000031",
+            "e-359bba0efa69e219-c000000032"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 5,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000133",
+            "e-359bba0efa69e219-c000000134"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000034"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "5e14b2df5e8c5639e4f1f0506cbae1a74d5da52cd47969926bd76c65cc635d8f",
+      "length": 6,
+      "members": [
+        {
+          "scope": 4,
+          "start": 1,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000027",
+            "e-359bba0efa69e219-c000000028",
+            "e-359bba0efa69e219-c000000029",
+            "e-359bba0efa69e219-c000000030",
+            "e-359bba0efa69e219-c000000031",
+            "e-359bba0efa69e219-c000000032"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 1,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000129",
+            "e-359bba0efa69e219-c000000130",
+            "e-359bba0efa69e219-c000000131",
+            "e-359bba0efa69e219-c000000132",
+            "e-359bba0efa69e219-c000000133",
+            "e-359bba0efa69e219-c000000134"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "5effadbb738e75566f7d3eeddf3bfd658535ce410763c7382e208abeb135e919",
+      "length": 3,
+      "members": [
+        {
+          "scope": 5,
+          "start": 5,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000063",
+            "e-359bba0efa69e219-c000000064",
+            "e-359bba0efa69e219-c000000065"
+          ]
+        },
+        {
+          "scope": 5,
+          "start": 11,
+          "stop": 13,
+          "events": [
+            "e-359bba0efa69e219-c000000069",
+            "e-359bba0efa69e219-c000000070",
+            "e-359bba0efa69e219-c000000071"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000138"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "5fe8fbedaab3885c3dd1779a78938362c2fe0ec7f5cea94679654756e65e65e8",
+      "length": 2,
+      "members": [
+        {
+          "scope": 2,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000014",
+            "e-359bba0efa69e219-c000000015"
+          ]
+        },
+        {
+          "scope": 17,
+          "start": 15,
+          "stop": 16,
+          "events": [
+            "e-359bba0efa69e219-c000000246",
+            "e-359bba0efa69e219-c000000247"
+          ]
+        },
+        {
+          "scope": 18,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000250",
+            "e-359bba0efa69e219-c000000251"
+          ]
+        },
+        {
+          "scope": 21,
+          "start": 4,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000278",
+            "e-359bba0efa69e219-c000000279"
+          ]
+        },
+        {
+          "scope": 22,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000282",
+            "e-359bba0efa69e219-c000000283"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000054"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "6025656aaea6e88fda24e954dee6a89a7aa9001736d8bae4b62329c6c58283b6",
+      "length": 3,
+      "members": [
+        {
+          "scope": 4,
+          "start": 1,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000027",
+            "e-359bba0efa69e219-c000000028",
+            "e-359bba0efa69e219-c000000029"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 1,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000129",
+            "e-359bba0efa69e219-c000000130",
+            "e-359bba0efa69e219-c000000131"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000140"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "605669030884cd0d47121fb05d6c5b004f6e657fe534b033fad1d01a76a6c25a",
+      "length": 4,
+      "members": [
+        {
+          "scope": 6,
+          "start": 2,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000076",
+            "e-359bba0efa69e219-c000000077",
+            "e-359bba0efa69e219-c000000078",
+            "e-359bba0efa69e219-c000000079"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 5,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000088",
+            "e-359bba0efa69e219-c000000089",
+            "e-359bba0efa69e219-c000000090",
+            "e-359bba0efa69e219-c000000091"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "61481635f970defa27c3cbb144bd8b9815a279bc6d589cd2239fe06ef90be24d",
+      "length": 5,
+      "members": [
+        {
+          "scope": 4,
+          "start": 18,
+          "stop": 22,
+          "events": [
+            "e-359bba0efa69e219-c000000044",
+            "e-359bba0efa69e219-c000000045",
+            "e-359bba0efa69e219-c000000046",
+            "e-359bba0efa69e219-c000000047",
+            "e-359bba0efa69e219-c000000048"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 17,
+          "stop": 21,
+          "events": [
+            "e-359bba0efa69e219-c000000215",
+            "e-359bba0efa69e219-c000000216",
+            "e-359bba0efa69e219-c000000217",
+            "e-359bba0efa69e219-c000000218",
+            "e-359bba0efa69e219-c000000219"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "66a2859b023e8e6e0059d2b421ca89d51d0d17f64a5d016cc33250eb043cd976",
+      "length": 2,
+      "members": [
+        {
+          "scope": 17,
+          "start": 7,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000238",
+            "e-359bba0efa69e219-c000000239"
+          ]
+        },
+        {
+          "scope": 21,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000275",
+            "e-359bba0efa69e219-c000000276"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000062"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "673ea27a616256eedf002797b7501fe93615918f695f00fa87bea13d060cf7b6",
+      "length": 2,
+      "members": [
+        {
+          "scope": 5,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000059",
+            "e-359bba0efa69e219-c000000060"
+          ]
+        },
+        {
+          "scope": 5,
+          "start": 14,
+          "stop": 15,
+          "events": [
+            "e-359bba0efa69e219-c000000072",
+            "e-359bba0efa69e219-c000000073"
+          ]
+        },
+        {
+          "scope": 6,
+          "start": 7,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000081",
+            "e-359bba0efa69e219-c000000082"
+          ]
+        },
+        {
+          "scope": 8,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000101",
+            "e-359bba0efa69e219-c000000102"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 7,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000205",
+            "e-359bba0efa69e219-c000000206"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000023"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "698890a3af37a33582e170fa2e2661a6d0152772f5de360d6a054c3c285c5507",
+      "length": 5,
+      "members": [
+        {
+          "scope": 11,
+          "start": 7,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000148",
+            "e-359bba0efa69e219-c000000149",
+            "e-359bba0efa69e219-c000000150",
+            "e-359bba0efa69e219-c000000151",
+            "e-359bba0efa69e219-c000000152"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 21,
+          "stop": 25,
+          "events": [
+            "e-359bba0efa69e219-c000000219",
+            "e-359bba0efa69e219-c000000220",
+            "e-359bba0efa69e219-c000000221",
+            "e-359bba0efa69e219-c000000222",
+            "e-359bba0efa69e219-c000000223"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "6eea17cbffd5d2ef5d8d0dd09b1d57e584670f1c938642b171ebf0116938c6f0",
+      "length": 2,
+      "members": [
+        {
+          "scope": 14,
+          "start": 8,
+          "stop": 9,
+          "events": [
+            "e-359bba0efa69e219-c000000184",
+            "e-359bba0efa69e219-c000000185"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 10,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000208",
+            "e-359bba0efa69e219-c000000209"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000044"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "6ef2f91498700484289b227ad9e3ccb94590a2c12e0631fcb68df973d190d101",
+      "length": 5,
+      "members": [
+        {
+          "scope": 4,
+          "start": 2,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000028",
+            "e-359bba0efa69e219-c000000029",
+            "e-359bba0efa69e219-c000000030",
+            "e-359bba0efa69e219-c000000031",
+            "e-359bba0efa69e219-c000000032"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 2,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000130",
+            "e-359bba0efa69e219-c000000131",
+            "e-359bba0efa69e219-c000000132",
+            "e-359bba0efa69e219-c000000133",
+            "e-359bba0efa69e219-c000000134"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "702d22cd5dff10ee337622df928532b7e8a8f02337741c9a23a2beff7ad599a0",
+      "length": 4,
+      "members": [
+        {
+          "scope": 9,
+          "start": 8,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000116",
+            "e-359bba0efa69e219-c000000117",
+            "e-359bba0efa69e219-c000000118",
+            "e-359bba0efa69e219-c000000119"
+          ]
+        },
+        {
+          "scope": 12,
+          "start": 4,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000164",
+            "e-359bba0efa69e219-c000000165",
+            "e-359bba0efa69e219-c000000166",
+            "e-359bba0efa69e219-c000000167"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "7498a3eb02f5e2511779a5b8c3ec4c26e92e54c93912565756a02116d3d979ad",
+      "length": 6,
+      "members": [
+        {
+          "scope": 9,
+          "start": 6,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000114",
+            "e-359bba0efa69e219-c000000115",
+            "e-359bba0efa69e219-c000000116",
+            "e-359bba0efa69e219-c000000117",
+            "e-359bba0efa69e219-c000000118",
+            "e-359bba0efa69e219-c000000119"
+          ]
+        },
+        {
+          "scope": 12,
+          "start": 2,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000162",
+            "e-359bba0efa69e219-c000000163",
+            "e-359bba0efa69e219-c000000164",
+            "e-359bba0efa69e219-c000000165",
+            "e-359bba0efa69e219-c000000166",
+            "e-359bba0efa69e219-c000000167"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "76fcc468fba0a6b2eb16b9a568c4a7d746ce286933ea27159d51fb61f5d3adfc",
+      "length": 3,
+      "members": [
+        {
+          "scope": 4,
+          "start": 8,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000034",
+            "e-359bba0efa69e219-c000000035",
+            "e-359bba0efa69e219-c000000036"
+          ]
+        },
+        {
+          "scope": 6,
+          "start": 1,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000075",
+            "e-359bba0efa69e219-c000000076",
+            "e-359bba0efa69e219-c000000077"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 3,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000086",
+            "e-359bba0efa69e219-c000000087",
+            "e-359bba0efa69e219-c000000088"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 1,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000109",
+            "e-359bba0efa69e219-c000000110",
+            "e-359bba0efa69e219-c000000111"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 4,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000112",
+            "e-359bba0efa69e219-c000000113",
+            "e-359bba0efa69e219-c000000114"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 6,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000134",
+            "e-359bba0efa69e219-c000000135",
+            "e-359bba0efa69e219-c000000136"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 9,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000137",
+            "e-359bba0efa69e219-c000000138",
+            "e-359bba0efa69e219-c000000139"
+          ]
+        },
+        {
+          "scope": 11,
+          "start": 11,
+          "stop": 13,
+          "events": [
+            "e-359bba0efa69e219-c000000152",
+            "e-359bba0efa69e219-c000000153",
+            "e-359bba0efa69e219-c000000154"
+          ]
+        },
+        {
+          "scope": 12,
+          "start": 1,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000161",
+            "e-359bba0efa69e219-c000000162",
+            "e-359bba0efa69e219-c000000163"
+          ]
+        },
+        {
+          "scope": 13,
+          "start": 1,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000169",
+            "e-359bba0efa69e219-c000000170",
+            "e-359bba0efa69e219-c000000171"
+          ]
+        },
+        {
+          "scope": 13,
+          "start": 4,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000172",
+            "e-359bba0efa69e219-c000000173",
+            "e-359bba0efa69e219-c000000174"
+          ]
+        },
+        {
+          "scope": 15,
+          "start": 1,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000191",
+            "e-359bba0efa69e219-c000000192",
+            "e-359bba0efa69e219-c000000193"
+          ]
+        },
+        {
+          "scope": 15,
+          "start": 4,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000194",
+            "e-359bba0efa69e219-c000000195",
+            "e-359bba0efa69e219-c000000196"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 25,
+          "stop": 27,
+          "events": [
+            "e-359bba0efa69e219-c000000223",
+            "e-359bba0efa69e219-c000000224",
+            "e-359bba0efa69e219-c000000225"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000080"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "782369d6ef7ffcd90c4864483c2bb534bcd5d35e1998ed783a80a3800d170877",
+      "length": 3,
+      "members": [
+        {
+          "scope": 4,
+          "start": 7,
+          "stop": 9,
+          "events": [
+            "e-359bba0efa69e219-c000000033",
+            "e-359bba0efa69e219-c000000034",
+            "e-359bba0efa69e219-c000000035"
+          ]
+        },
+        {
+          "scope": 5,
+          "start": 10,
+          "stop": 12,
+          "events": [
+            "e-359bba0efa69e219-c000000068",
+            "e-359bba0efa69e219-c000000069",
+            "e-359bba0efa69e219-c000000070"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 2,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000085",
+            "e-359bba0efa69e219-c000000086",
+            "e-359bba0efa69e219-c000000087"
+          ]
+        },
+        {
+          "scope": 11,
+          "start": 10,
+          "stop": 12,
+          "events": [
+            "e-359bba0efa69e219-c000000151",
+            "e-359bba0efa69e219-c000000152",
+            "e-359bba0efa69e219-c000000153"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 24,
+          "stop": 26,
+          "events": [
+            "e-359bba0efa69e219-c000000222",
+            "e-359bba0efa69e219-c000000223",
+            "e-359bba0efa69e219-c000000224"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000084"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "78f08b916a7a5470d073085f7c6ad811ad6e4e0f8aff667b2ba78e578e42ce2d",
+      "length": 3,
+      "members": [
+        {
+          "scope": 14,
+          "start": 7,
+          "stop": 9,
+          "events": [
+            "e-359bba0efa69e219-c000000183",
+            "e-359bba0efa69e219-c000000184",
+            "e-359bba0efa69e219-c000000185"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 9,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000207",
+            "e-359bba0efa69e219-c000000208",
+            "e-359bba0efa69e219-c000000209"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000142"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "7b9c21029ab1a0cf07b38e941207166fd5cfb1256ccb54b889e7262e0b03abf1",
+      "length": 5,
+      "members": [
+        {
+          "scope": 6,
+          "start": 1,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000075",
+            "e-359bba0efa69e219-c000000076",
+            "e-359bba0efa69e219-c000000077",
+            "e-359bba0efa69e219-c000000078",
+            "e-359bba0efa69e219-c000000079"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 4,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000087",
+            "e-359bba0efa69e219-c000000088",
+            "e-359bba0efa69e219-c000000089",
+            "e-359bba0efa69e219-c000000090",
+            "e-359bba0efa69e219-c000000091"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "7f14bb3d4231425b7a45991ca0384620edda2bf334ef22871a16f25606a99d4d",
+      "length": 5,
+      "members": [
+        {
+          "scope": 4,
+          "start": 11,
+          "stop": 15,
+          "events": [
+            "e-359bba0efa69e219-c000000037",
+            "e-359bba0efa69e219-c000000038",
+            "e-359bba0efa69e219-c000000039",
+            "e-359bba0efa69e219-c000000040",
+            "e-359bba0efa69e219-c000000041"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 6,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000114",
+            "e-359bba0efa69e219-c000000115",
+            "e-359bba0efa69e219-c000000116",
+            "e-359bba0efa69e219-c000000117",
+            "e-359bba0efa69e219-c000000118"
+          ]
+        },
+        {
+          "scope": 12,
+          "start": 2,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000162",
+            "e-359bba0efa69e219-c000000163",
+            "e-359bba0efa69e219-c000000164",
+            "e-359bba0efa69e219-c000000165",
+            "e-359bba0efa69e219-c000000166"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "843389cf3760c5ca69b3df7d2a8865ef32cf3a4c60aecf4a2f7c9b47fc3826bf",
+      "length": 2,
+      "members": [
+        {
+          "scope": 11,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000142",
+            "e-359bba0efa69e219-c000000143"
+          ]
+        },
+        {
+          "scope": 14,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000177",
+            "e-359bba0efa69e219-c000000178"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000199",
+            "e-359bba0efa69e219-c000000200"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000037"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "84ed49c9706c405e268aeeb1df88daeb70f524c836eef7246d6f6c89e2b13490",
+      "length": 5,
+      "members": [
+        {
+          "scope": 4,
+          "start": 25,
+          "stop": 29,
+          "events": [
+            "e-359bba0efa69e219-c000000051",
+            "e-359bba0efa69e219-c000000052",
+            "e-359bba0efa69e219-c000000053",
+            "e-359bba0efa69e219-c000000054",
+            "e-359bba0efa69e219-c000000055"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 10,
+          "stop": 14,
+          "events": [
+            "e-359bba0efa69e219-c000000093",
+            "e-359bba0efa69e219-c000000094",
+            "e-359bba0efa69e219-c000000095",
+            "e-359bba0efa69e219-c000000096",
+            "e-359bba0efa69e219-c000000097"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "852042abe12610a9f9f7753e473e987b21286ed48786fbc27e7925139a6acf27",
+      "length": 6,
+      "members": [
+        {
+          "scope": 4,
+          "start": 9,
+          "stop": 14,
+          "events": [
+            "e-359bba0efa69e219-c000000035",
+            "e-359bba0efa69e219-c000000036",
+            "e-359bba0efa69e219-c000000037",
+            "e-359bba0efa69e219-c000000038",
+            "e-359bba0efa69e219-c000000039",
+            "e-359bba0efa69e219-c000000040"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 4,
+          "stop": 9,
+          "events": [
+            "e-359bba0efa69e219-c000000112",
+            "e-359bba0efa69e219-c000000113",
+            "e-359bba0efa69e219-c000000114",
+            "e-359bba0efa69e219-c000000115",
+            "e-359bba0efa69e219-c000000116",
+            "e-359bba0efa69e219-c000000117"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "86a4f6a5df75a2d00434fb6f6bcbb2910e05a9b734bb335b48f56ca2cc3eb17c",
+      "length": 4,
+      "members": [
+        {
+          "scope": 4,
+          "start": 23,
+          "stop": 26,
+          "events": [
+            "e-359bba0efa69e219-c000000049",
+            "e-359bba0efa69e219-c000000050",
+            "e-359bba0efa69e219-c000000051",
+            "e-359bba0efa69e219-c000000052"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 8,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000091",
+            "e-359bba0efa69e219-c000000092",
+            "e-359bba0efa69e219-c000000093",
+            "e-359bba0efa69e219-c000000094"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "8761b91486969c12f693d497cca16a2170c83b074588362ca21b6a3061aadb8a",
+      "length": 2,
+      "members": [
+        {
+          "scope": 4,
+          "start": 8,
+          "stop": 9,
+          "events": [
+            "e-359bba0efa69e219-c000000034",
+            "e-359bba0efa69e219-c000000035"
+          ]
+        },
+        {
+          "scope": 4,
+          "start": 10,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000036",
+            "e-359bba0efa69e219-c000000037"
+          ]
+        },
+        {
+          "scope": 5,
+          "start": 5,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000063",
+            "e-359bba0efa69e219-c000000064"
+          ]
+        },
+        {
+          "scope": 5,
+          "start": 11,
+          "stop": 12,
+          "events": [
+            "e-359bba0efa69e219-c000000069",
+            "e-359bba0efa69e219-c000000070"
+          ]
+        },
+        {
+          "scope": 6,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000075",
+            "e-359bba0efa69e219-c000000076"
+          ]
+        },
+        {
+          "scope": 6,
+          "start": 3,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000077",
+            "e-359bba0efa69e219-c000000078"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 3,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000086",
+            "e-359bba0efa69e219-c000000087"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 5,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000088",
+            "e-359bba0efa69e219-c000000089"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000109",
+            "e-359bba0efa69e219-c000000110"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 3,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000111",
+            "e-359bba0efa69e219-c000000112"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 5,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000113",
+            "e-359bba0efa69e219-c000000114"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 6,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000134",
+            "e-359bba0efa69e219-c000000135"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 8,
+          "stop": 9,
+          "events": [
+            "e-359bba0efa69e219-c000000136",
+            "e-359bba0efa69e219-c000000137"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 10,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000138",
+            "e-359bba0efa69e219-c000000139"
+          ]
+        },
+        {
+          "scope": 11,
+          "start": 11,
+          "stop": 12,
+          "events": [
+            "e-359bba0efa69e219-c000000152",
+            "e-359bba0efa69e219-c000000153"
+          ]
+        },
+        {
+          "scope": 12,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000161",
+            "e-359bba0efa69e219-c000000162"
+          ]
+        },
+        {
+          "scope": 13,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000169",
+            "e-359bba0efa69e219-c000000170"
+          ]
+        },
+        {
+          "scope": 13,
+          "start": 3,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000171",
+            "e-359bba0efa69e219-c000000172"
+          ]
+        },
+        {
+          "scope": 13,
+          "start": 5,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000173",
+            "e-359bba0efa69e219-c000000174"
+          ]
+        },
+        {
+          "scope": 15,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000191",
+            "e-359bba0efa69e219-c000000192"
+          ]
+        },
+        {
+          "scope": 15,
+          "start": 3,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000193",
+            "e-359bba0efa69e219-c000000194"
+          ]
+        },
+        {
+          "scope": 15,
+          "start": 5,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000195",
+            "e-359bba0efa69e219-c000000196"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 13,
+          "stop": 14,
+          "events": [
+            "e-359bba0efa69e219-c000000211",
+            "e-359bba0efa69e219-c000000212"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 25,
+          "stop": 26,
+          "events": [
+            "e-359bba0efa69e219-c000000223",
+            "e-359bba0efa69e219-c000000224"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000008"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "89aa71dc5729bdc13cbc052d1f3eb280bbde298714249c61708a27210a17ee93",
+      "length": 2,
+      "members": [
+        {
+          "scope": 4,
+          "start": 7,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000033",
+            "e-359bba0efa69e219-c000000034"
+          ]
+        },
+        {
+          "scope": 5,
+          "start": 10,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000068",
+            "e-359bba0efa69e219-c000000069"
+          ]
+        },
+        {
+          "scope": 6,
+          "start": 5,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000079",
+            "e-359bba0efa69e219-c000000080"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 2,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000085",
+            "e-359bba0efa69e219-c000000086"
+          ]
+        },
+        {
+          "scope": 11,
+          "start": 10,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000151",
+            "e-359bba0efa69e219-c000000152"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 24,
+          "stop": 25,
+          "events": [
+            "e-359bba0efa69e219-c000000222",
+            "e-359bba0efa69e219-c000000223"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000019"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "8bac6ba9fa8095f737c1c86a87a3d34af1bd81853f9b7e04899292c915fb5c26",
+      "length": 2,
+      "members": [
+        {
+          "scope": 17,
+          "start": 8,
+          "stop": 9,
+          "events": [
+            "e-359bba0efa69e219-c000000239",
+            "e-359bba0efa69e219-c000000240"
+          ]
+        },
+        {
+          "scope": 17,
+          "start": 11,
+          "stop": 12,
+          "events": [
+            "e-359bba0efa69e219-c000000242",
+            "e-359bba0efa69e219-c000000243"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000056"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "8d6c592eea0c69b3b5a0d049fd0968cc8656a6315f8a07a58b1ea54b8e22e495",
+      "length": 5,
+      "members": [
+        {
+          "scope": 4,
+          "start": 8,
+          "stop": 12,
+          "events": [
+            "e-359bba0efa69e219-c000000034",
+            "e-359bba0efa69e219-c000000035",
+            "e-359bba0efa69e219-c000000036",
+            "e-359bba0efa69e219-c000000037",
+            "e-359bba0efa69e219-c000000038"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 3,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000086",
+            "e-359bba0efa69e219-c000000087",
+            "e-359bba0efa69e219-c000000088",
+            "e-359bba0efa69e219-c000000089",
+            "e-359bba0efa69e219-c000000090"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 1,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000109",
+            "e-359bba0efa69e219-c000000110",
+            "e-359bba0efa69e219-c000000111",
+            "e-359bba0efa69e219-c000000112",
+            "e-359bba0efa69e219-c000000113"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 6,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000134",
+            "e-359bba0efa69e219-c000000135",
+            "e-359bba0efa69e219-c000000136",
+            "e-359bba0efa69e219-c000000137",
+            "e-359bba0efa69e219-c000000138"
+          ]
+        },
+        {
+          "scope": 13,
+          "start": 1,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000169",
+            "e-359bba0efa69e219-c000000170",
+            "e-359bba0efa69e219-c000000171",
+            "e-359bba0efa69e219-c000000172",
+            "e-359bba0efa69e219-c000000173"
+          ]
+        },
+        {
+          "scope": 15,
+          "start": 1,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000191",
+            "e-359bba0efa69e219-c000000192",
+            "e-359bba0efa69e219-c000000193",
+            "e-359bba0efa69e219-c000000194",
+            "e-359bba0efa69e219-c000000195"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "8e6efe6fc7a65eb1ca70478848f853daf7db67f4892d5a96f59c6ac471ac8d94",
+      "length": 4,
+      "members": [
+        {
+          "scope": 4,
+          "start": 26,
+          "stop": 29,
+          "events": [
+            "e-359bba0efa69e219-c000000052",
+            "e-359bba0efa69e219-c000000053",
+            "e-359bba0efa69e219-c000000054",
+            "e-359bba0efa69e219-c000000055"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 11,
+          "stop": 14,
+          "events": [
+            "e-359bba0efa69e219-c000000094",
+            "e-359bba0efa69e219-c000000095",
+            "e-359bba0efa69e219-c000000096",
+            "e-359bba0efa69e219-c000000097"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "8f2ec02cfd2d1ac3928522782583f5bab7871773e8908c3bb114aee844e082cd",
+      "length": 2,
+      "members": [
+        {
+          "scope": 19,
+          "start": 2,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000256",
+            "e-359bba0efa69e219-c000000257"
+          ]
+        },
+        {
+          "scope": 23,
+          "start": 2,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000288",
+            "e-359bba0efa69e219-c000000289"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000066"
+      ],
+      "status": "submitted_unlearned"
+    },
+    {
+      "cohort": "92c57f7edd954cf1ad64f9a85d00c0a5ee99f3fbd339b5a3ac7f163063cbbd91",
+      "length": 2,
+      "members": [
+        {
+          "scope": 19,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000255",
+            "e-359bba0efa69e219-c000000256"
+          ]
+        },
+        {
+          "scope": 23,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000287",
+            "e-359bba0efa69e219-c000000288"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000071"
+      ],
+      "status": "submitted_unlearned"
+    },
+    {
+      "cohort": "95c8745327e9165807fa6af6d1461ffcfc197cbd73b93fc3c8dbfa9d4836a5b7",
+      "length": 2,
+      "members": [
+        {
+          "scope": 17,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000232",
+            "e-359bba0efa69e219-c000000233"
+          ]
+        },
+        {
+          "scope": 17,
+          "start": 4,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000235",
+            "e-359bba0efa69e219-c000000236"
+          ]
+        },
+        {
+          "scope": 17,
+          "start": 9,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000240",
+            "e-359bba0efa69e219-c000000241"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000052"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "980cab0a834962772d5c593561874d4c501b9ac652e3e25b24e8b44471f5afa2",
+      "length": 8,
+      "members": [
+        {
+          "scope": 4,
+          "start": 8,
+          "stop": 15,
+          "events": [
+            "e-359bba0efa69e219-c000000034",
+            "e-359bba0efa69e219-c000000035",
+            "e-359bba0efa69e219-c000000036",
+            "e-359bba0efa69e219-c000000037",
+            "e-359bba0efa69e219-c000000038",
+            "e-359bba0efa69e219-c000000039",
+            "e-359bba0efa69e219-c000000040",
+            "e-359bba0efa69e219-c000000041"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 3,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000111",
+            "e-359bba0efa69e219-c000000112",
+            "e-359bba0efa69e219-c000000113",
+            "e-359bba0efa69e219-c000000114",
+            "e-359bba0efa69e219-c000000115",
+            "e-359bba0efa69e219-c000000116",
+            "e-359bba0efa69e219-c000000117",
+            "e-359bba0efa69e219-c000000118"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "985deaeca9c6378786ca343d708942b4e08094611e209120c495b8209f82e5aa",
+      "length": 2,
+      "members": [
+        {
+          "scope": 5,
+          "start": 4,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000062",
+            "e-359bba0efa69e219-c000000063"
+          ]
+        },
+        {
+          "scope": 8,
+          "start": 4,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000104",
+            "e-359bba0efa69e219-c000000105"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000041"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "9a8f9d66a7595fa85620cbcc11e885ec224fbaa739651432459b673c41d324ee",
+      "length": 2,
+      "members": [
+        {
+          "scope": 1,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000003",
+            "e-359bba0efa69e219-c000000004"
+          ]
+        },
+        {
+          "scope": 17,
+          "start": 14,
+          "stop": 15,
+          "events": [
+            "e-359bba0efa69e219-c000000245",
+            "e-359bba0efa69e219-c000000246"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000060"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "9aacd9c7472b19c6451773b21e13ad498c268ecb4c512de1d8a6c8d08eecd6ba",
+      "length": 6,
+      "members": [
+        {
+          "scope": 9,
+          "start": 1,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000109",
+            "e-359bba0efa69e219-c000000110",
+            "e-359bba0efa69e219-c000000111",
+            "e-359bba0efa69e219-c000000112",
+            "e-359bba0efa69e219-c000000113",
+            "e-359bba0efa69e219-c000000114"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 6,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000134",
+            "e-359bba0efa69e219-c000000135",
+            "e-359bba0efa69e219-c000000136",
+            "e-359bba0efa69e219-c000000137",
+            "e-359bba0efa69e219-c000000138",
+            "e-359bba0efa69e219-c000000139"
+          ]
+        },
+        {
+          "scope": 13,
+          "start": 1,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000169",
+            "e-359bba0efa69e219-c000000170",
+            "e-359bba0efa69e219-c000000171",
+            "e-359bba0efa69e219-c000000172",
+            "e-359bba0efa69e219-c000000173",
+            "e-359bba0efa69e219-c000000174"
+          ]
+        },
+        {
+          "scope": 15,
+          "start": 1,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000191",
+            "e-359bba0efa69e219-c000000192",
+            "e-359bba0efa69e219-c000000193",
+            "e-359bba0efa69e219-c000000194",
+            "e-359bba0efa69e219-c000000195",
+            "e-359bba0efa69e219-c000000196"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "9fff0564f3df2819574f54d24bbfacb8d2a3bccdfed439b889ec6b142bf97711",
+      "length": 5,
+      "members": [
+        {
+          "scope": 11,
+          "start": 8,
+          "stop": 12,
+          "events": [
+            "e-359bba0efa69e219-c000000149",
+            "e-359bba0efa69e219-c000000150",
+            "e-359bba0efa69e219-c000000151",
+            "e-359bba0efa69e219-c000000152",
+            "e-359bba0efa69e219-c000000153"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 22,
+          "stop": 26,
+          "events": [
+            "e-359bba0efa69e219-c000000220",
+            "e-359bba0efa69e219-c000000221",
+            "e-359bba0efa69e219-c000000222",
+            "e-359bba0efa69e219-c000000223",
+            "e-359bba0efa69e219-c000000224"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "a1060dd0d22a361b9b350ed13dd575c1c973dbab6cf191c7ace42cfcfac4c7d2",
+      "length": 2,
+      "members": [
+        {
+          "scope": 4,
+          "start": 19,
+          "stop": 20,
+          "events": [
+            "e-359bba0efa69e219-c000000045",
+            "e-359bba0efa69e219-c000000046"
+          ]
+        },
+        {
+          "scope": 4,
+          "start": 21,
+          "stop": 22,
+          "events": [
+            "e-359bba0efa69e219-c000000047",
+            "e-359bba0efa69e219-c000000048"
+          ]
+        },
+        {
+          "scope": 4,
+          "start": 23,
+          "stop": 24,
+          "events": [
+            "e-359bba0efa69e219-c000000049",
+            "e-359bba0efa69e219-c000000050"
+          ]
+        },
+        {
+          "scope": 5,
+          "start": 9,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000067",
+            "e-359bba0efa69e219-c000000068"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 8,
+          "stop": 9,
+          "events": [
+            "e-359bba0efa69e219-c000000091",
+            "e-359bba0efa69e219-c000000092"
+          ]
+        },
+        {
+          "scope": 11,
+          "start": 7,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000148",
+            "e-359bba0efa69e219-c000000149"
+          ]
+        },
+        {
+          "scope": 11,
+          "start": 9,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000150",
+            "e-359bba0efa69e219-c000000151"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 18,
+          "stop": 19,
+          "events": [
+            "e-359bba0efa69e219-c000000216",
+            "e-359bba0efa69e219-c000000217"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 20,
+          "stop": 21,
+          "events": [
+            "e-359bba0efa69e219-c000000218",
+            "e-359bba0efa69e219-c000000219"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 22,
+          "stop": 23,
+          "events": [
+            "e-359bba0efa69e219-c000000220",
+            "e-359bba0efa69e219-c000000221"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000010"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "a1778de8ec218a54d8d18d75f05d72d2f235dad471aa999ff0e93fbe7d58a4fc",
+      "length": 2,
+      "members": [
+        {
+          "scope": 4,
+          "start": 2,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000028",
+            "e-359bba0efa69e219-c000000029"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 2,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000130",
+            "e-359bba0efa69e219-c000000131"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000048"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "a21fb9274b5f482757b908c2ca7ddb518f1b01dbc5e4349d942107055eaccd42",
+      "length": 2,
+      "members": [
+        {
+          "scope": 4,
+          "start": 12,
+          "stop": 13,
+          "events": [
+            "e-359bba0efa69e219-c000000038",
+            "e-359bba0efa69e219-c000000039"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 7,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000115",
+            "e-359bba0efa69e219-c000000116"
+          ]
+        },
+        {
+          "scope": 12,
+          "start": 3,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000163",
+            "e-359bba0efa69e219-c000000164"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 14,
+          "stop": 15,
+          "events": [
+            "e-359bba0efa69e219-c000000212",
+            "e-359bba0efa69e219-c000000213"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000031"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "a326c25a0e620324ef7e27aac596e13a8f1f9166e1f0d5f479340d44ae9a2a4d",
+      "length": 5,
+      "members": [
+        {
+          "scope": 11,
+          "start": 9,
+          "stop": 13,
+          "events": [
+            "e-359bba0efa69e219-c000000150",
+            "e-359bba0efa69e219-c000000151",
+            "e-359bba0efa69e219-c000000152",
+            "e-359bba0efa69e219-c000000153",
+            "e-359bba0efa69e219-c000000154"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 23,
+          "stop": 27,
+          "events": [
+            "e-359bba0efa69e219-c000000221",
+            "e-359bba0efa69e219-c000000222",
+            "e-359bba0efa69e219-c000000223",
+            "e-359bba0efa69e219-c000000224",
+            "e-359bba0efa69e219-c000000225"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "a68fe4aedcde0bcca626980a32f76fce594d3d777cb53c11b513216559c85a38",
+      "length": 3,
+      "members": [
+        {
+          "scope": 4,
+          "start": 19,
+          "stop": 21,
+          "events": [
+            "e-359bba0efa69e219-c000000045",
+            "e-359bba0efa69e219-c000000046",
+            "e-359bba0efa69e219-c000000047"
+          ]
+        },
+        {
+          "scope": 4,
+          "start": 22,
+          "stop": 24,
+          "events": [
+            "e-359bba0efa69e219-c000000048",
+            "e-359bba0efa69e219-c000000049",
+            "e-359bba0efa69e219-c000000050"
+          ]
+        },
+        {
+          "scope": 11,
+          "start": 7,
+          "stop": 9,
+          "events": [
+            "e-359bba0efa69e219-c000000148",
+            "e-359bba0efa69e219-c000000149",
+            "e-359bba0efa69e219-c000000150"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 18,
+          "stop": 20,
+          "events": [
+            "e-359bba0efa69e219-c000000216",
+            "e-359bba0efa69e219-c000000217",
+            "e-359bba0efa69e219-c000000218"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 21,
+          "stop": 23,
+          "events": [
+            "e-359bba0efa69e219-c000000219",
+            "e-359bba0efa69e219-c000000220",
+            "e-359bba0efa69e219-c000000221"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000086"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "a8ee5d16ea3682cfa86c04ae2a4a08181fa77dcb36c0dbe8044b4b39d59db04d",
+      "length": 3,
+      "members": [
+        {
+          "scope": 4,
+          "start": 4,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000030",
+            "e-359bba0efa69e219-c000000031",
+            "e-359bba0efa69e219-c000000032"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 4,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000132",
+            "e-359bba0efa69e219-c000000133",
+            "e-359bba0efa69e219-c000000134"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000144"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "a976d860623b1479e4cb4bba40c33434f94364068e396de51221ea326047769f",
+      "length": 6,
+      "members": [
+        {
+          "scope": 11,
+          "start": 8,
+          "stop": 13,
+          "events": [
+            "e-359bba0efa69e219-c000000149",
+            "e-359bba0efa69e219-c000000150",
+            "e-359bba0efa69e219-c000000151",
+            "e-359bba0efa69e219-c000000152",
+            "e-359bba0efa69e219-c000000153",
+            "e-359bba0efa69e219-c000000154"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 22,
+          "stop": 27,
+          "events": [
+            "e-359bba0efa69e219-c000000220",
+            "e-359bba0efa69e219-c000000221",
+            "e-359bba0efa69e219-c000000222",
+            "e-359bba0efa69e219-c000000223",
+            "e-359bba0efa69e219-c000000224",
+            "e-359bba0efa69e219-c000000225"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "adb1fbd84b0423e91777869d57b5cb4ebb571f09c362f305e7092450e65329d6",
+      "length": 2,
+      "members": [
+        {
+          "scope": 4,
+          "start": 24,
+          "stop": 25,
+          "events": [
+            "e-359bba0efa69e219-c000000050",
+            "e-359bba0efa69e219-c000000051"
+          ]
+        },
+        {
+          "scope": 4,
+          "start": 26,
+          "stop": 27,
+          "events": [
+            "e-359bba0efa69e219-c000000052",
+            "e-359bba0efa69e219-c000000053"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 9,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000092",
+            "e-359bba0efa69e219-c000000093"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 11,
+          "stop": 12,
+          "events": [
+            "e-359bba0efa69e219-c000000094",
+            "e-359bba0efa69e219-c000000095"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000021"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "b131ea07f4f70c1cdeda398249cf87c6e83af12a1a7b4ab1ecacdc434e93fb2b",
+      "length": 2,
+      "members": [
+        {
+          "scope": 4,
+          "start": 4,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000030",
+            "e-359bba0efa69e219-c000000031"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 4,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000132",
+            "e-359bba0efa69e219-c000000133"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000050"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "b5eb11116798d0fd3e638ebc748cfa1f3d31dbee5079837edc4dc1ac6d44a37e",
+      "length": 3,
+      "members": [
+        {
+          "scope": 5,
+          "start": 13,
+          "stop": 15,
+          "events": [
+            "e-359bba0efa69e219-c000000071",
+            "e-359bba0efa69e219-c000000072",
+            "e-359bba0efa69e219-c000000073"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 6,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000204",
+            "e-359bba0efa69e219-c000000205",
+            "e-359bba0efa69e219-c000000206"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000146"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "b7770c5dd73df6b3e356cc3b47c023f884c645e6e03033504036e39ee06f65db",
+      "length": 9,
+      "members": [
+        {
+          "scope": 4,
+          "start": 23,
+          "stop": 31,
+          "events": [
+            "e-359bba0efa69e219-c000000049",
+            "e-359bba0efa69e219-c000000050",
+            "e-359bba0efa69e219-c000000051",
+            "e-359bba0efa69e219-c000000052",
+            "e-359bba0efa69e219-c000000053",
+            "e-359bba0efa69e219-c000000054",
+            "e-359bba0efa69e219-c000000055",
+            "e-359bba0efa69e219-c000000056",
+            "e-359bba0efa69e219-c000000057"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 8,
+          "stop": 16,
+          "events": [
+            "e-359bba0efa69e219-c000000091",
+            "e-359bba0efa69e219-c000000092",
+            "e-359bba0efa69e219-c000000093",
+            "e-359bba0efa69e219-c000000094",
+            "e-359bba0efa69e219-c000000095",
+            "e-359bba0efa69e219-c000000096",
+            "e-359bba0efa69e219-c000000097",
+            "e-359bba0efa69e219-c000000098",
+            "e-359bba0efa69e219-c000000099"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "ba288b810b7035e7b6ac96cdccdd4a6c3f5f9817e11def1ac36e54839b009c7b",
+      "length": 2,
+      "members": [
+        {
+          "scope": 1,
+          "start": 2,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000004",
+            "e-359bba0efa69e219-c000000005"
+          ]
+        },
+        {
+          "scope": 2,
+          "start": 2,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000015",
+            "e-359bba0efa69e219-c000000016"
+          ]
+        },
+        {
+          "scope": 18,
+          "start": 2,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000251",
+            "e-359bba0efa69e219-c000000252"
+          ]
+        },
+        {
+          "scope": 20,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000263",
+            "e-359bba0efa69e219-c000000264"
+          ]
+        },
+        {
+          "scope": 22,
+          "start": 2,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000283",
+            "e-359bba0efa69e219-c000000284"
+          ]
+        },
+        {
+          "scope": 24,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000297",
+            "e-359bba0efa69e219-c000000298"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000006"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "bbbb9e9bbd62a05108e120b28b01e94b859454671e8d65f33bab8bfd20c761e1",
+      "length": 3,
+      "members": [
+        {
+          "scope": 6,
+          "start": 3,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000077",
+            "e-359bba0efa69e219-c000000078",
+            "e-359bba0efa69e219-c000000079"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 6,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000089",
+            "e-359bba0efa69e219-c000000090",
+            "e-359bba0efa69e219-c000000091"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000148"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "bed7f3f18570f02b2fb1654c8f2ad7cc06c315500394b5480d4d761a6d572a7b",
+      "length": 4,
+      "members": [
+        {
+          "scope": 4,
+          "start": 19,
+          "stop": 22,
+          "events": [
+            "e-359bba0efa69e219-c000000045",
+            "e-359bba0efa69e219-c000000046",
+            "e-359bba0efa69e219-c000000047",
+            "e-359bba0efa69e219-c000000048"
+          ]
+        },
+        {
+          "scope": 11,
+          "start": 7,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000148",
+            "e-359bba0efa69e219-c000000149",
+            "e-359bba0efa69e219-c000000150",
+            "e-359bba0efa69e219-c000000151"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 18,
+          "stop": 21,
+          "events": [
+            "e-359bba0efa69e219-c000000216",
+            "e-359bba0efa69e219-c000000217",
+            "e-359bba0efa69e219-c000000218",
+            "e-359bba0efa69e219-c000000219"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000170"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "c081077bd6bc65c72f59c35cd9cd85730aa115c2889f9fefee9428ddd1b3f85e",
+      "length": 2,
+      "members": [
+        {
+          "scope": 4,
+          "start": 13,
+          "stop": 14,
+          "events": [
+            "e-359bba0efa69e219-c000000039",
+            "e-359bba0efa69e219-c000000040"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 8,
+          "stop": 9,
+          "events": [
+            "e-359bba0efa69e219-c000000116",
+            "e-359bba0efa69e219-c000000117"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 10,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000118",
+            "e-359bba0efa69e219-c000000119"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 12,
+          "stop": 13,
+          "events": [
+            "e-359bba0efa69e219-c000000120",
+            "e-359bba0efa69e219-c000000121"
+          ]
+        },
+        {
+          "scope": 12,
+          "start": 4,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000164",
+            "e-359bba0efa69e219-c000000165"
+          ]
+        },
+        {
+          "scope": 12,
+          "start": 6,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000166",
+            "e-359bba0efa69e219-c000000167"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000027"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "c1b3f0496c28062de5cf6a5d783d1100fd0fe364a10f3979c6c2ee62cc8f53d4",
+      "length": 6,
+      "members": [
+        {
+          "scope": 4,
+          "start": 25,
+          "stop": 30,
+          "events": [
+            "e-359bba0efa69e219-c000000051",
+            "e-359bba0efa69e219-c000000052",
+            "e-359bba0efa69e219-c000000053",
+            "e-359bba0efa69e219-c000000054",
+            "e-359bba0efa69e219-c000000055",
+            "e-359bba0efa69e219-c000000056"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 10,
+          "stop": 15,
+          "events": [
+            "e-359bba0efa69e219-c000000093",
+            "e-359bba0efa69e219-c000000094",
+            "e-359bba0efa69e219-c000000095",
+            "e-359bba0efa69e219-c000000096",
+            "e-359bba0efa69e219-c000000097",
+            "e-359bba0efa69e219-c000000098"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "c49f3d7f84dfdb23aaa81c3c61796b80417ceef03f5e70b96dd98ed30fccb569",
+      "length": 4,
+      "members": [
+        {
+          "scope": 4,
+          "start": 2,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000028",
+            "e-359bba0efa69e219-c000000029",
+            "e-359bba0efa69e219-c000000030",
+            "e-359bba0efa69e219-c000000031"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 2,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000130",
+            "e-359bba0efa69e219-c000000131",
+            "e-359bba0efa69e219-c000000132",
+            "e-359bba0efa69e219-c000000133"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "c5a7218f972162445745b3c9c9ecf42b851bb9843b240fd8792e73cc32664b29",
+      "length": 4,
+      "members": [
+        {
+          "scope": 4,
+          "start": 1,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000027",
+            "e-359bba0efa69e219-c000000028",
+            "e-359bba0efa69e219-c000000029",
+            "e-359bba0efa69e219-c000000030"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 1,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000129",
+            "e-359bba0efa69e219-c000000130",
+            "e-359bba0efa69e219-c000000131",
+            "e-359bba0efa69e219-c000000132"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "c759ea46359dbb0839c20391ae4702eef4e2dfb4a140e6cf635a20bec1d0d660",
+      "length": 3,
+      "members": [
+        {
+          "scope": 5,
+          "start": 8,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000066",
+            "e-359bba0efa69e219-c000000067",
+            "e-359bba0efa69e219-c000000068"
+          ]
+        },
+        {
+          "scope": 11,
+          "start": 6,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000147",
+            "e-359bba0efa69e219-c000000148",
+            "e-359bba0efa69e219-c000000149"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000150"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "c8cc7b255e541e6dfb41e09761112620b425ee13ec11d76b40ff3452e761bc49",
+      "length": 5,
+      "members": [
+        {
+          "scope": 4,
+          "start": 24,
+          "stop": 28,
+          "events": [
+            "e-359bba0efa69e219-c000000050",
+            "e-359bba0efa69e219-c000000051",
+            "e-359bba0efa69e219-c000000052",
+            "e-359bba0efa69e219-c000000053",
+            "e-359bba0efa69e219-c000000054"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 9,
+          "stop": 13,
+          "events": [
+            "e-359bba0efa69e219-c000000092",
+            "e-359bba0efa69e219-c000000093",
+            "e-359bba0efa69e219-c000000094",
+            "e-359bba0efa69e219-c000000095",
+            "e-359bba0efa69e219-c000000096"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "cce06d27bade2bda6d24695c4a4feca8577c2329e30cb4a1183df6700478cc19",
+      "length": 6,
+      "members": [
+        {
+          "scope": 4,
+          "start": 23,
+          "stop": 28,
+          "events": [
+            "e-359bba0efa69e219-c000000049",
+            "e-359bba0efa69e219-c000000050",
+            "e-359bba0efa69e219-c000000051",
+            "e-359bba0efa69e219-c000000052",
+            "e-359bba0efa69e219-c000000053",
+            "e-359bba0efa69e219-c000000054"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 8,
+          "stop": 13,
+          "events": [
+            "e-359bba0efa69e219-c000000091",
+            "e-359bba0efa69e219-c000000092",
+            "e-359bba0efa69e219-c000000093",
+            "e-359bba0efa69e219-c000000094",
+            "e-359bba0efa69e219-c000000095",
+            "e-359bba0efa69e219-c000000096"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "cf3f2dd3561cd152d080339b3d4166b855a360680cd5d2e30369f62da3a53134",
+      "length": 4,
+      "members": [
+        {
+          "scope": 4,
+          "start": 12,
+          "stop": 15,
+          "events": [
+            "e-359bba0efa69e219-c000000038",
+            "e-359bba0efa69e219-c000000039",
+            "e-359bba0efa69e219-c000000040",
+            "e-359bba0efa69e219-c000000041"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 7,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000115",
+            "e-359bba0efa69e219-c000000116",
+            "e-359bba0efa69e219-c000000117",
+            "e-359bba0efa69e219-c000000118"
+          ]
+        },
+        {
+          "scope": 12,
+          "start": 3,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000163",
+            "e-359bba0efa69e219-c000000164",
+            "e-359bba0efa69e219-c000000165",
+            "e-359bba0efa69e219-c000000166"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000172"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "d106266f0505a9a9d4e4f644643b368ae471038accbcacf03c3100f812c0d84d",
+      "length": 4,
+      "members": [
+        {
+          "scope": 5,
+          "start": 5,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000063",
+            "e-359bba0efa69e219-c000000064",
+            "e-359bba0efa69e219-c000000065",
+            "e-359bba0efa69e219-c000000066"
+          ]
+        },
+        {
+          "scope": 5,
+          "start": 11,
+          "stop": 14,
+          "events": [
+            "e-359bba0efa69e219-c000000069",
+            "e-359bba0efa69e219-c000000070",
+            "e-359bba0efa69e219-c000000071",
+            "e-359bba0efa69e219-c000000072"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "d2a883dd1789384204cc1a4ca4ad8769ba97a47cced0dcb171986fda3744d9fd",
+      "length": 3,
+      "members": [
+        {
+          "scope": 2,
+          "start": 2,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000015",
+            "e-359bba0efa69e219-c000000016",
+            "e-359bba0efa69e219-c000000017"
+          ]
+        },
+        {
+          "scope": 18,
+          "start": 2,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000251",
+            "e-359bba0efa69e219-c000000252",
+            "e-359bba0efa69e219-c000000253"
+          ]
+        },
+        {
+          "scope": 20,
+          "start": 1,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000263",
+            "e-359bba0efa69e219-c000000264",
+            "e-359bba0efa69e219-c000000265"
+          ]
+        },
+        {
+          "scope": 22,
+          "start": 2,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000283",
+            "e-359bba0efa69e219-c000000284",
+            "e-359bba0efa69e219-c000000285"
+          ]
+        },
+        {
+          "scope": 24,
+          "start": 1,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000297",
+            "e-359bba0efa69e219-c000000298",
+            "e-359bba0efa69e219-c000000299"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000088"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "d3456cc54a52e9b896aeaadae5dc5bd3a101249caab82af9762c9f432babca0b",
+      "length": 7,
+      "members": [
+        {
+          "scope": 4,
+          "start": 8,
+          "stop": 14,
+          "events": [
+            "e-359bba0efa69e219-c000000034",
+            "e-359bba0efa69e219-c000000035",
+            "e-359bba0efa69e219-c000000036",
+            "e-359bba0efa69e219-c000000037",
+            "e-359bba0efa69e219-c000000038",
+            "e-359bba0efa69e219-c000000039",
+            "e-359bba0efa69e219-c000000040"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 3,
+          "stop": 9,
+          "events": [
+            "e-359bba0efa69e219-c000000111",
+            "e-359bba0efa69e219-c000000112",
+            "e-359bba0efa69e219-c000000113",
+            "e-359bba0efa69e219-c000000114",
+            "e-359bba0efa69e219-c000000115",
+            "e-359bba0efa69e219-c000000116",
+            "e-359bba0efa69e219-c000000117"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "d38ec32678decb6acde34e7bb4b48048f2738e775cebb993e9f18923bff5e6dd",
+      "length": 2,
+      "members": [
+        {
+          "scope": 2,
+          "start": 4,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000017",
+            "e-359bba0efa69e219-c000000018"
+          ]
+        },
+        {
+          "scope": 21,
+          "start": 3,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000277",
+            "e-359bba0efa69e219-c000000278"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000073"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "d3c68283550a1ebb5bc3a2fbe05877b3a4f293652119307ecd95ddfe0deb20c6",
+      "length": 3,
+      "members": [
+        {
+          "scope": 4,
+          "start": 18,
+          "stop": 20,
+          "events": [
+            "e-359bba0efa69e219-c000000044",
+            "e-359bba0efa69e219-c000000045",
+            "e-359bba0efa69e219-c000000046"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 7,
+          "stop": 9,
+          "events": [
+            "e-359bba0efa69e219-c000000090",
+            "e-359bba0efa69e219-c000000091",
+            "e-359bba0efa69e219-c000000092"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 17,
+          "stop": 19,
+          "events": [
+            "e-359bba0efa69e219-c000000215",
+            "e-359bba0efa69e219-c000000216",
+            "e-359bba0efa69e219-c000000217"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000102"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "d4addf888a3ef67b50376d781905437b0e031aa3c16acbf6675f99a16abf64f2",
+      "length": 3,
+      "members": [
+        {
+          "scope": 1,
+          "start": 5,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000007",
+            "e-359bba0efa69e219-c000000008",
+            "e-359bba0efa69e219-c000000009"
+          ]
+        },
+        {
+          "scope": 1,
+          "start": 8,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000010",
+            "e-359bba0efa69e219-c000000011",
+            "e-359bba0efa69e219-c000000012"
+          ]
+        },
+        {
+          "scope": 25,
+          "start": 2,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000306",
+            "e-359bba0efa69e219-c000000307",
+            "e-359bba0efa69e219-c000000308"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000104"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "d528b1758a6df07d5ef257e766234dfca191ac4abdc8150cd9f5c02167bf8daf",
+      "length": 7,
+      "members": [
+        {
+          "scope": 9,
+          "start": 1,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000109",
+            "e-359bba0efa69e219-c000000110",
+            "e-359bba0efa69e219-c000000111",
+            "e-359bba0efa69e219-c000000112",
+            "e-359bba0efa69e219-c000000113",
+            "e-359bba0efa69e219-c000000114",
+            "e-359bba0efa69e219-c000000115"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 6,
+          "stop": 12,
+          "events": [
+            "e-359bba0efa69e219-c000000134",
+            "e-359bba0efa69e219-c000000135",
+            "e-359bba0efa69e219-c000000136",
+            "e-359bba0efa69e219-c000000137",
+            "e-359bba0efa69e219-c000000138",
+            "e-359bba0efa69e219-c000000139",
+            "e-359bba0efa69e219-c000000140"
+          ]
+        },
+        {
+          "scope": 13,
+          "start": 1,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000169",
+            "e-359bba0efa69e219-c000000170",
+            "e-359bba0efa69e219-c000000171",
+            "e-359bba0efa69e219-c000000172",
+            "e-359bba0efa69e219-c000000173",
+            "e-359bba0efa69e219-c000000174",
+            "e-359bba0efa69e219-c000000175"
+          ]
+        },
+        {
+          "scope": 15,
+          "start": 1,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000191",
+            "e-359bba0efa69e219-c000000192",
+            "e-359bba0efa69e219-c000000193",
+            "e-359bba0efa69e219-c000000194",
+            "e-359bba0efa69e219-c000000195",
+            "e-359bba0efa69e219-c000000196",
+            "e-359bba0efa69e219-c000000197"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "d8ddae28c60043d884cb9075dce83f9c58edf4db95e81b104908d6236eb40597",
+      "length": 6,
+      "members": [
+        {
+          "scope": 4,
+          "start": 18,
+          "stop": 23,
+          "events": [
+            "e-359bba0efa69e219-c000000044",
+            "e-359bba0efa69e219-c000000045",
+            "e-359bba0efa69e219-c000000046",
+            "e-359bba0efa69e219-c000000047",
+            "e-359bba0efa69e219-c000000048",
+            "e-359bba0efa69e219-c000000049"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 17,
+          "stop": 22,
+          "events": [
+            "e-359bba0efa69e219-c000000215",
+            "e-359bba0efa69e219-c000000216",
+            "e-359bba0efa69e219-c000000217",
+            "e-359bba0efa69e219-c000000218",
+            "e-359bba0efa69e219-c000000219",
+            "e-359bba0efa69e219-c000000220"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "d91ede1f71b328e96d2943bfb7acd8000f5f155a919662b10a9b0a267b7b0fa3",
+      "length": 3,
+      "members": [
+        {
+          "scope": 2,
+          "start": 3,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000016",
+            "e-359bba0efa69e219-c000000017",
+            "e-359bba0efa69e219-c000000018"
+          ]
+        },
+        {
+          "scope": 21,
+          "start": 2,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000276",
+            "e-359bba0efa69e219-c000000277",
+            "e-359bba0efa69e219-c000000278"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000152"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "da38ad8b0881e87dd1198a25e0f08131b81942e8a3b15bc1464c97207a51d243",
+      "length": 4,
+      "members": [
+        {
+          "scope": 4,
+          "start": 27,
+          "stop": 30,
+          "events": [
+            "e-359bba0efa69e219-c000000053",
+            "e-359bba0efa69e219-c000000054",
+            "e-359bba0efa69e219-c000000055",
+            "e-359bba0efa69e219-c000000056"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 12,
+          "stop": 15,
+          "events": [
+            "e-359bba0efa69e219-c000000095",
+            "e-359bba0efa69e219-c000000096",
+            "e-359bba0efa69e219-c000000097",
+            "e-359bba0efa69e219-c000000098"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 16,
+          "stop": 19,
+          "events": [
+            "e-359bba0efa69e219-c000000124",
+            "e-359bba0efa69e219-c000000125",
+            "e-359bba0efa69e219-c000000126",
+            "e-359bba0efa69e219-c000000127"
+          ]
+        },
+        {
+          "scope": 14,
+          "start": 2,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000178",
+            "e-359bba0efa69e219-c000000179",
+            "e-359bba0efa69e219-c000000180",
+            "e-359bba0efa69e219-c000000181"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000160"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "dc7d3d79b977a318aa7fe65cb4b22a7e4133a62e47b9c2c953bfcf8621d48b18",
+      "length": 3,
+      "members": [
+        {
+          "scope": 4,
+          "start": 13,
+          "stop": 15,
+          "events": [
+            "e-359bba0efa69e219-c000000039",
+            "e-359bba0efa69e219-c000000040",
+            "e-359bba0efa69e219-c000000041"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 8,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000116",
+            "e-359bba0efa69e219-c000000117",
+            "e-359bba0efa69e219-c000000118"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 11,
+          "stop": 13,
+          "events": [
+            "e-359bba0efa69e219-c000000119",
+            "e-359bba0efa69e219-c000000120",
+            "e-359bba0efa69e219-c000000121"
+          ]
+        },
+        {
+          "scope": 12,
+          "start": 4,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000164",
+            "e-359bba0efa69e219-c000000165",
+            "e-359bba0efa69e219-c000000166"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000092"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "de79821cc1d63597f174697077eacfb68bddc00500f5e0c02b30af69ee875bb4",
+      "length": 4,
+      "members": [
+        {
+          "scope": 5,
+          "start": 7,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000065",
+            "e-359bba0efa69e219-c000000066",
+            "e-359bba0efa69e219-c000000067",
+            "e-359bba0efa69e219-c000000068"
+          ]
+        },
+        {
+          "scope": 11,
+          "start": 5,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000146",
+            "e-359bba0efa69e219-c000000147",
+            "e-359bba0efa69e219-c000000148",
+            "e-359bba0efa69e219-c000000149"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "e013e20969ae42e261e38111a3ceacfa65f1a9f1485fcf7555be2314143a0d10",
+      "length": 2,
+      "members": [
+        {
+          "scope": 2,
+          "start": 3,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000016",
+            "e-359bba0efa69e219-c000000017"
+          ]
+        },
+        {
+          "scope": 18,
+          "start": 3,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000252",
+            "e-359bba0efa69e219-c000000253"
+          ]
+        },
+        {
+          "scope": 20,
+          "start": 2,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000264",
+            "e-359bba0efa69e219-c000000265"
+          ]
+        },
+        {
+          "scope": 21,
+          "start": 2,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000276",
+            "e-359bba0efa69e219-c000000277"
+          ]
+        },
+        {
+          "scope": 22,
+          "start": 3,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000284",
+            "e-359bba0efa69e219-c000000285"
+          ]
+        },
+        {
+          "scope": 24,
+          "start": 2,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000298",
+            "e-359bba0efa69e219-c000000299"
+          ]
+        },
+        {
+          "scope": 25,
+          "start": 11,
+          "stop": 12,
+          "events": [
+            "e-359bba0efa69e219-c000000315",
+            "e-359bba0efa69e219-c000000316"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000058"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "e0884335669ff37fa4456aa84d48a9758fff2ebda76be6ee9f58d7788d49b737",
+      "length": 6,
+      "members": [
+        {
+          "scope": 4,
+          "start": 10,
+          "stop": 15,
+          "events": [
+            "e-359bba0efa69e219-c000000036",
+            "e-359bba0efa69e219-c000000037",
+            "e-359bba0efa69e219-c000000038",
+            "e-359bba0efa69e219-c000000039",
+            "e-359bba0efa69e219-c000000040",
+            "e-359bba0efa69e219-c000000041"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 5,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000113",
+            "e-359bba0efa69e219-c000000114",
+            "e-359bba0efa69e219-c000000115",
+            "e-359bba0efa69e219-c000000116",
+            "e-359bba0efa69e219-c000000117",
+            "e-359bba0efa69e219-c000000118"
+          ]
+        },
+        {
+          "scope": 12,
+          "start": 1,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000161",
+            "e-359bba0efa69e219-c000000162",
+            "e-359bba0efa69e219-c000000163",
+            "e-359bba0efa69e219-c000000164",
+            "e-359bba0efa69e219-c000000165",
+            "e-359bba0efa69e219-c000000166"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "e18614baf0cd4de4a93706ba28fba04c195ebf8789125ed7dc4a19693b9aefc8",
+      "length": 6,
+      "members": [
+        {
+          "scope": 11,
+          "start": 7,
+          "stop": 12,
+          "events": [
+            "e-359bba0efa69e219-c000000148",
+            "e-359bba0efa69e219-c000000149",
+            "e-359bba0efa69e219-c000000150",
+            "e-359bba0efa69e219-c000000151",
+            "e-359bba0efa69e219-c000000152",
+            "e-359bba0efa69e219-c000000153"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 21,
+          "stop": 26,
+          "events": [
+            "e-359bba0efa69e219-c000000219",
+            "e-359bba0efa69e219-c000000220",
+            "e-359bba0efa69e219-c000000221",
+            "e-359bba0efa69e219-c000000222",
+            "e-359bba0efa69e219-c000000223",
+            "e-359bba0efa69e219-c000000224"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "e3f65e22dcdb3353e182c976ff10cc62469f1041b1b9992b42796209bd8b0c62",
+      "length": 5,
+      "members": [
+        {
+          "scope": 1,
+          "start": 4,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000006",
+            "e-359bba0efa69e219-c000000007",
+            "e-359bba0efa69e219-c000000008",
+            "e-359bba0efa69e219-c000000009",
+            "e-359bba0efa69e219-c000000010"
+          ]
+        },
+        {
+          "scope": 25,
+          "start": 1,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000305",
+            "e-359bba0efa69e219-c000000306",
+            "e-359bba0efa69e219-c000000307",
+            "e-359bba0efa69e219-c000000308",
+            "e-359bba0efa69e219-c000000309"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "e457fcf0e88e92e813deed4bce83a0913e35257fd1b1f3d0dbbe022021b8a6e1",
+      "length": 6,
+      "members": [
+        {
+          "scope": 4,
+          "start": 6,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000032",
+            "e-359bba0efa69e219-c000000033",
+            "e-359bba0efa69e219-c000000034",
+            "e-359bba0efa69e219-c000000035",
+            "e-359bba0efa69e219-c000000036",
+            "e-359bba0efa69e219-c000000037"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 1,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000084",
+            "e-359bba0efa69e219-c000000085",
+            "e-359bba0efa69e219-c000000086",
+            "e-359bba0efa69e219-c000000087",
+            "e-359bba0efa69e219-c000000088",
+            "e-359bba0efa69e219-c000000089"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "e58f78f261f74a131eb3cd697883c6e4ba8b99119cdfb1bc1a4a1895a7c7db65",
+      "length": 6,
+      "members": [
+        {
+          "scope": 4,
+          "start": 24,
+          "stop": 29,
+          "events": [
+            "e-359bba0efa69e219-c000000050",
+            "e-359bba0efa69e219-c000000051",
+            "e-359bba0efa69e219-c000000052",
+            "e-359bba0efa69e219-c000000053",
+            "e-359bba0efa69e219-c000000054",
+            "e-359bba0efa69e219-c000000055"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 9,
+          "stop": 14,
+          "events": [
+            "e-359bba0efa69e219-c000000092",
+            "e-359bba0efa69e219-c000000093",
+            "e-359bba0efa69e219-c000000094",
+            "e-359bba0efa69e219-c000000095",
+            "e-359bba0efa69e219-c000000096",
+            "e-359bba0efa69e219-c000000097"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "e62fa89908ded095290a1eadf0ca73e70a9082d0c4a2251e2034533cccfb07b0",
+      "length": 3,
+      "members": [
+        {
+          "scope": 4,
+          "start": 6,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000032",
+            "e-359bba0efa69e219-c000000033",
+            "e-359bba0efa69e219-c000000034"
+          ]
+        },
+        {
+          "scope": 6,
+          "start": 4,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000078",
+            "e-359bba0efa69e219-c000000079",
+            "e-359bba0efa69e219-c000000080"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 1,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000084",
+            "e-359bba0efa69e219-c000000085",
+            "e-359bba0efa69e219-c000000086"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000106"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "eaaeda040aef5d4d45b8f1bdc5b10db6cac9b3b8319ee6c03f9320406201b5e7",
+      "length": 7,
+      "members": [
+        {
+          "scope": 11,
+          "start": 7,
+          "stop": 13,
+          "events": [
+            "e-359bba0efa69e219-c000000148",
+            "e-359bba0efa69e219-c000000149",
+            "e-359bba0efa69e219-c000000150",
+            "e-359bba0efa69e219-c000000151",
+            "e-359bba0efa69e219-c000000152",
+            "e-359bba0efa69e219-c000000153",
+            "e-359bba0efa69e219-c000000154"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 21,
+          "stop": 27,
+          "events": [
+            "e-359bba0efa69e219-c000000219",
+            "e-359bba0efa69e219-c000000220",
+            "e-359bba0efa69e219-c000000221",
+            "e-359bba0efa69e219-c000000222",
+            "e-359bba0efa69e219-c000000223",
+            "e-359bba0efa69e219-c000000224",
+            "e-359bba0efa69e219-c000000225"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "ed93519353ac2214a799317a821845613b4d5af601792e5793d835f80fb2badc",
+      "length": 3,
+      "members": [
+        {
+          "scope": 1,
+          "start": 4,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000006",
+            "e-359bba0efa69e219-c000000007",
+            "e-359bba0efa69e219-c000000008"
+          ]
+        },
+        {
+          "scope": 3,
+          "start": 4,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000023",
+            "e-359bba0efa69e219-c000000024",
+            "e-359bba0efa69e219-c000000025"
+          ]
+        },
+        {
+          "scope": 25,
+          "start": 1,
+          "stop": 3,
+          "events": [
+            "e-359bba0efa69e219-c000000305",
+            "e-359bba0efa69e219-c000000306",
+            "e-359bba0efa69e219-c000000307"
+          ]
+        },
+        {
+          "scope": 25,
+          "start": 8,
+          "stop": 10,
+          "events": [
+            "e-359bba0efa69e219-c000000312",
+            "e-359bba0efa69e219-c000000313",
+            "e-359bba0efa69e219-c000000314"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000094"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "ee4234ceae1288844b5f74f88e879c9c14797b661db0142aefc16b8ccbc41e21",
+      "length": 4,
+      "members": [
+        {
+          "scope": 4,
+          "start": 24,
+          "stop": 27,
+          "events": [
+            "e-359bba0efa69e219-c000000050",
+            "e-359bba0efa69e219-c000000051",
+            "e-359bba0efa69e219-c000000052",
+            "e-359bba0efa69e219-c000000053"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 9,
+          "stop": 12,
+          "events": [
+            "e-359bba0efa69e219-c000000092",
+            "e-359bba0efa69e219-c000000093",
+            "e-359bba0efa69e219-c000000094",
+            "e-359bba0efa69e219-c000000095"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "ef54be41091e70edffa757ec654fb9b91cfa7c7d1d2ede4c142ae1eea9d8ebb7",
+      "length": 5,
+      "members": [
+        {
+          "scope": 4,
+          "start": 7,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000033",
+            "e-359bba0efa69e219-c000000034",
+            "e-359bba0efa69e219-c000000035",
+            "e-359bba0efa69e219-c000000036",
+            "e-359bba0efa69e219-c000000037"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 2,
+          "stop": 6,
+          "events": [
+            "e-359bba0efa69e219-c000000085",
+            "e-359bba0efa69e219-c000000086",
+            "e-359bba0efa69e219-c000000087",
+            "e-359bba0efa69e219-c000000088",
+            "e-359bba0efa69e219-c000000089"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "efb06ab5d32713c8cdac88137cb1d4db2d5f41f967406f04436faff1435ee216",
+      "length": 5,
+      "members": [
+        {
+          "scope": 4,
+          "start": 9,
+          "stop": 13,
+          "events": [
+            "e-359bba0efa69e219-c000000035",
+            "e-359bba0efa69e219-c000000036",
+            "e-359bba0efa69e219-c000000037",
+            "e-359bba0efa69e219-c000000038",
+            "e-359bba0efa69e219-c000000039"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 4,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000112",
+            "e-359bba0efa69e219-c000000113",
+            "e-359bba0efa69e219-c000000114",
+            "e-359bba0efa69e219-c000000115",
+            "e-359bba0efa69e219-c000000116"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "f0e6a3e6eb89ad19ff80d3472c31410a68c61484284afec65fb566fd0685d14c",
+      "length": 5,
+      "members": [
+        {
+          "scope": 4,
+          "start": 10,
+          "stop": 14,
+          "events": [
+            "e-359bba0efa69e219-c000000036",
+            "e-359bba0efa69e219-c000000037",
+            "e-359bba0efa69e219-c000000038",
+            "e-359bba0efa69e219-c000000039",
+            "e-359bba0efa69e219-c000000040"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 5,
+          "stop": 9,
+          "events": [
+            "e-359bba0efa69e219-c000000113",
+            "e-359bba0efa69e219-c000000114",
+            "e-359bba0efa69e219-c000000115",
+            "e-359bba0efa69e219-c000000116",
+            "e-359bba0efa69e219-c000000117"
+          ]
+        },
+        {
+          "scope": 12,
+          "start": 1,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000161",
+            "e-359bba0efa69e219-c000000162",
+            "e-359bba0efa69e219-c000000163",
+            "e-359bba0efa69e219-c000000164",
+            "e-359bba0efa69e219-c000000165"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "f20552ca41dd610cb9ebcac71994bf5af333a3c36cd30cfab182c1361b5efa55",
+      "length": 4,
+      "members": [
+        {
+          "scope": 4,
+          "start": 6,
+          "stop": 9,
+          "events": [
+            "e-359bba0efa69e219-c000000032",
+            "e-359bba0efa69e219-c000000033",
+            "e-359bba0efa69e219-c000000034",
+            "e-359bba0efa69e219-c000000035"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 1,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000084",
+            "e-359bba0efa69e219-c000000085",
+            "e-359bba0efa69e219-c000000086",
+            "e-359bba0efa69e219-c000000087"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "f41f2b458ddca5d666927afe95f2867ca83af0fb348758ba8d61d447cb40985e",
+      "length": 6,
+      "members": [
+        {
+          "scope": 4,
+          "start": 19,
+          "stop": 24,
+          "events": [
+            "e-359bba0efa69e219-c000000045",
+            "e-359bba0efa69e219-c000000046",
+            "e-359bba0efa69e219-c000000047",
+            "e-359bba0efa69e219-c000000048",
+            "e-359bba0efa69e219-c000000049",
+            "e-359bba0efa69e219-c000000050"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 18,
+          "stop": 23,
+          "events": [
+            "e-359bba0efa69e219-c000000216",
+            "e-359bba0efa69e219-c000000217",
+            "e-359bba0efa69e219-c000000218",
+            "e-359bba0efa69e219-c000000219",
+            "e-359bba0efa69e219-c000000220",
+            "e-359bba0efa69e219-c000000221"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "f4763c8c1738f22a10548f2716acacd15881422ff25466b04177fb7eb8d32ab7",
+      "length": 4,
+      "members": [
+        {
+          "scope": 4,
+          "start": 18,
+          "stop": 21,
+          "events": [
+            "e-359bba0efa69e219-c000000044",
+            "e-359bba0efa69e219-c000000045",
+            "e-359bba0efa69e219-c000000046",
+            "e-359bba0efa69e219-c000000047"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 17,
+          "stop": 20,
+          "events": [
+            "e-359bba0efa69e219-c000000215",
+            "e-359bba0efa69e219-c000000216",
+            "e-359bba0efa69e219-c000000217",
+            "e-359bba0efa69e219-c000000218"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "f60c3b7eb13a9dbd8a41a836bb0a42525f122d3c394d87a31c028299802e6fff",
+      "length": 2,
+      "members": [
+        {
+          "scope": 4,
+          "start": 3,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000029",
+            "e-359bba0efa69e219-c000000030"
+          ]
+        },
+        {
+          "scope": 10,
+          "start": 3,
+          "stop": 4,
+          "events": [
+            "e-359bba0efa69e219-c000000131",
+            "e-359bba0efa69e219-c000000132"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000077"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "fa2c8e2996508c6a54fd0f66c57fba8fbbbc0a71cff066802ce8367cea68f2d2",
+      "length": 6,
+      "members": [
+        {
+          "scope": 4,
+          "start": 8,
+          "stop": 13,
+          "events": [
+            "e-359bba0efa69e219-c000000034",
+            "e-359bba0efa69e219-c000000035",
+            "e-359bba0efa69e219-c000000036",
+            "e-359bba0efa69e219-c000000037",
+            "e-359bba0efa69e219-c000000038",
+            "e-359bba0efa69e219-c000000039"
+          ]
+        },
+        {
+          "scope": 9,
+          "start": 3,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000111",
+            "e-359bba0efa69e219-c000000112",
+            "e-359bba0efa69e219-c000000113",
+            "e-359bba0efa69e219-c000000114",
+            "e-359bba0efa69e219-c000000115",
+            "e-359bba0efa69e219-c000000116"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "fb696c9e9fe1cc78a545c6553b6856ef2228cfb3b32d742d5f0005eae25d7be9",
+      "length": 3,
+      "members": [
+        {
+          "scope": 5,
+          "start": 6,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000064",
+            "e-359bba0efa69e219-c000000065",
+            "e-359bba0efa69e219-c000000066"
+          ]
+        },
+        {
+          "scope": 5,
+          "start": 12,
+          "stop": 14,
+          "events": [
+            "e-359bba0efa69e219-c000000070",
+            "e-359bba0efa69e219-c000000071",
+            "e-359bba0efa69e219-c000000072"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000154"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "fc9a5326600be724ddf062209a39f78ca238fa2f835bba444715572f83d74c38",
+      "length": 3,
+      "members": [
+        {
+          "scope": 5,
+          "start": 9,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000067",
+            "e-359bba0efa69e219-c000000068",
+            "e-359bba0efa69e219-c000000069"
+          ]
+        },
+        {
+          "scope": 11,
+          "start": 9,
+          "stop": 11,
+          "events": [
+            "e-359bba0efa69e219-c000000150",
+            "e-359bba0efa69e219-c000000151",
+            "e-359bba0efa69e219-c000000152"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 23,
+          "stop": 25,
+          "events": [
+            "e-359bba0efa69e219-c000000221",
+            "e-359bba0efa69e219-c000000222",
+            "e-359bba0efa69e219-c000000223"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000108"
+      ],
+      "status": "learned"
+    },
+    {
+      "cohort": "fe6765f2cac6d0179de89fe869a13bad55fbb9ac93ec12887568d73c11637c2c",
+      "length": 5,
+      "members": [
+        {
+          "scope": 4,
+          "start": 23,
+          "stop": 27,
+          "events": [
+            "e-359bba0efa69e219-c000000049",
+            "e-359bba0efa69e219-c000000050",
+            "e-359bba0efa69e219-c000000051",
+            "e-359bba0efa69e219-c000000052",
+            "e-359bba0efa69e219-c000000053"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 8,
+          "stop": 12,
+          "events": [
+            "e-359bba0efa69e219-c000000091",
+            "e-359bba0efa69e219-c000000092",
+            "e-359bba0efa69e219-c000000093",
+            "e-359bba0efa69e219-c000000094",
+            "e-359bba0efa69e219-c000000095"
+          ]
+        }
+      ],
+      "submitted_jobs": [],
+      "status": "unsubmitted"
+    },
+    {
+      "cohort": "feca14efae533476b5ddf1382e159bbdb9311cb16ef46af8c6c6bfc86e6a8ea0",
+      "length": 2,
+      "members": [
+        {
+          "scope": 4,
+          "start": 6,
+          "stop": 7,
+          "events": [
+            "e-359bba0efa69e219-c000000032",
+            "e-359bba0efa69e219-c000000033"
+          ]
+        },
+        {
+          "scope": 4,
+          "start": 18,
+          "stop": 19,
+          "events": [
+            "e-359bba0efa69e219-c000000044",
+            "e-359bba0efa69e219-c000000045"
+          ]
+        },
+        {
+          "scope": 6,
+          "start": 4,
+          "stop": 5,
+          "events": [
+            "e-359bba0efa69e219-c000000078",
+            "e-359bba0efa69e219-c000000079"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 1,
+          "stop": 2,
+          "events": [
+            "e-359bba0efa69e219-c000000084",
+            "e-359bba0efa69e219-c000000085"
+          ]
+        },
+        {
+          "scope": 7,
+          "start": 7,
+          "stop": 8,
+          "events": [
+            "e-359bba0efa69e219-c000000090",
+            "e-359bba0efa69e219-c000000091"
+          ]
+        },
+        {
+          "scope": 16,
+          "start": 17,
+          "stop": 18,
+          "events": [
+            "e-359bba0efa69e219-c000000215",
+            "e-359bba0efa69e219-c000000216"
+          ]
+        }
+      ],
+      "submitted_jobs": [
+        "job-000017"
+      ],
+      "status": "learned"
+    }
+  ],
+  "scope_limit": "候选域仅为当前精确步骤效果键与共享端口分组，不是所有参数化共同结构或全部程序空间。"
+}
