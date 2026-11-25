@@ -136,7 +136,8 @@ end
 function frozen_knowledge_digest(knowledge)
     interpretations = [(active_id(model),model.rule.references,model.condition.support,
         model.counterexamples,model.unknown) for model in knowledge.active]
-    programs = [(p.publication,p.definition,p.depth,p.sources,p.steps,p.shared) for p in knowledge.programs]
+    programs = [(p.publication,p.definition,p.depth,p.sources,p.steps,p.shared,p.available_after)
+        for p in knowledge.programs]
     depths = [(id,knowledge.definition_depths[id]) for id in sort!(collect(keys(knowledge.definition_depths)))]
     return content_hash(JSON.json([interpretations,[trial.sample.event_id for trial in knowledge.trials],programs,depths]))
 end
@@ -528,6 +529,22 @@ function finalize_learning!(knowledge, config, store, pairs, repo_root; frozen, 
     return (; publications,pending)
 end
 
+function collect_online_job!(knowledge, config, rec, job, status, publications, program_jobs)
+    if job.kind == :effect
+        publication = collect_effect_learning!(knowledge,config,rec.store,job.prepared,status)
+        isnothing(publication) || push!(publications,publication)
+    else
+        assessment = collect_program_learning!(knowledge,rec.store,job.prepared,status;
+            available_after=rec.before_ref)
+        push!(program_jobs,assessment)
+        haskey(assessment,"publication") && push!(publications,assessment["publication"])
+    end
+end
+
+function program_corpus_key(corpus)
+    return semantic_hash([corpus.programs,[scope["events"] for scope in corpus.scopes]])
+end
+
 function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(), frozen=false)
     attempts = Dict{Tuple{Int,Int,Int},Int}()
     history = [0]
@@ -538,8 +555,16 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     continuation = nothing
     goal_pending = nothing
     program_cursor = nothing
-    tried_program = false
+    program_attempts = Set{Tuple{String,String,String}}()
+    refuted_steps = Set{String}()
     inflight = nothing
+    sequence_enabled = !frozen && get(config.learning,"sequences",false)
+    sequence_events = sequence_enabled ? Any[entry] : Any[]
+    sequence_effects = Dict{String,PublicEffects}()
+    program_jobs = Dict{String,Any}[]
+    program_prefix = nothing
+    last_sequence_check = 0
+    last_job = :program
     background = !frozen && get(config.learning,"background_search",false)
     composing = !isnothing(config.planning) && haskey(config.planning,"goal")
     spatial = !isnothing(config.planning) && get(config.planning,"autonomous",false) ? SpatialLearning() : nothing
@@ -555,8 +580,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     while rec.sent_count < rec.limit && !rec.frozen
         if !isnothing(inflight) && isfile(joinpath(inflight.job,"worker-status.json"))
             status = read_json(joinpath(inflight.job,"worker-status.json"))
-            publication = collect_effect_learning!(knowledge,config,rec.store,inflight,status)
-            isnothing(publication) || push!(publications,publication)
+            collect_online_job!(knowledge,config,rec,inflight,status,publications,program_jobs)
             inflight = nothing
         end
         decision_started = time_ns()
@@ -570,6 +594,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             event = read_json(store_path(rec.store,"events",rec.before_ref * ".json"))
             entry = (;event,observation=rec.observation)
             register_evidence_obligation!(rec.store,entry;frozen)
+            sequence_enabled && push!(sequence_events,entry)
+            program_cursor = nothing
             begin_visual_attempt!(visual)
             history = [0]
             ready_at = time_ns()
@@ -579,7 +605,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             goal = bind_observed_goal(last(obs.frames),config.planning["goal"])
         end
         !isnothing(goal) && goal_truth(goal,last(obs.frames)) == proven && break
-        programs_pending = !composing && (!tried_program || !isnothing(program_cursor))
+        programs_pending = !composing && !isempty(knowledge.programs)
         decision = ranked_public_actions(knowledge,obs,history,attempts,coordinates;
             composing,programs_pending,program_cursor)
         isempty(decision.ranked) && break
@@ -608,15 +634,19 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         end
         program_note = nothing
         if programs_pending
-            if !tried_program
-                tried_program = true
+            if isnothing(program_cursor)
+                state = content_hash(JSON.json([obs.levels_completed,last(obs.frames),obs.available_actions]))
                 for program in knowledge.programs
                     length(program.steps) <= rec.limit-rec.sent_count || continue
+                    any(step->program_step_key(step) in refuted_steps,program.steps) && continue
                     cursor = ProgramCursor(program,1,Any[])
-                    if !isnothing(current_program_step(cursor,decision))
-                        program_cursor = cursor
-                        break
-                    end
+                    first_step = current_program_step(cursor,decision)
+                    isnothing(first_step) && continue
+                    key = (program.definition,state,active_id(first_step.chosen.model))
+                    key in program_attempts && continue
+                    push!(program_attempts,key)
+                    program_cursor = cursor
+                    break
                 end
             end
             if !isnothing(program_cursor)
@@ -624,7 +654,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 definition = program_cursor.program
                 program_note = Dict("definition"=>definition.definition,"publication"=>definition.publication,
                     "depth"=>definition.depth,"index"=>program_cursor.next_step,
-                    "length"=>length(definition.steps),"training_events"=>definition.sources)
+                    "length"=>length(definition.steps),"training_events"=>definition.sources,
+                    "available_after"=>definition.available_after)
                 if isnothing(next)
                     program_note["feedback"] = "withdrawn_before_unproved_step"
                     program_cursor = nothing
@@ -658,7 +689,11 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         plan_reads = isnothing(goal_cursor) ? String[] : reduce(vcat,
             (recovery_reads(rec,model) for model in knowledge.active if haskey(goal_cursor.node.dependencies,model.rule.id));
             init=String[])
-        isnothing(program_cursor) || append!(plan_reads,program_cursor.program.sources)
+        if !isnothing(program_cursor)
+            program = program_cursor.program
+            append!(plan_reads,program.sources)
+            isnothing(program.available_after) || push!(plan_reads,program.available_after)
+        end
         prediction = predict_public(rec,item;plan_reads)
         if !isnothing(spatial_choice)
             reads = unique([rec.before_ref;spatial_choice.reads])
@@ -731,6 +766,10 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         isnothing(experiment) || record_experiment_service!(experiments,rec.store,experiment,event)
         sample = motion_example(entry,resulting;history)
         effects = observed_effects(entry,resulting)
+        if sequence_enabled
+            push!(sequence_events,resulting)
+            sequence_effects[effects.event_id] = effects
+        end
         spatial_feedback = nothing
         visual_feedback = nothing
         contact_feedback = nothing
@@ -777,10 +816,16 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             response = program_feedback!(program_cursor,item,assessment,effects)
             program_note["feedback"] = response
             if response != "advance"
+                if response != "completed"
+                    failed = program_cursor.program.steps[program_cursor.next_step]
+                    push!(refuted_steps,program_step_key(failed))
+                end
                 program_note["withdrawn_suffix"] = response == "completed" ? Int[] :
                     collect(program_cursor.next_step+1:length(program_cursor.program.steps))
                 program_cursor = nothing
             end
+        elseif !isempty(assessment.assessments) && all(==("supported"),values(assessment.assessments))
+            delete!(refuted_steps,program_step_key(item.action,item.chosen.model.rule.effects))
         end
         if !isnothing(plan)
             if !isempty(assessment.assessments) && all(==("supported"),values(assessment.assessments))
@@ -798,7 +843,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             end
             goal_pending = feedback.next
         end
-        new_scene = !isnothing(spatial) && obs.levels_completed != resulting.observation.levels_completed
+        level_changed = obs.levels_completed != resulting.observation.levels_completed
+        level_changed && empty!(refuted_steps)
+        new_scene = !isnothing(spatial) && level_changed
         old = if frozen
             Dict()
         elseif new_scene
@@ -837,14 +884,31 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         count += 1
         if !frozen && isnothing(inflight)
             count_for_batch = config.learning["batch_confirmed_events"]
-            if length(pairs) >= count_for_batch
+            prepared = nothing
+            if sequence_enabled && last_job == :effect && count-last_sequence_check >= count_for_batch
+                corpus = compile_sequence_corpus([sequence_events];observations=sequence_effects,
+                    close_revisits=true,include_open=false)
+                last_sequence_check = count
+                key = program_corpus_key(corpus)
+                if key != program_prefix && !isempty(corpus.programs)
+                    prepared = prepare_program_learning!(knowledge,config,rec.store,repo_root,corpus)
+                    program_prefix = key
+                    last_job = :program
+                end
+            end
+            if isnothing(prepared) && length(pairs) >= count_for_batch
                 batch = pairs[1:count_for_batch]
                 deleteat!(pairs,1:count_for_batch)
+                prepared = prepare_effect_learning!(knowledge,config,rec.store,batch,repo_root)
+                last_job = :effect
+            end
+            if !isnothing(prepared)
+                job = (; kind=last_job, job=prepared.job, prepared)
                 if background
-                    inflight = prepare_effect_learning!(knowledge,config,rec.store,batch,repo_root)
+                    inflight = job
                 else
-                    digest = online_learn!(knowledge,config,rec.store,batch,repo_root)
-                    isnothing(digest) || push!(publications,digest)
+                    status = wait_worker(job.job,store_path(rec.store))
+                    collect_online_job!(knowledge,config,rec,job,status,publications,program_jobs)
                 end
             end
         end
@@ -852,8 +916,25 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     if !isnothing(spatial) && !rec.frozen && !isnothing(rec.card_id)
         close_scorecard!(rec)
     end
-    final = finalize_learning!(knowledge,config,rec.store,pairs,repo_root;frozen,inflight)
+    if !isnothing(inflight)
+        status = wait_worker(inflight.job,store_path(rec.store))
+        collect_online_job!(knowledge,config,rec,inflight,status,publications,program_jobs)
+    end
+    final = finalize_learning!(knowledge,config,rec.store,pairs,repo_root;frozen,inflight=nothing)
     append!(publications,final.publications)
+    sequence = nothing
+    if sequence_enabled
+        episodes = [sequence_events]
+        corpus = compile_sequence_corpus(episodes;observations=sequence_effects,close_revisits=true)
+        artifact = store_path(rec.store,"learning","sequence-corpus.json")
+        compiled = persist_sequence_corpus(episodes,artifact;corpus)
+        if !rec.frozen && !isempty(corpus.programs) && program_corpus_key(corpus) != program_prefix
+            searched = train_program_corpus!(knowledge,config,rec.store,repo_root,corpus;available_after=rec.before_ref)
+            push!(program_jobs,searched)
+            haskey(searched,"publication") && push!(publications,searched["publication"])
+        end
+        sequence = merge(compiled,(search=isempty(program_jobs) ? nothing : last(program_jobs),jobs=program_jobs))
+    end
     after_version = frozen ? frozen_knowledge_digest(knowledge) : nothing
     after_version == frozen_version || error("Frozen evaluation changed the mechanism")
     if frozen
@@ -865,7 +946,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     outcome = (; actions=count, publications, state=rec.observation.state, models=length(knowledge.active),
         levels_completed=rec.observation.levels_completed, win_levels=rec.observation.win_levels,
         frozen_before=frozen_version, frozen_after=after_version, consumed_definition_depth=consumed_depth,
-        pending_learning_events=final.pending)
+        pending_learning_events=final.pending,sequence)
     composing || return outcome
     truth = isnothing(goal) ? unknown_truth : goal_truth(goal,last(rec.observation.frames))
     return merge(outcome,(goal=truth == proven ? "observed" : truth == disproven ? "not_reached" : "unknown",))

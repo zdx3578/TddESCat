@@ -48,6 +48,7 @@ KIND_IDS = {
         "sequence_withdrawal",
         "sequence_resource",
         "sequence_click",
+        "sequence_live",
     ),
     "sequence_depth": ("eight_step_program",),
     "trace_learning": ("learned_intermediate_response",),
