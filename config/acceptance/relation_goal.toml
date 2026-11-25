@@ -1,0 +1,5 @@
+schema_version = 1
+kind = "relation_goal"
+output_name = "relation-goals"
+environment_config = "../bench_server.toml"
+judge_config = "../bench_scenarios.toml"

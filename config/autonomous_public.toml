@@ -33,3 +33,4 @@ max_action_coordinates = 512
 
 [planning]
 autonomous = true
+relation_goals = true

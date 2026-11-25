@@ -20,15 +20,22 @@ function bind_observed_goal(frame, config)
         isnothing(cue) ? nothing : UInt8(cue),distance)
 end
 
-function goal_truth(goal::ObservedGoal, frame)
+function observed_goal_relations(goal::ObservedGoal,frame)
     groups = public_components(frame)
-    goal.marker in groups || return unknown_truth
+    cue = isnothing(goal.cue_color) || goal.cue_color in frame ? proven : disproven
+    unavailable = (near_marker=unknown_truth,cue_visible=cue)
+    goal.marker in groups || return unavailable
     roles = filter(s -> first(s)[3] == goal.role_color && geometry(s) == goal.role_geometry, groups)
-    length(roles) == 1 || return unknown_truth
-    !isnothing(goal.cue_color) && goal.cue_color ∉ frame && return disproven
+    length(roles) == 1 || return unavailable
     nearby = any(abs(x-u)+abs(y-v) <= goal.pixel_distance
         for (x,y,_) in goal.marker for (u,v,_) in only(roles))
-    return nearby ? proven : disproven
+    return (near_marker=nearby ? proven : disproven,cue_visible=cue)
+end
+
+function goal_truth(goal::ObservedGoal,frame)
+    facts = observed_goal_relations(goal,frame)
+    facts.near_marker == unknown_truth && return unknown_truth
+    return all(==(proven),facts) ? proven : disproven
 end
 
 function project_frame(choice,before)
@@ -90,8 +97,7 @@ function forecast_program(knowledge,obs,history,cursor,coordinates,meters,accept
     observation = obs
     sequence = NamedTuple[]
     previous = last(obs.frames)
-    width = maximum((atom isa HistorySuffix ? length(atom.actions) : atom isa RecentAction ? 1 : 0
-        for model in knowledge.active for atom in model.condition.atoms);init=1)
+    width = goal_history_width(knowledge)
     recent = copy(history)
     for i in 1:min(steps_available,length(draft.program.steps)-draft.next_step+1)
         decision = ranked_public_actions(knowledge,observation,recent,Dict{ConcreteAction,Int}(),
@@ -164,6 +170,7 @@ end
 function goal_program_record(forecast)
     return Dict("contract"=>forecast.contract,"target"=>forecast.target,"role"=>forecast.role,
         "continuation"=>forecast.continuation,
+        "regression"=>get(forecast,:regression,nothing),
         "steps"=>[Dict("action"=>step.item.action,"frame_sha256"=>frame_key(step.frame),
             "mechanism"=>active_id(step.item.chosen.model),"queries"=>step.item.chosen.expected)
             for step in forecast.path])
@@ -394,8 +401,7 @@ function choose_observed_goal_step(rec,knowledge,goal,history,decision,pending,m
         note["withdrawn_suffix"] = checked.reason
         note["invalidation"] = goal_invalidation!(pending,"condition")
     end
-    history_width = maximum((atom isa HistorySuffix ? length(atom.actions) : atom isa RecentAction ? 1 : 0
-        for model in knowledge.active for atom in model.condition.atoms);init=1)
+    history_width = goal_history_width(knowledge)
     id = command_id(rec.next_sequence)
     result = search_observed_goal(knowledge,rec.observation,history,goal,history_width,max_action_coordinates,id;meters)
     proof = public_projection_record(result)

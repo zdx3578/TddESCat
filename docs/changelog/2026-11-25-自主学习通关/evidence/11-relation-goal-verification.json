@@ -1,0 +1,726 @@
+{
+  "terminal": {
+    "state": "WIN",
+    "levels_completed": 7,
+    "events": 752,
+    "frames": 1514,
+    "audited_actions": 744,
+    "single_session": true,
+    "scorecard_win": true,
+    "scorecard_sha256": "894b3065b04aa2d2cfaec9321bae714b4d10526e3721651264b385c79979b72d",
+    "progress_transfer": true,
+    "replay_exit": 0
+  },
+  "source": {
+    "schema_version": 1,
+    "suite_id": "autonomous-offline-win",
+    "run_id": "relation-goals-official-r02",
+    "git_commit": "7d519eb7d07adbac4cfa4e84faf35ce76f85ec84",
+    "worktree_sha256": "7afed768d43a33c02797ad98faf429befb62ef89d584b4df97a6ba2ea237bbeb",
+    "config_sha256": "1042b988b2cb9a8e6ce2a14531af88bc97f0acbdceba1b7757055045e6fea853",
+    "locks": {
+      "python": "606a07ec1ecbd2282472e305c1b24f94107343ea491acef8969801b703d89540",
+      "julia": "0ec6da0595f34a8ef38d83105253b1733668929e66540aa61f9f9ec5d432bbc8",
+      "rust": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2"
+    },
+    "environment": "official_offline_http",
+    "isolation": "linux_namespaces",
+    "started_at": "2026-11-25T11:43:19.421076+00:00"
+  },
+  "runtime_engine": {
+    "binary_sha256": "7875508f65b90d21fa142b5d554277889a083b8351a21d9c75b657dd06a02272",
+    "build_sha256": "b4d791d8d11e9a69a0df1b37d75872a06dd2d3de379a75cc0fdc4b5960672486"
+  },
+  "raw_artifact_index_sha256": "3c38cdb5ad0ccbf16f4bfcd0ab1d74e12d11e3ace430012f6c1fcf603b67c07a",
+  "native_program": {
+    "completed_measurement_calls": 12,
+    "control_dispositions": {
+      "completed": 12
+    },
+    "ordinary_action_differences": 14,
+    "baseline_action_differences": 0,
+    "cross_level": true,
+    "relation_uses": []
+  },
+  "accepted_assertions": [
+    "autonomous_public_win",
+    "autonomous_goal_program"
+  ],
+  "verified_index_entries": 8913,
+  "trace_compared": {
+    "baseline": "measurement-program-official-r04",
+    "evaluated": "relation-goals-official-r02",
+    "baseline_confirmed": 752,
+    "new_confirmed": 752,
+    "baseline_terminal": "WIN",
+    "new_terminal": "WIN",
+    "compared_fields": [
+      "action_input",
+      "frame",
+      "state",
+      "levels_completed",
+      "win_levels",
+      "available_actions"
+    ],
+    "prefix_equal": true,
+    "trace_equal": true,
+    "first_difference": null
+  },
+  "projection_counts": {
+    "supported": 51,
+    "refuted_or_unknown": 52
+  },
+  "first_projection_revision": [
+    {
+      "command": "c000000107",
+      "action": {
+        "id": 1
+      },
+      "status": "witnessed_base",
+      "contract": "projection-f1c8523f95e7b22f10d30d5cb6de873f3ba2bbedf5b8f704d455891edf69ae54",
+      "version": "projection-f1c8523f95e7b22f10d30d5cb6de873f3ba2bbedf5b8f704d455891edf69ae54",
+      "condition_reads": [],
+      "inside_writes": 5,
+      "outside_writes": 0,
+      "local_supported": true,
+      "matching": false,
+      "program_feedback": null
+    },
+    {
+      "command": "c000000109",
+      "action": {
+        "id": 1
+      },
+      "status": "unproved_projection_scope",
+      "contract": "projection-f1c8523f95e7b22f10d30d5cb6de873f3ba2bbedf5b8f704d455891edf69ae54",
+      "version": "projection-scope-bfb1c81ef867da593f677132fe1242ead496687f9ee9d3b721487b5f4c16a394",
+      "condition_reads": [
+        "e-0e359922caa8edb9-c000000085",
+        "e-0e359922caa8edb9-c000000086",
+        "e-0e359922caa8edb9-c000000087",
+        "e-0e359922caa8edb9-c000000088",
+        "e-0e359922caa8edb9-c000000089",
+        "e-0e359922caa8edb9-c000000090",
+        "e-0e359922caa8edb9-c000000104",
+        "e-0e359922caa8edb9-c000000105",
+        "e-0e359922caa8edb9-c000000106",
+        "e-0e359922caa8edb9-c000000107"
+      ],
+      "inside_writes": 5,
+      "outside_writes": 0,
+      "local_supported": true,
+      "matching": false,
+      "program_feedback": null
+    },
+    {
+      "command": "c000000110",
+      "action": {
+        "id": 1
+      },
+      "status": "conditioned_projection",
+      "contract": "projection-f1c8523f95e7b22f10d30d5cb6de873f3ba2bbedf5b8f704d455891edf69ae54",
+      "version": "projection-scope-98ec13a8dfe823ae83bfab7f9bbed94a205dd8cbe2e0e82276484cdc7150da08",
+      "condition_reads": [
+        "e-0e359922caa8edb9-c000000085",
+        "e-0e359922caa8edb9-c000000086",
+        "e-0e359922caa8edb9-c000000087",
+        "e-0e359922caa8edb9-c000000088",
+        "e-0e359922caa8edb9-c000000089",
+        "e-0e359922caa8edb9-c000000090",
+        "e-0e359922caa8edb9-c000000104",
+        "e-0e359922caa8edb9-c000000105",
+        "e-0e359922caa8edb9-c000000106",
+        "e-0e359922caa8edb9-c000000107",
+        "e-0e359922caa8edb9-c000000108",
+        "e-0e359922caa8edb9-c000000109"
+      ],
+      "inside_writes": 0,
+      "outside_writes": 0,
+      "local_supported": true,
+      "matching": true,
+      "program_feedback": "advance"
+    },
+    {
+      "command": "c000000111",
+      "action": {
+        "id": 1
+      },
+      "status": "conditioned_projection",
+      "contract": "projection-f1c8523f95e7b22f10d30d5cb6de873f3ba2bbedf5b8f704d455891edf69ae54",
+      "version": "projection-scope-98ec13a8dfe823ae83bfab7f9bbed94a205dd8cbe2e0e82276484cdc7150da08",
+      "condition_reads": [
+        "e-0e359922caa8edb9-c000000085",
+        "e-0e359922caa8edb9-c000000086",
+        "e-0e359922caa8edb9-c000000087",
+        "e-0e359922caa8edb9-c000000088",
+        "e-0e359922caa8edb9-c000000089",
+        "e-0e359922caa8edb9-c000000090",
+        "e-0e359922caa8edb9-c000000104",
+        "e-0e359922caa8edb9-c000000105",
+        "e-0e359922caa8edb9-c000000106",
+        "e-0e359922caa8edb9-c000000107",
+        "e-0e359922caa8edb9-c000000108",
+        "e-0e359922caa8edb9-c000000109",
+        "e-0e359922caa8edb9-c000000110"
+      ],
+      "inside_writes": 0,
+      "outside_writes": 0,
+      "local_supported": true,
+      "matching": true,
+      "program_feedback": "completed"
+    }
+  ],
+  "learned_progress_relation": {
+    "c000000429": {
+      "level": 6,
+      "observed": "entered",
+      "predicted": "unknown",
+      "model": null,
+      "remaining": 2,
+      "rules": []
+    },
+    "c000000498": {
+      "level": 6,
+      "observed": "progress",
+      "predicted": "progress",
+      "model": "progress-60d450a4b33edb0f2f3e8b465b3e468d2f8a24f2f2b7933d6cf3d80c2fc5c438",
+      "remaining": 1,
+      "rules": [
+        {
+          "variable": "remaining_sites",
+          "rows": [
+            [
+              1,
+              true
+            ],
+            [
+              2,
+              false
+            ]
+          ]
+        }
+      ]
+    },
+    "c000000753": {
+      "level": 7,
+      "observed": "progress",
+      "predicted": "progress",
+      "model": "progress-60d450a4b33edb0f2f3e8b465b3e468d2f8a24f2f2b7933d6cf3d80c2fc5c438",
+      "remaining": 1,
+      "rules": [
+        {
+          "variable": "remaining_sites",
+          "rows": [
+            [
+              1,
+              true
+            ],
+            [
+              2,
+              false
+            ]
+          ]
+        }
+      ]
+    }
+  },
+  "synthetic_held_out": {
+    "ablation": [
+      {
+        "id": 0
+      },
+      {
+        "id": 1
+      },
+      {
+        "id": 1
+      },
+      {
+        "id": 5
+      }
+    ],
+    "ablation_reason": "observed_goal_policy",
+    "instantiations": [
+      {
+        "baseline": {
+          "id": 1
+        },
+        "commands": [
+          {
+            "id": 0
+          },
+          {
+            "id": 2
+          },
+          {
+            "id": 2
+          }
+        ],
+        "definition": "lib_0d15134afaf7a9ef6887b2718d8cfe08029ef6f3ce855f97d8c5fecb6a2bd758",
+        "regression": {
+          "body": [
+            "public-relationship-policy-v1",
+            "find_unsatisfied_relation",
+            "bind_verified_producer",
+            "recheck_each_transition",
+            "continue_to_observed_goal"
+          ],
+          "initial": {
+            "near_marker": "disproven",
+            "cue_visible": "proven"
+          },
+          "missing": [
+            "near_marker"
+          ],
+          "established": [
+            "near_marker"
+          ],
+          "actual": {
+            "near_marker": "proven",
+            "cue_visible": "proven"
+          },
+          "binding": {
+            "role_color": 5,
+            "role_geometry": [
+              [
+                0,
+                0
+              ]
+            ],
+            "marker": [
+              [
+                30,
+                18,
+                12
+              ],
+              [
+                30,
+                19,
+                12
+              ],
+              [
+                30,
+                20,
+                12
+              ],
+              [
+                30,
+                21,
+                12
+              ],
+              [
+                30,
+                22,
+                12
+              ],
+              [
+                30,
+                23,
+                12
+              ],
+              [
+                30,
+                24,
+                12
+              ],
+              [
+                30,
+                25,
+                12
+              ],
+              [
+                30,
+                26,
+                12
+              ],
+              [
+                30,
+                27,
+                12
+              ],
+              [
+                30,
+                28,
+                12
+              ],
+              [
+                30,
+                29,
+                12
+              ],
+              [
+                30,
+                30,
+                12
+              ],
+              [
+                30,
+                31,
+                12
+              ],
+              [
+                30,
+                32,
+                12
+              ],
+              [
+                30,
+                33,
+                12
+              ],
+              [
+                30,
+                34,
+                12
+              ],
+              [
+                30,
+                35,
+                12
+              ],
+              [
+                31,
+                18,
+                12
+              ],
+              [
+                31,
+                19,
+                12
+              ],
+              [
+                31,
+                20,
+                12
+              ],
+              [
+                31,
+                21,
+                12
+              ],
+              [
+                31,
+                22,
+                12
+              ],
+              [
+                31,
+                23,
+                12
+              ],
+              [
+                31,
+                24,
+                12
+              ],
+              [
+                31,
+                25,
+                12
+              ],
+              [
+                31,
+                26,
+                12
+              ],
+              [
+                31,
+                27,
+                12
+              ],
+              [
+                31,
+                28,
+                12
+              ],
+              [
+                31,
+                29,
+                12
+              ],
+              [
+                31,
+                30,
+                12
+              ],
+              [
+                31,
+                31,
+                12
+              ],
+              [
+                31,
+                32,
+                12
+              ],
+              [
+                31,
+                33,
+                12
+              ],
+              [
+                31,
+                34,
+                12
+              ],
+              [
+                31,
+                35,
+                12
+              ]
+            ],
+            "cue_color": 13,
+            "distance": 3
+          },
+          "producer": null,
+          "reads": []
+        },
+        "selected": {
+          "id": 2
+        }
+      },
+      {
+        "baseline": {
+          "id": 1
+        },
+        "commands": [
+          {
+            "id": 0
+          },
+          {
+            "id": 2
+          },
+          {
+            "id": 2
+          },
+          {
+            "id": 5
+          }
+        ],
+        "definition": "lib_0d15134afaf7a9ef6887b2718d8cfe08029ef6f3ce855f97d8c5fecb6a2bd758",
+        "regression": {
+          "body": [
+            "public-relationship-policy-v1",
+            "find_unsatisfied_relation",
+            "bind_verified_producer",
+            "recheck_each_transition",
+            "continue_to_observed_goal"
+          ],
+          "initial": {
+            "near_marker": "disproven",
+            "cue_visible": "disproven"
+          },
+          "missing": [
+            "near_marker",
+            "cue_visible"
+          ],
+          "established": [
+            "near_marker"
+          ],
+          "actual": {
+            "near_marker": "proven",
+            "cue_visible": "disproven"
+          },
+          "binding": {
+            "role_color": 5,
+            "role_geometry": [
+              [
+                0,
+                0
+              ]
+            ],
+            "marker": [
+              [
+                34,
+                22,
+                12
+              ],
+              [
+                34,
+                23,
+                12
+              ],
+              [
+                34,
+                24,
+                12
+              ],
+              [
+                34,
+                25,
+                12
+              ],
+              [
+                34,
+                26,
+                12
+              ],
+              [
+                34,
+                27,
+                12
+              ],
+              [
+                34,
+                28,
+                12
+              ],
+              [
+                34,
+                29,
+                12
+              ],
+              [
+                34,
+                30,
+                12
+              ],
+              [
+                34,
+                31,
+                12
+              ],
+              [
+                34,
+                32,
+                12
+              ],
+              [
+                34,
+                33,
+                12
+              ],
+              [
+                34,
+                34,
+                12
+              ],
+              [
+                34,
+                35,
+                12
+              ],
+              [
+                34,
+                36,
+                12
+              ],
+              [
+                34,
+                37,
+                12
+              ],
+              [
+                34,
+                38,
+                12
+              ],
+              [
+                34,
+                39,
+                12
+              ],
+              [
+                35,
+                22,
+                12
+              ],
+              [
+                35,
+                23,
+                12
+              ],
+              [
+                35,
+                24,
+                12
+              ],
+              [
+                35,
+                25,
+                12
+              ],
+              [
+                35,
+                26,
+                12
+              ],
+              [
+                35,
+                27,
+                12
+              ],
+              [
+                35,
+                28,
+                12
+              ],
+              [
+                35,
+                29,
+                12
+              ],
+              [
+                35,
+                30,
+                12
+              ],
+              [
+                35,
+                31,
+                12
+              ],
+              [
+                35,
+                32,
+                12
+              ],
+              [
+                35,
+                33,
+                12
+              ],
+              [
+                35,
+                34,
+                12
+              ],
+              [
+                35,
+                35,
+                12
+              ],
+              [
+                35,
+                36,
+                12
+              ],
+              [
+                35,
+                37,
+                12
+              ],
+              [
+                35,
+                38,
+                12
+              ],
+              [
+                35,
+                39,
+                12
+              ]
+            ],
+            "cue_color": 13,
+            "distance": 3
+          },
+          "producer": null,
+          "reads": []
+        },
+        "selected": {
+          "id": 2
+        }
+      }
+    ]
+  }
+}
