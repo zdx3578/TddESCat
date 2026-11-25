@@ -32,6 +32,7 @@ from tests.bench.autonomous_audit import (
     audit_progress_sample,
     require,
 )
+from tests.bench.program_audit import audit_live_goal_programs
 
 
 def offline_capture(root, task, run):
@@ -433,7 +434,6 @@ def main(config, run):
         report["solver_exit"] = code
         passed = code == 0 and report["passed"]
         report["passed"] = passed
-        write_json(public / "autonomous-verification.json", report)
         append_assertion(
             run,
             identifier,
@@ -441,6 +441,27 @@ def main(config, run):
             ["public/autonomous-verification.json", "grade/autonomous-replay.log"],
             None if passed else "missing_cold_learning_and_full_game_win",
         )
+        agent = tomllib.loads((public / "agent.toml").read_text())
+        if agent["learning"].get("sequences", False):
+            program = audit_live_goal_programs(public)
+            report["program_control"] = program
+            goal_program = (
+                bool(program["uses"])
+                and program["ordinary_choice_changed"]
+                and program["cross_level"]
+                and not program["errors"]
+            )
+            append_assertion(
+                run,
+                "autonomous_goal_program",
+                goal_program,
+                ["public/autonomous-verification.json"],
+                None
+                if goal_program
+                else "missing_verified_in_session_program_choice_and_transfer",
+            )
+            passed &= goal_program
+        write_json(public / "autonomous-verification.json", report)
         return int(not passed)
     if code:
         append_assertion(

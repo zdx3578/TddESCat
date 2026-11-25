@@ -53,6 +53,7 @@ KIND_IDS = {
     "sequence_depth": ("eight_step_program",),
     "trace_learning": ("learned_intermediate_response",),
     "measurement_learning": ("measurement_public_feedback",),
+    "measurement_goal": ("measurement_goal_execution", "program_publication_recovery"),
 }
 MODULES = {
     "protocol": "tests.protocol.test_faults",
@@ -85,6 +86,7 @@ MODULES = {
     "sequence_depth": "tests.bench.check_sequence_depth",
     "trace_learning": "tests.bench.check_trace_learning",
     "measurement_learning": "tests.bench.check_measurement",
+    "measurement_goal": "tests.bench.check_meter_goal",
     "stitch_growth": "tests.bench.check_kernel",
 }
 
@@ -262,6 +264,10 @@ def run_task(root, config_path, task, run_dir, runtime):
 
     kind = task["kind"]
     expected = task["game_ids"] if kind == "arc_public25" else KIND_IDS[kind]
+    if kind == "autonomous_offline":
+        agent = tomllib.loads(task["agent_config"].read_text())
+        if agent["learning"].get("sequences", False):
+            expected = (*expected, "autonomous_goal_program")
     official_local = kind in (
         "fixture",
         "evidence",
@@ -281,6 +287,7 @@ def run_task(root, config_path, task, run_dir, runtime):
         "association_background",
         "sequence_learning",
         "measurement_learning",
+        "measurement_goal",
     )
     offline_arc = kind in ("arc_offline", "autonomous_offline", "arc_public25")
     isolated = (
@@ -452,6 +459,7 @@ def run_task(root, config_path, task, run_dir, runtime):
         "sequence_depth",
         "trace_learning",
         "measurement_learning",
+        "measurement_goal",
         "stitch_growth",
     ):
         write_artifact_index(run_dir)

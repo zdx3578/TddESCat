@@ -178,9 +178,13 @@ end
     @test admitted.contact.conditions.judgment == :admitted
     @test Set(admitted.contact.conditions.scope_events) == Set(["blocked","passed"])
 
+    @test TS.may_retry_visual_attempt!(controller,state,0)
+    @test !TS.may_retry_visual_attempt!(controller,state,0)
     TS.observe_visual_contact!(controller,state,changed,
         observed_step("same-history-refutation",changed,4,frame))
     @test isempty(TS.fit_contact_guards(controller.contact_samples).scoped)
+    @test TS.may_retry_visual_attempt!(controller,state,0)
+    @test !TS.may_retry_visual_attempt!(controller,state,0)
 end
 
 @testset "The whole response qualifies one step only when its trace agrees" begin

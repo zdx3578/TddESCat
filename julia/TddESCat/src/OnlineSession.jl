@@ -88,7 +88,7 @@ function trial_meters(effects)
 end
 
 function measured_scope(fragments)
-    ids = Tuple(part.instance for part in fragments if part.family == :measurement)
+    ids = Tuple(meter_pattern(part.binding) for part in fragments if part.family == :measurement)
     isempty(ids) && return nothing
     return (ids,Tuple(part.value for part in fragments if part.family == :translation))
 end
@@ -573,7 +573,7 @@ function finalize_learning!(knowledge, config, store, pairs, repo_root; frozen, 
     return (; publications,pending)
 end
 
-function collect_online_job!(knowledge, config, rec, job, status, publications, program_jobs)
+function collect_online_job!(knowledge,config,rec,job,status,publications,program_jobs,completed_cohorts)
     if job.kind == :effect
         publication = collect_effect_learning!(knowledge,config,rec.store,job.prepared,status)
         isnothing(publication) || push!(publications,publication)
@@ -582,11 +582,10 @@ function collect_online_job!(knowledge, config, rec, job, status, publications, 
             available_after=rec.before_ref)
         push!(program_jobs,assessment)
         haskey(assessment,"publication") && push!(publications,assessment["publication"])
+        if haskey(assessment,"cohort") && !isempty(get(assessment,"programs",[]))
+            push!(completed_cohorts,assessment["cohort"])
+        end
     end
-end
-
-function program_corpus_key(corpus)
-    return semantic_hash([corpus.programs,[scope["events"] for scope in corpus.scopes]])
 end
 
 function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(), frozen=false)
@@ -606,7 +605,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     sequence_events = sequence_enabled ? Any[entry] : Any[]
     measurement = MeterContext()
     program_jobs = Dict{String,Any}[]
-    program_prefix = nothing
+    submitted_programs = Set{String}()
+    completed_cohorts = Set{String}()
     last_sequence_check = 0
     last_job = :program
     background = !frozen && get(config.learning,"background_search",false)
@@ -624,7 +624,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     while rec.sent_count < rec.limit && !rec.frozen
         if !isnothing(inflight) && isfile(joinpath(inflight.job,"worker-status.json"))
             status = read_json(joinpath(inflight.job,"worker-status.json"))
-            collect_online_job!(knowledge,config,rec,inflight,status,publications,program_jobs)
+            collect_online_job!(knowledge,config,rec,inflight,status,publications,program_jobs,completed_cohorts)
             inflight = nothing
         end
         decision_started = time_ns()
@@ -651,7 +651,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             goal = bind_observed_goal(last(obs.frames),config.planning["goal"])
         end
         !isnothing(goal) && goal_truth(goal,last(obs.frames)) == proven && break
-        programs_pending = !composing && !isempty(knowledge.programs)
+        programs_pending = !isempty(knowledge.programs)
         decision = ranked_public_actions(knowledge,obs,history,attempts,coordinates;
             composing,programs_pending,program_cursor,meters)
         isempty(decision.ranked) && break
@@ -678,41 +678,73 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             end
             continuation = nothing
         end
+        spatial_choice = if !isnothing(spatial)
+            planned = autonomous_visual_plan(visual,spatial,obs,decision,rec.before_ref)
+            isnothing(planned) ? spatial_experiment(spatial,obs,decision) : planned
+        end
+        baseline_action = isnothing(spatial_choice) ? item.action : Dict("id"=>spatial_choice.id)
         program_note = nothing
+        program_forecast = nothing
         if programs_pending
+            constrained = composing || !isnothing(spatial)
+            primitive_limit = isnothing(goal_cursor) ? rec.limit-rec.sent_count :
+                length(projected_trace(goal_cursor))
+            function eligible(cursor)
+                next = current_program_step(cursor,decision)
+                isnothing(next) && return nothing
+                constrained || return (;next,forecast=nothing)
+                forecast = goal_program(knowledge,obs,history,cursor,coordinates,meters,goal,spatial,
+                    visual,spatial_choice,primitive_limit,goal_cursor)
+                isnothing(forecast) && return nothing
+                return (;next=first(forecast.path).item,forecast)
+            end
+            selected_program = nothing
             if isnothing(program_cursor)
                 state = content_hash(JSON.json([obs.levels_completed,last(obs.frames),obs.available_actions]))
+                considered = Set{String}()
                 for program in knowledge.programs
-                    length(program.steps) <= rec.limit-rec.sent_count || continue
+                    constrained || length(program.steps) <= rec.limit-rec.sent_count || continue
                     any(step->program_step_key(step) in refuted_steps,program.steps) && continue
+                    if !isnothing(spatial_choice) && first(program.steps)["action"]["id"] != spatial_choice.id
+                        continue
+                    end
+                    contract = semantic_hash([program.definition,program_step_key.(program.steps),program.shared])
+                    contract in considered && continue
+                    push!(considered,contract)
                     cursor = ProgramCursor(program,1,Any[])
-                    first_step = current_program_step(cursor,decision)
-                    isnothing(first_step) && continue
-                    key = (program.definition,state,active_id(first_step.chosen.model))
+                    candidate = eligible(cursor)
+                    isnothing(candidate) && continue
+                    key = (contract,state,active_id(candidate.next.chosen.model))
                     key in program_attempts && continue
                     push!(program_attempts,key)
                     program_cursor = cursor
+                    selected_program = candidate
                     break
                 end
+            else
+                selected_program = eligible(program_cursor)
             end
             if !isnothing(program_cursor)
-                next = current_program_step(program_cursor,decision)
                 definition = program_cursor.program
                 program_note = Dict("definition"=>definition.definition,"publication"=>definition.publication,
                     "depth"=>definition.depth,"index"=>program_cursor.next_step,
                     "length"=>length(definition.steps),"training_events"=>definition.sources,
-                    "available_after"=>definition.available_after)
-                if isnothing(next)
+                    "available_after"=>definition.available_after,
+                    "ordinary_action"=>first(decision.ranked).action,"baseline_action"=>baseline_action)
+                if isnothing(selected_program)
                     program_note["feedback"] = "withdrawn_before_unproved_step"
+                    program_note["withdrawn_suffix"] = collect(program_cursor.next_step:length(definition.steps))
                     program_cursor = nothing
                 else
-                    item = next
+                    item = selected_program.next
+                    program_forecast = selected_program.forecast
+                    if !isnothing(program_forecast)
+                        program_note["goal"] = goal_program_record(program_forecast)
+                        goal_cursor = nothing
+                        policy_note = nothing
+                    end
                 end
             end
-        end
-        spatial_choice = if !isnothing(spatial) && isnothing(program_cursor)
-            planned = autonomous_visual_plan(visual,spatial,obs,decision,rec.before_ref)
-            isnothing(planned) ? spatial_experiment(spatial,obs,decision) : planned
         end
         experiment = if !frozen && !composing && isnothing(program_cursor) && isnothing(spatial_choice)
             select_experiment!(experiments,rec.store,decision.ranked,obs.available_actions,rec.before_ref)
@@ -727,7 +759,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             item = decision.ranked[choice]
             policy_note = nothing
         end
-        if !isnothing(spatial_choice)
+        if !isnothing(spatial_choice) && isnothing(program_cursor)
             requested = first(row for row in decision.ranked if row.action == Dict("id"=>spatial_choice.id))
             item = merge(requested,(reason=spatial_choice.reason,))
             policy_note = nothing
@@ -739,6 +771,17 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             program = program_cursor.program
             append!(plan_reads,program.sources)
             isnothing(program.available_after) || push!(plan_reads,program.available_after)
+            if !isnothing(program_forecast)
+                for step in program_forecast.path
+                    append!(plan_reads,recovery_reads(rec,step.item.chosen.model))
+                end
+                if !isnothing(program_forecast.continuation)
+                    rules = Set(step["rule"] for step in program_forecast.continuation)
+                    for model in knowledge.active
+                        model.rule.id in rules && append!(plan_reads,recovery_reads(rec,model))
+                    end
+                end
+            end
         end
         prediction = predict_public(rec,item;plan_reads)
         if !isnothing(spatial_choice)
@@ -860,7 +903,14 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         assessment = isnothing(item.chosen) ? (actual=Dict(),assessments=Dict()) :
             measure_joint((model=item.chosen.model.rule,fragments=item.chosen.fragments),sample.after)
         if !isnothing(program_cursor)
-            response = program_feedback!(program_cursor,item,assessment,effects)
+            unproved = !isnothing(program_forecast) &&
+                (sample.after != first(program_forecast.path).frame ||
+                 any(!=("response_trace"),keys(effects.public_delta)))
+            response = unproved ? "goal_projection_refuted" : program_feedback!(program_cursor,item,assessment,effects)
+            if response == "advance" && !isnothing(program_forecast) && length(program_forecast.path) == 1
+                response = "completed"
+                program_note["terminated_at_goal"] = true
+            end
             program_note["feedback"] = response
             if response != "advance"
                 if response != "completed"
@@ -934,13 +984,13 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             count_for_batch = config.learning["batch_confirmed_events"]
             prepared = nothing
             if sequence_enabled && last_job == :effect && count-last_sequence_check >= count_for_batch
-                corpus = compile_sequence_corpus([sequence_events];observations=knowledge.observations,
-                    close_revisits=true,include_open=false)
+                closed = compile_sequence_corpus([sequence_events];observations=knowledge.observations,
+                    close_revisits=true)
                 last_sequence_check = count
-                key = program_corpus_key(corpus)
-                if key != program_prefix && !isempty(corpus.programs)
+                corpus = next_program_corpus(closed,sequence_events,knowledge.observations,submitted_programs,completed_cohorts)
+                if !isnothing(corpus) && !isempty(corpus.programs) && program_corpus_key(corpus) ∉ submitted_programs
                     prepared = prepare_program_learning!(knowledge,config,rec.store,repo_root,corpus)
-                    program_prefix = key
+                    push!(submitted_programs,prepared.key)
                     last_job = :program
                 end
             end
@@ -956,7 +1006,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                     inflight = job
                 else
                     status = wait_worker(job.job,store_path(rec.store))
-                    collect_online_job!(knowledge,config,rec,job,status,publications,program_jobs)
+                    collect_online_job!(knowledge,config,rec,job,status,publications,program_jobs,completed_cohorts)
                 end
             end
         end
@@ -966,7 +1016,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     end
     if !isnothing(inflight)
         status = wait_worker(inflight.job,store_path(rec.store))
-        collect_online_job!(knowledge,config,rec,inflight,status,publications,program_jobs)
+        collect_online_job!(knowledge,config,rec,inflight,status,publications,program_jobs,completed_cohorts)
     end
     final = finalize_learning!(knowledge,config,rec.store,pairs,repo_root;frozen,inflight=nothing)
     append!(publications,final.publications)
@@ -976,8 +1026,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         corpus = compile_sequence_corpus(episodes;observations=knowledge.observations,close_revisits=true)
         artifact = store_path(rec.store,"learning","sequence-corpus.json")
         compiled = persist_sequence_corpus(episodes,artifact;corpus)
-        if !rec.frozen && !isempty(corpus.programs) && program_corpus_key(corpus) != program_prefix
-            searched = train_program_corpus!(knowledge,config,rec.store,repo_root,corpus;available_after=rec.before_ref)
+        tail = next_program_corpus(corpus,sequence_events,knowledge.observations,submitted_programs,completed_cohorts)
+        if !rec.frozen && !isnothing(tail) && !isempty(tail.programs) && program_corpus_key(tail) ∉ submitted_programs
+            searched = train_program_corpus!(knowledge,config,rec.store,repo_root,tail;available_after=rec.before_ref)
             push!(program_jobs,searched)
             haskey(searched,"publication") && push!(publications,searched["publication"])
         end
@@ -994,7 +1045,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     outcome = (; actions=count, publications, state=rec.observation.state, models=length(knowledge.active),
         levels_completed=rec.observation.levels_completed, win_levels=rec.observation.win_levels,
         frozen_before=frozen_version, frozen_after=after_version, consumed_definition_depth=consumed_depth,
-        pending_learning_events=final.pending,sequence)
+        pending_learning_events=final.pending,pending_program_jobs=pending_program_jobs(rec.store),sequence)
     composing || return outcome
     truth = isnothing(goal) ? unknown_truth : goal_truth(goal,last(rec.observation.frames))
     return merge(outcome,(goal=truth == proven ? "observed" : truth == disproven ? "not_reached" : "unknown",))
@@ -1029,8 +1080,15 @@ function recover_learning!(store, config, repo_root)
     end
     jobs = learning_jobs(store)
     knowledge.learning_jobs = isempty(jobs) ? 0 : parse(Int,split(basename(last(jobs)),'-')[2])
+    records = Dict(item.event["event_id"]=>item for item in sources)
+    for (before,after) in prior.pairs
+        records[before.event["event_id"]] = before
+        records[after.event["event_id"]] = after
+    end
+    cutoff = isempty(sources) ? nothing : last(sources).event["event_id"]
     if session["frozen"] && isfile(store_path(store,"learning","evaluation-boundary.json"))
-        return (; pending=summarize_learning!(store))
+        recover_program_jobs!(knowledge,config,store,repo_root,records,cutoff;published_only=true)
+        return (;pending=summarize_learning!(store),programs=pending_program_jobs(store))
     end
     by_event = Dict(pair[2].event["event_id"]=>pair for pair in pairs)
     attempted = Set{String}()
@@ -1054,5 +1112,6 @@ function recover_learning!(store, config, repo_root)
     for group in Iterators.partition(outstanding,config.learning["batch_confirmed_events"])
         online_learn!(knowledge,config,store,group,repo_root)
     end
-    return (; pending=summarize_learning!(store))
+    recover_program_jobs!(knowledge,config,store,repo_root,records,cutoff)
+    return (;pending=summarize_learning!(store),programs=pending_program_jobs(store))
 end

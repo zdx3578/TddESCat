@@ -1,0 +1,321 @@
+{
+  "source": {
+    "schema_version": 1,
+    "suite_id": "autonomous-offline-win",
+    "run_id": "measurement-program-official-r04",
+    "git_commit": "f4f5588a1bc1401b6fa6ba34b85deda2e77809c7",
+    "worktree_sha256": "73447939d3763221ef0c7e88c50de17ad9eeb2c3e729e3e87102fe4eab7444ea",
+    "config_sha256": "1042b988b2cb9a8e6ce2a14531af88bc97f0acbdceba1b7757055045e6fea853",
+    "locks": {
+      "python": "606a07ec1ecbd2282472e305c1b24f94107343ea491acef8969801b703d89540",
+      "julia": "0ec6da0595f34a8ef38d83105253b1733668929e66540aa61f9f9ec5d432bbc8",
+      "rust": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2"
+    },
+    "environment": "official_offline_http",
+    "isolation": "linux_namespaces",
+    "started_at": "2026-11-25T09:42:15.731255+00:00"
+  },
+  "arc_source": {
+    "environment": "official_offline_http",
+    "game_id": "ls20-9607627b",
+    "game_source_sha256": "298c810da2850d557c95d92a2cbd846df29a45d7134e20888617bedf5dafcd92",
+    "metadata_sha256": "311c6ae235ec0c52127a3197800e36793092d6f5ca404f873ed04ea7a48819b5",
+    "catalog_sha256": "3a0a5377d9bdf53ee0004b6ba12e7e2f4379189d591e3cb199d7603ac31649b6",
+    "toolkit": "0.9.10",
+    "engine": "0.9.3"
+  },
+  "exact_original_artifact_index_sha256": "7f8b77d74e3072e5e3efe5eb4799f3412ba085b10f46f92acf74ccb4a55b6070",
+  "portable_artifact_index_sha256": "23979e8975fa829c788efa9cf6bec3f280ec860412cd616208ef38301297fddb",
+  "worker_identity": {
+    "binary_sha256": "7875508f65b90d21fa142b5d554277889a083b8351a21d9c75b657dd06a02272",
+    "build_sha256": "b4d791d8d11e9a69a0df1b37d75872a06dd2d3de379a75cc0fdc4b5960672486"
+  },
+  "terminal": {
+    "state": "WIN",
+    "levels_completed": 7,
+    "events": 752,
+    "frames": 1514,
+    "audited_actions": 744,
+    "single_session": true,
+    "scorecard_win": true,
+    "scorecard_sha256": "3655e5773d4a85e880e9a698d8bbe1a3c249f32880b2f107ea8eb7679c502eb2",
+    "progress_transfer": true,
+    "replay_exit": 0
+  },
+  "goal_program": {
+    "errors": [],
+    "ordinary_choice_changed": true,
+    "baseline_choice_changed": false,
+    "cross_level": true
+  },
+  "completed_programs_by_level": {
+    "2": 6,
+    "3": 7,
+    "4": 3
+  },
+  "ordinary_choice_changed_count": 21,
+  "refuted_program_projections": 7,
+  "first_withdrawal": {
+    "event": "e-359bba0efa69e219-c000000109",
+    "expected_frame": "f0ef705bae2cc2007f6b3a905afc776fdd91e447a118e1cef92b83845fd50cec",
+    "observed_frame": "5113ad59f142caa70a07687499bff99e8b5dec6d3e4d8d3fdf4be0213569138d",
+    "assessment": {
+      "translation-49-45": "supported",
+      "measurement-700b061cafa69b711d317f122700d5d0965232e3ac0893c12b8307e493bee09f": "supported",
+      "translation-49-47": "supported"
+    },
+    "withdrawn_suffix": [
+      2
+    ],
+    "next_event": "e-359bba0efa69e219-c000000110",
+    "next_action": {
+      "id": 1
+    }
+  },
+  "comparison_with_measurement_only": {
+    "baseline_receipts": 752,
+    "with_program_receipts": 752,
+    "same_ordered_trajectory": true,
+    "baseline_sha256": "209df5e02321249975bee2b03301d4f4026b789f3246a7e9c82e10223306307b",
+    "with_program_sha256": "209df5e02321249975bee2b03301d4f4026b789f3246a7e9c82e10223306307b"
+  },
+  "shared_definition": "lib_31b49dee13592c185aeda2ec082d5a668b67c21250960507e38d29088391719f",
+  "verified_cases": [
+    {
+      "waypoint": [
+        34,
+        25
+      ],
+      "steps": [
+        {
+          "event": "e-359bba0efa69e219-c000000086",
+          "definition": "lib_31b49dee13592c185aeda2ec082d5a668b67c21250960507e38d29088391719f",
+          "level": 2,
+          "selected": {
+            "id": 1
+          },
+          "ordinary": {
+            "id": 3
+          },
+          "baseline": {
+            "id": 1
+          },
+          "measurements": [
+            "700b061cafa69b711d317f122700d5d0965232e3ac0893c12b8307e493bee09f"
+          ],
+          "command": "c000000086",
+          "publication": "08c7e8f50e99706775f25ccbc266ba079dbf85c92030abc9567f8dae05f6c590",
+          "before_receipt": "4b946198d02e1f6868e8c21e0ced0b2fb1b7fa345aa18d88cfa9a3612df86882",
+          "response": "d08ea23820b14253aef88489aefdecfc380c8c0277069fed6f872aaa17592a7b",
+          "available_after": "e-359bba0efa69e219-c000000048",
+          "training_events": [
+            "e-359bba0efa69e219-c000000034",
+            "e-359bba0efa69e219-c000000035"
+          ],
+          "feedback": "advance",
+          "expected": {
+            "measurement-700b061cafa69b711d317f122700d5d0965232e3ac0893c12b8307e493bee09f": 36,
+            "translation-34-35": [
+              0,
+              -5
+            ],
+            "translation-34-37": [
+              0,
+              -5
+            ],
+            "visual_signal": {
+              "width": 3,
+              "height": 3,
+              "mask": 359,
+              "pigment": 9
+            }
+          },
+          "actual": {
+            "measurement-700b061cafa69b711d317f122700d5d0965232e3ac0893c12b8307e493bee09f": 36,
+            "translation-34-35": [
+              0,
+              -5
+            ],
+            "translation-34-37": [
+              0,
+              -5
+            ]
+          }
+        },
+        {
+          "event": "e-359bba0efa69e219-c000000087",
+          "definition": "lib_31b49dee13592c185aeda2ec082d5a668b67c21250960507e38d29088391719f",
+          "level": 2,
+          "selected": {
+            "id": 1
+          },
+          "ordinary": {
+            "id": 4
+          },
+          "baseline": {
+            "id": 1
+          },
+          "measurements": [
+            "700b061cafa69b711d317f122700d5d0965232e3ac0893c12b8307e493bee09f"
+          ],
+          "command": "c000000087",
+          "publication": "08c7e8f50e99706775f25ccbc266ba079dbf85c92030abc9567f8dae05f6c590",
+          "before_receipt": "d08ea23820b14253aef88489aefdecfc380c8c0277069fed6f872aaa17592a7b",
+          "response": "0acfd1961e631866dab5eab6e72909ddbf38f17fc09cc5795689eac53292c586",
+          "available_after": "e-359bba0efa69e219-c000000048",
+          "training_events": [
+            "e-359bba0efa69e219-c000000034",
+            "e-359bba0efa69e219-c000000035"
+          ],
+          "feedback": "completed",
+          "expected": {
+            "measurement-700b061cafa69b711d317f122700d5d0965232e3ac0893c12b8307e493bee09f": 34,
+            "translation-34-30": [
+              0,
+              -5
+            ],
+            "visual_signal": {
+              "width": 3,
+              "height": 3,
+              "mask": 359,
+              "pigment": 9
+            },
+            "translation-34-32": [
+              0,
+              -5
+            ]
+          },
+          "actual": {
+            "measurement-700b061cafa69b711d317f122700d5d0965232e3ac0893c12b8307e493bee09f": 34,
+            "translation-34-30": [
+              0,
+              -5
+            ],
+            "translation-34-32": [
+              0,
+              -5
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "waypoint": [
+        54,
+        10
+      ],
+      "steps": [
+        {
+          "event": "e-359bba0efa69e219-c000000224",
+          "definition": "lib_31b49dee13592c185aeda2ec082d5a668b67c21250960507e38d29088391719f",
+          "level": 3,
+          "selected": {
+            "id": 1
+          },
+          "ordinary": {
+            "id": 2
+          },
+          "baseline": {
+            "id": 1
+          },
+          "measurements": [
+            "356a1e3c1a72d48000be53a9af26eff0b81c6e50a3c85b9a8cf9805045ed12ee"
+          ],
+          "command": "c000000224",
+          "publication": "08c7e8f50e99706775f25ccbc266ba079dbf85c92030abc9567f8dae05f6c590",
+          "before_receipt": "119279d9c632a16b997693ea30c6adc4caa52c2fc7c77cf27fab4d69be95d885",
+          "response": "bc43d0dd557fb602f03ff6c30cfc36a8eda3b20927f55a4ee7abbfa71aa9d661",
+          "available_after": "e-359bba0efa69e219-c000000048",
+          "training_events": [
+            "e-359bba0efa69e219-c000000034",
+            "e-359bba0efa69e219-c000000035"
+          ],
+          "feedback": "advance",
+          "expected": {
+            "translation-54-22": [
+              0,
+              -5
+            ],
+            "measurement-356a1e3c1a72d48000be53a9af26eff0b81c6e50a3c85b9a8cf9805045ed12ee": 22,
+            "translation-54-20": [
+              0,
+              -5
+            ],
+            "visual_signal": {
+              "width": 3,
+              "height": 3,
+              "mask": 359,
+              "pigment": 9
+            }
+          },
+          "actual": {
+            "translation-54-22": [
+              0,
+              -5
+            ],
+            "measurement-356a1e3c1a72d48000be53a9af26eff0b81c6e50a3c85b9a8cf9805045ed12ee": 22,
+            "translation-54-20": [
+              0,
+              -5
+            ]
+          }
+        },
+        {
+          "event": "e-359bba0efa69e219-c000000225",
+          "definition": "lib_31b49dee13592c185aeda2ec082d5a668b67c21250960507e38d29088391719f",
+          "level": 3,
+          "selected": {
+            "id": 1
+          },
+          "ordinary": {
+            "id": 3
+          },
+          "baseline": {
+            "id": 1
+          },
+          "measurements": [
+            "356a1e3c1a72d48000be53a9af26eff0b81c6e50a3c85b9a8cf9805045ed12ee"
+          ],
+          "command": "c000000225",
+          "publication": "08c7e8f50e99706775f25ccbc266ba079dbf85c92030abc9567f8dae05f6c590",
+          "before_receipt": "bc43d0dd557fb602f03ff6c30cfc36a8eda3b20927f55a4ee7abbfa71aa9d661",
+          "response": "1fb8f74bebfd00e64ae11837cfc0bc030376fc1f26671e02b57120789304e4b6",
+          "available_after": "e-359bba0efa69e219-c000000048",
+          "training_events": [
+            "e-359bba0efa69e219-c000000034",
+            "e-359bba0efa69e219-c000000035"
+          ],
+          "feedback": "completed",
+          "expected": {
+            "translation-54-15": [
+              0,
+              -5
+            ],
+            "measurement-356a1e3c1a72d48000be53a9af26eff0b81c6e50a3c85b9a8cf9805045ed12ee": 20,
+            "translation-54-17": [
+              0,
+              -5
+            ],
+            "visual_signal": {
+              "width": 3,
+              "height": 3,
+              "mask": 359,
+              "pigment": 9
+            }
+          },
+          "actual": {
+            "translation-54-15": [
+              0,
+              -5
+            ],
+            "measurement-356a1e3c1a72d48000be53a9af26eff0b81c6e50a3c85b9a8cf9805045ed12ee": 20,
+            "translation-54-17": [
+              0,
+              -5
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

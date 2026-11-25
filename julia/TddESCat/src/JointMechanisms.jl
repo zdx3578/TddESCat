@@ -33,7 +33,8 @@ struct JointMechanism
 end
 
 function frame_patch(output, before, after, anchors)
-    output.complete && isempty(output.residual) && isempty(output.public_delta) || return nothing
+    output.complete && isempty(output.residual) && all(==("response_trace"),keys(output.public_delta)) ||
+        return nothing
     moving = Set{Pixel}()
     fixed = Set{Pixel}()
     for effect in output.effects

@@ -271,6 +271,8 @@ def audit_live_program(path, events):
         receipt = receipts[check["event_ref"]]
         decision = decisions[receipt["command_ref"]]
         assert decision["reason"] == "revalidated_learned_program"
+        ordinary = decision["candidates"][0]["action"]
+        assert program["ordinary_action"] == ordinary
         assert set(check["assessments"].values()) == {"supported"}
         activation = discovered[program["publication"]]
         assert program["available_after"] == activation["available_after"]
@@ -294,7 +296,12 @@ def audit_live_program(path, events):
         ]
         pose = [min(pixel[axis] for pixel in effect["before"]) for axis in (0, 1)]
         applications.append(
-            {"event": receipt["event_id"], "before_pose": pose, **program}
+            {
+                "event": receipt["event_id"],
+                "before_pose": pose,
+                "changes_ordinary_choice": receipt["action"] != ordinary,
+                **program,
+            }
         )
     completed = [row for row in applications if row["feedback"] == "completed"]
     assert len(completed) >= 2, applications
@@ -307,6 +314,7 @@ def audit_live_program(path, events):
         assert start["index"] == 1 and start["definition"] == row["definition"]
         repeated.setdefault(row["definition"], set()).add(tuple(start["before_pose"]))
     assert any(len(poses) >= 2 for poses in repeated.values()), completed
+    assert any(row["changes_ordinary_choice"] for row in applications), applications
     return {
         "actions": len(events) - 1,
         "publications": list(discovered.values()),

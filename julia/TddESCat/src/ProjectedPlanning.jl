@@ -81,6 +81,113 @@ function compatible_frame_projection(supports, expected, frame)
     return isnothing(matched) ? (choice=nothing,frame=nothing,conflict=false) : matched
 end
 
+function projected_program_ports(choice,frame)
+    groups = public_components(frame)
+    enclosed = [role.target for role in enclosure_pairs(groups)]
+    ports = Any[]
+    for (model,part) in zip(choice.model.rule.effects,choice.fragments)
+        port = if part.family == :measurement
+            (instance=part.instance,value=part.expected)
+        elseif part.family == :count
+            support = sort!(reduce(vcat,(s for s in groups if shape_template(s) == model.template);init=ColorCell[]))
+            (instance=part.instance,count=part.expected,support)
+        elseif part.family == :translation
+            model_binding(model,groups,enclosed)
+        elseif part.family == :selection
+            part.basis
+        else
+            ColorCell[(x,y,UInt8(part.expected)) for (x,y,_) in part.basis]
+        end
+        isnothing(port) && return nothing
+        push!(ports,port)
+    end
+    return ports
+end
+
+function forecast_program(knowledge,obs,history,cursor,coordinates,meters,accepts,reaches,steps_available)
+    draft = ProgramCursor(cursor.program,cursor.next_step,copy(cursor.outputs))
+    observation = obs
+    sequence = NamedTuple[]
+    previous = last(obs.frames)
+    width = maximum((atom isa HistorySuffix ? length(atom.actions) : atom isa RecentAction ? 1 : 0
+        for model in knowledge.active for atom in model.condition.atoms);init=1)
+    recent = copy(history)
+    for i in 1:min(steps_available,length(draft.program.steps)-draft.next_step+1)
+        decision = ranked_public_actions(knowledge,observation,recent,Dict{ConcreteAction,Int}(),
+            coordinates;composing=true,programs_pending=true,program_cursor=draft,meters)
+        item = current_program_step(draft,decision)
+        isnothing(item) && return nothing
+        frame = item.projection
+        isnothing(frame) && return nothing
+        accepts(i,previous,item,frame) || return nothing
+        outputs = projected_program_ports(item.chosen,frame)
+        isnothing(outputs) && return nothing
+        push!(sequence,(;item,frame))
+        recent = [recent;item.action["id"]]
+        recent = last(recent,min(width,length(recent)))
+        reaches(i,frame,recent) && return sequence
+        draft.outputs = outputs
+        draft.next_step += 1
+        previous = frame
+        observation = (frames=[frame],available_actions=obs.available_actions)
+    end
+    return nothing
+end
+
+function goal_program(knowledge,obs,history,cursor,coordinates,meters,goal,spatial,visual,
+                      spatial_choice,primitive_limit,primitive)
+    left = length(cursor.program.steps)-cursor.next_step+1
+    if !isnothing(goal)
+        path = forecast_program(knowledge,obs,history,cursor,coordinates,meters,
+            (_,_,_,_)->true,(_,frame,_)->goal_truth(goal,frame) == proven,min(left,primitive_limit))
+        if !isnothing(path)
+            return (contract="distance_to_marker",target=goal.marker,role=nothing,path,continuation=nothing)
+        end
+        isnothing(primitive) && return nothing
+        trace = projected_trace(primitive)
+        targets = Dict(state_key(primitive.projection.states[step["after"]])=>(index,trace[index+1:end])
+            for (index,step) in enumerate(trace[1:end-1]))
+        successor = nothing
+        function establishes_tail(index,frame,recent)
+            key = state_key(ProjectedState(frame,sort(obs.available_actions),recent))
+            target = get(targets,key,nothing)
+            isnothing(target) && return false
+            index == left && index <= first(target) || return false
+            successor = last(target)
+            return true
+        end
+        path = forecast_program(knowledge,obs,history,cursor,coordinates,meters,(_,_,_,_)->true,
+            establishes_tail,min(left,primitive_limit))
+        isnothing(path) && return nothing
+        return (contract="goal_predecessor",target=frame_key(last(path).frame),role=nothing,path,
+            continuation=successor)
+    elseif !isnothing(spatial_choice) && !isnothing(visual.continuation) &&
+            !get(spatial_choice,:executes_contact,true)
+        left <= primitive_limit || return nothing
+        tail = visual.continuation.steps
+        length(tail) >= left-1 || return nothing
+        left > 1 && any(step->!isnothing(step.contact),tail[1:left-1]) && return nothing
+        actions = [spatial_choice.id;[step.action for step in tail[1:left-1]]]
+        anchors = Pixel[spatial_choice.destination,(step.to for step in tail[1:left-1])...]
+        accepts = (i,_,item,frame)-> item.action["id"] == actions[i] &&
+            locate_role(frame,spatial.role) == anchors[i]
+        path = forecast_program(knowledge,obs,history,cursor,coordinates,meters,
+            accepts,(i,frame,_)->i == left && locate_role(frame,spatial.role) == last(anchors),left)
+        isnothing(path) && return nothing
+        return (contract="observed_route_waypoint",target=last(anchors),role=copy(spatial.role),path,
+            continuation=nothing)
+    end
+    return nothing
+end
+
+function goal_program_record(forecast)
+    return Dict("contract"=>forecast.contract,"target"=>forecast.target,"role"=>forecast.role,
+        "continuation"=>forecast.continuation,
+        "steps"=>[Dict("action"=>step.item.action,"frame_sha256"=>frame_key(step.frame),
+            "mechanism"=>active_id(step.item.chosen.model),"queries"=>step.item.chosen.expected)
+            for step in forecast.path])
+end
+
 struct ProjectedState
     frame::Matrix{UInt8}
     actions::Vector{Int}

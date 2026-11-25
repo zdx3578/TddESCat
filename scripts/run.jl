@@ -102,7 +102,7 @@ function main(args)
             TddESCat.recover_learning!(store,config,ROOT)
         end
         println(JSON.json(result))
-        return isempty(result.pending) ? 0 : 1
+        return isempty(result.pending) && isempty(result.programs) ? 0 : 1
     end
     if length(args) == 2 && first(args) == "--replay"
         isdir(last(args)) || throw(ArgumentError("Public run directory does not exist"))

@@ -39,9 +39,14 @@ function decode_program_steps(term, registry)
         return (steps=[left.steps;right.steps],
             shared=[left.shared;[descriptor["layout"]["shared"]];right.shared])
     elseif descriptor["kind"] == "Step"
+        layout = descriptor["layout"]
+        if get(layout,"encoding",nothing) == "bound-effects-v1"
+            action = first(term["args"])
+            action["kind"] == "Const" && action["sort"] == "Integer" || error("Invalid bound Step action")
+            return (steps=[(;action=action["value"],effects=term["args"][2:end],layout)],shared=Any[])
+        end
         action,pre,effect,post = term["args"]
         action["kind"] == "Const" && action["sort"] == "Integer" || error("Invalid Step action")
-        layout = descriptor["layout"]
         all(registry[node["operator"]]["descriptor"]["kind"] == "Atom" && node["args"][1]["kind"] == "Slot" &&
             registry[node["operator"]]["descriptor"]["layout"]["phase"] == phase
             for (node,phase) in ((pre,"before"),(post,"after"))) || error("Step relative phases differ")
@@ -57,6 +62,16 @@ function verify_program_interval(expanded, registry, scope, first_step, last_ste
         error("Program expansion changed trace sharing")
     for (step,record,slots) in zip(expanded.steps,scope["steps"][interval],scope["role_slots"][interval])
         raw = record["effects"]
+        if get(step.layout,"encoding",nothing) == "bound-effects-v1"
+            contracts = [step_effect_contract(Symbol(row["family"]),row["values"],row["after"]) for row in raw]
+            families = [row["family"] for row in raw]
+            steps = [wire_const(arg.sort,arg.value) for part in contracts for arg in part.args]
+            step.action == record["action"]["id"] &&
+                step.layout["effects"] == [item.descriptor for item in contracts] &&
+                step.layout["input_ports"] == step.layout["output_ports"] == families &&
+                step.effects == steps || error("Bound Step changed its typed public effect")
+            continue
+        end
         step.action == record["action"]["id"] && length(step.effects) == length(raw) ||
             error("Program expansion changed public action or effect count")
         for (child,data,pair) in zip(step.effects,raw,slots)
@@ -120,7 +135,46 @@ function record_program_assessment(job,assessment)
     return merge(assessment,Dict("job"=>basename(job)))
 end
 
-function prepare_program_learning!(knowledge,config,store,repo_root,corpus)
+function program_corpus_key(corpus)
+    return semantic_hash(JSON.parse(JSON.json([corpus.programs,corpus.slots,corpus.scopes])))
+end
+
+function next_program_corpus(complete,events,observations,submitted,learned)
+    any(step->any(effect->effect["family"] == "measurement",step["effects"]),
+        Iterators.flatten(scope["steps"] for scope in complete.scopes)) || return complete
+    cohorts = Dict{String,Vector{Tuple{Int,Int,Int}}}()
+    for (index,scope) in enumerate(complete.scopes)
+        contracts = program_step_key.(scope["steps"])
+        for start in eachindex(contracts), stop in start+1:length(contracts)
+            key = semantic_hash([contracts[start:stop],scope["shared"][start:stop-1]])
+            key in learned && continue
+            members = get!(Vector{Tuple{Int,Int,Int}},cohorts,key)
+            if isempty(members) || last(members)[1] != index || last(members)[3] < start
+                push!(members,(index,start,stop))
+            end
+        end
+    end
+    eligible = filter(row->length(last(row)) > 1,collect(cohorts))
+    sort!(eligible;by=row->begin
+        _,lo,hi = first(last(row))
+        (hi-lo,-length(last(row)),first(row))
+    end)
+    by_ref = Dict(item.event["event_id"]=>item for item in events)
+    for (key,members) in eligible
+        episodes = []
+        for (index,lo,hi) in members
+            rows = complete.scopes[index]["steps"][lo:hi]
+            push!(episodes,[by_ref[first(rows)["before_ref"]];[by_ref[row["event_ref"]] for row in rows]])
+        end
+        corpus = compile_sequence_corpus(episodes;observations)
+        isempty(corpus.programs) && continue
+        program_corpus_key(corpus) in submitted && continue
+        return merge(corpus,(cohort=key,))
+    end
+    return nothing
+end
+
+function prepare_program_learning!(knowledge,config,store,repo_root,corpus;retry_of=nothing)
     isempty(corpus.programs) && return nothing
     settings = read_json(store_path(store,"supervision.json"))
     config_text = read(config.learning["policy_file"],String)
@@ -130,8 +184,8 @@ function prepare_program_learning!(knowledge,config,store,repo_root,corpus)
     isnothing(current) || merge_semantic_signature!(corpus.signature,current.bundle["signature"])
     library = scoped_search_library(base,corpus.signature,corpus.programs,corpus.slots)
     refs = sort!(unique!([ref for scope in corpus.scopes for ref in scope["events"]]))
-    snapshot = "sequence-" * semantic_hash([[step["event_ref"],step["response_blob"]]
-        for scope in corpus.scopes for step in scope["steps"]])
+    key = program_corpus_key(corpus)
+    snapshot = "sequence-" * key
     knowledge.learning_jobs += 1
     job = store_path(store,"learning","job-" * lpad(knowledge.learning_jobs,6,'0'))
     atomic_json(joinpath(job,"sequence-corpus.json"),corpus)
@@ -139,11 +193,13 @@ function prepare_program_learning!(knowledge,config,store,repo_root,corpus)
         corpus.programs,corpus.origins,corpus.slots;repo_root,config_text,
         engine_identity=settings["engine_identity"],input_scope_complete=isempty(corpus.obligations),
         intent="program",consumer="program-semantics",obligation_refs=refs)
-    return (;job,manifest,snapshot,corpus)
+    atomic_json(joinpath(job,"program-submission.json"),Dict(
+        "snapshot"=>snapshot,"key"=>key,"retry_of"=>retry_of,"evidence"=>refs))
+    return (;job,manifest,snapshot,corpus,key)
 end
 
 function collect_program_learning!(knowledge,store,prepared,status; available_after=nothing)
-    (;job,manifest,snapshot,corpus) = prepared
+    (;job,manifest,snapshot,corpus,key) = prepared
     status["policy_sha256"] == manifest["config_file"]["sha256"] &&
         status["binary_sha256"] == manifest["engine_pin"]["binary_sha256"] ||
         error("Program worker policy or binary differs")
@@ -151,18 +207,40 @@ function collect_program_learning!(knowledge,store,prepared,status; available_af
     checked = isdir(output) ? read_stitch_rounds(joinpath(job,"input"),output) : nothing
     complete = !isnothing(checked) && !isempty(checked.verified) && status["code"] in (0,10) &&
         last(checked.verified)["round_outcome"] == "no_positive_gain"
-    assessment = Dict{String,Any}("status"=>status,"search_complete"=>complete,
+    assessment = Dict{String,Any}("status"=>status,"key"=>key,"search_complete"=>complete,
         "termination_reason"=>isnothing(checked) || isnothing(checked.summary) ? "worker_incomplete" :
             checked.summary["termination_reason"])
+    hasproperty(corpus,:cohort) && (assessment["cohort"] = corpus.cohort)
     if isnothing(checked) || isempty(checked.verified)
         return record_program_assessment(job,merge(assessment,Dict("result"=>"worker_incomplete")))
     end
+    checked.manifest["evidence_snapshot_id"] == snapshot && checked.text == corpus.programs &&
+        canonical_bytes(checked.signature) == canonical_bytes(corpus.signature) ||
+        error("The program search input does not agree with its submitted corpus")
+    atomic_json(joinpath(job,"program-verification.json"),Dict(
+        "snapshot"=>snapshot,"input_sha256"=>checked.input_sha,
+        "verified_rounds"=>length(checked.verified),"search_complete"=>complete))
     if isempty(last(checked.verified)["calls"])
         return record_program_assessment(job,merge(assessment,Dict("result"=>"no_proved_program")))
     end
-    id = publish_stitch!(store_path(store,"publication"),checked;current_evidence=snapshot)
-    released = read_published_stitch(store_path(store,"publication");publication=id)
+    directory = store_path(store,"publication")
+    activation = joinpath(job,"program-publication.json")
+    old = isfile(activation) ? read_json(activation) : nothing
+    head = read_published_stitch(directory)
+    id = if !isnothing(old)
+        old["input_sha256"] == checked.input_sha || error("The program activation has a different input")
+        available_after = old["available_after"]
+        old["publication"]
+    elseif !isnothing(head) && head.bundle["input_sha256"] == checked.input_sha
+        head.publication
+    else
+        publish_stitch!(directory,checked;current_evidence=snapshot)
+    end
+    released = read_published_stitch(directory;publication=id)
+    released.bundle["input_sha256"] == checked.input_sha || error("The published program has a different input")
     programs = read_program_macros(released,corpus;available_after)
+    atomic_json(activation,Dict("publication"=>id,"available_after"=>available_after,
+        "snapshot"=>snapshot,"input_sha256"=>checked.input_sha))
     for program in programs
         any(p->p.definition == program.definition && p.sources == program.sources,knowledge.programs) ||
             push!(knowledge.programs,program)
@@ -171,6 +249,57 @@ function collect_program_learning!(knowledge,store,prepared,status; available_af
     sort!(knowledge.programs;by=p->(-length(p.steps),p.definition))
     return record_program_assessment(job,merge(assessment,Dict("result"=>"published","publication"=>id,
         "available_after"=>available_after,"programs"=>unique([program.definition for program in programs]))))
+end
+
+function program_jobs_by_snapshot(store)
+    jobs = Dict{String,String}()
+    for job in learning_jobs(store)
+        path = joinpath(job,"sequence-corpus.json")
+        isfile(path) || continue
+        corpus = read_json(path)
+        parsed = (;programs=corpus["programs"],slots=corpus["slots"],scopes=corpus["scopes"])
+        jobs[program_corpus_key(parsed)] = job
+    end
+    return jobs
+end
+
+function program_job_complete(job)
+    file = joinpath(job,"assessment.json")
+    return isfile(file) && get(read_json(file),"search_complete",false)
+end
+
+function pending_program_jobs(store)
+    return sort!([basename(job) for job in values(program_jobs_by_snapshot(store))
+        if !program_job_complete(job)])
+end
+
+function recover_program_jobs!(knowledge,config,store,repo_root,records,available_after;published_only=false)
+    for (key,job) in sort!(collect(program_jobs_by_snapshot(store));by=last)
+        program_job_complete(job) && continue
+        published_only && !isfile(joinpath(job,"program-publication.json")) && continue
+        raw = read_json(joinpath(job,"sequence-corpus.json"))
+        corpus = (;(Symbol(field)=>value for (field,value) in raw)...)
+        for scope in corpus.scopes, step in scope["steps"]
+            before = records[step["before_ref"]]
+            after = records[step["event_ref"]]
+            interpreted = sequence_evidence(before,after,knowledge.observations[step["event_ref"]])
+            canonical_bytes(JSON.parse(JSON.json(interpreted))) == canonical_bytes(step) ||
+                error("Recovered sequence differs from the confirmed raw receipts")
+        end
+        manifest_file = joinpath(job,"input","manifest.json")
+        assessment_file = joinpath(job,"assessment.json")
+        if isfile(manifest_file) && !isfile(assessment_file)
+            manifest = read_json(manifest_file)
+            snapshot = manifest["evidence_snapshot_id"]
+            assessment = collect_program_learning!(knowledge,store,(;job,manifest,snapshot,corpus,key),
+                wait_worker(job,store_path(store));available_after)
+            assessment["search_complete"] && continue
+        end
+        published_only && continue
+        prepared = prepare_program_learning!(knowledge,config,store,repo_root,corpus;retry_of=basename(job))
+        isnothing(prepared) && continue
+        collect_program_learning!(knowledge,store,prepared,wait_worker(prepared.job,store_path(store));available_after)
+    end
 end
 
 function train_program_corpus!(knowledge,config,store,repo_root,corpus; available_after=nothing)
@@ -191,7 +320,8 @@ function train_prior_programs!(knowledge,config,store,repo_root)
         steps >= 2 && push!(get!(Vector{Any},groups,steps),episode)
     end
     for size in sort!(collect(keys(groups)))
-        train_program_corpus!(knowledge,config,store,repo_root,compile_sequence_corpus(groups[size]))
+        train_program_corpus!(knowledge,config,store,repo_root,
+            compile_sequence_corpus(groups[size];observations=knowledge.observations))
     end
     return nothing
 end

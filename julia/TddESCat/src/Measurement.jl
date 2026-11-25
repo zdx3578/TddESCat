@@ -103,9 +103,14 @@ function meter_layout(binding)
     return (meter_axis(box),meter_thickness(box),meter_length(box),binding.from_end)
 end
 
+meter_pattern(binding) = (meter_window(binding.face.box),binding.face.fill,binding.face.rim,
+    binding.blank,binding.from_end)
+
 function match_meter(source,meters)
     id = meter_identity(source)
     exact = findfirst(binding->meter_identity(binding) == id,meters)
+    isnothing(exact) || return meters[exact]
+    exact = findfirst(binding->meter_pattern(binding) == meter_pattern(source),meters)
     isnothing(exact) || return meters[exact]
     candidates = [binding for binding in meters if meter_layout(binding) == meter_layout(source)]
     return length(candidates) == 1 ? only(candidates) : nothing

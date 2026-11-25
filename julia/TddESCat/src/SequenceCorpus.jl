@@ -100,8 +100,43 @@ end
 click_descriptor(binding) = Dict("kind"=>"ClickBinding",
     "layout"=>Dict("view"=>"target-support-grid","denominator"=>binding.denominator))
 
+function step_effect_contract(family,values,after)
+    descriptor = Dict{String,Any}("family"=>string(family),
+        "before_sort"=>effect_sort(family,false),"after_sort"=>effect_sort(family,true))
+    if family == :selection
+        binding = relative_click(values,after)
+        descriptor["click"] = click_descriptor(binding)
+        values = collect(binding.offset)
+    elseif family == :measurement
+        descriptor["measurement"] = meter_contract()
+    elseif family ∉ (:translation,:pigment,:count)
+        error("No typed program port for " * string(family))
+    end
+    sort = family == :pigment ? "Color" : "Integer"
+    return (;descriptor,sorts=fill(sort,length(values)),args=[Literal(sort,value) for value in values])
+end
+
+function measured_sequence_step!(signature,slots,positions,output,action,offset,ports)
+    contracts = [step_effect_contract(effect.family,effect.values,effect.after) for effect in output.effects]
+    layout = Dict("encoding"=>"bound-effects-v1","input_ports"=>ports,"output_ports"=>ports,
+        "effects"=>[item.descriptor for item in contracts])
+    role_slots = [(add_sequence_slot!(slots,positions,effect_sort(effect.family,false),"before",offset,i).index,
+        add_sequence_slot!(slots,positions,effect_sort(effect.family,true),"after",offset,i).index)
+        for (i,effect) in enumerate(output.effects)]
+    sort = program_sort!(signature,ports,ports)
+    parameters = reduce(vcat,(item.sorts for item in contracts);init=String[])
+    op = semantic_operator!(signature,["Integer";parameters],sort,
+        Dict("kind"=>"Step","layout"=>layout);version="sequence-operators-v2")
+    args = reduce(vcat,(item.args for item in contracts);init=Literal[])
+    return (;term=Call(op,Literal("Integer",action["id"]),args...),sort,output,
+        input_ports=ports,output_ports=ports,role_slots,first_step=offset,last_step=offset)
+end
+
 function sequence_step!(signature, slots, positions, output, action, offset)
     ports = [string(effect.family) for effect in output.effects]
+    if :measurement in (effect.family for effect in output.effects)
+        return measured_sequence_step!(signature,slots,positions,output,action,offset,ports)
+    end
     before = add_sequence_slot!(slots,positions,"SceneBefore","before",offset)
     after = add_sequence_slot!(slots,positions,"SceneAfter","after",offset)
     pre = relation_atom!(signature,"step-inputs",[(effect_sort(effect.family,false),"before")

@@ -23,6 +23,7 @@ engine = "../target/release/tddesc-stitch"
 policy_file = "stitch.toml"
 batch_confirmed_events = 8
 background_search = true
+sequences = true
 
 [search]
 context_radii = [1, 2, 4]
