@@ -282,6 +282,32 @@ function outcome_preparation(agenda,obs,decision,context)
     return nothing
 end
 
+function partition_experiment(agenda,scene,obs,context,regions)
+    (isnothing(regions) || 6 ∉ obs.available_actions) && return nothing
+    index = findlast(!isnothing,regions.topology)
+    isnothing(index) && return nothing
+    change = regions.topology[index]
+    change.status == "observed_overlap" || return nothing
+    affected = BitSet(merge.after for merge in change.merges)
+    for split in change.splits
+        union!(affected,first.(split.after))
+    end
+    isempty(affected) && return nothing
+    labels = last(regions.frames).owner
+    for candidate in scene
+        candidate.broad && continue
+        x,y = candidate.point
+        label = labels[y+1,x+1]
+        label in affected || continue
+        action = click_action(candidate.point)
+        haskey(agenda.visits,(context,action_key(action))) && continue
+        obligation = (;source=regions.event,response_frame=index-1,region=label,
+            binding=candidate.instance,status="unresolved")
+        return (;action,intent=:probe_partition_binding,tests=NamedTuple[],reads=[regions.event],obligation)
+    end
+    return nothing
+end
+
 function advancement_probe(agenda,obs,decision,context)
     isempty(agenda.advancement) && return nothing
     previous = previous_key(agenda,agenda.previous)

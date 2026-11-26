@@ -59,27 +59,75 @@ struct ReceiptRegions
     event::String
     frames::Vector{FrameRegions}
     differences::Vector{Union{Nothing,Int}}
+    topology::Vector{Union{Nothing,NamedTuple}}
 end
 
-function receipt_regions(entry; previous=nothing)
+function region_partition_change(before,after,left::FrameRegions,right::FrameRegions)
+    size(before) == size(after) || return (;status="incompatible_frame_domains",splits=[],merges=[])
+    removed = BitSet()
+    added = BitSet()
+    for pixel in eachindex(before,after)
+        before[pixel] == after[pixel] && continue
+        push!(removed,left.owner[pixel])
+        push!(added,right.owner[pixel])
+    end
+    overlap = Dict{Tuple{Int,Int},Int}()
+    for pixel in eachindex(before,after)
+        before[pixel] == after[pixel] || continue
+        old,new = left.owner[pixel],right.owner[pixel]
+        (old in removed || new in added) || continue
+        key = (old,new)
+        overlap[key] = get(overlap,key,0)+1
+    end
+    splits, merges = NamedTuple[], NamedTuple[]
+    from = Dict{Int,Vector{Tuple{Int,Int}}}()
+    to = Dict{Int,Vector{Tuple{Int,Int}}}()
+    for ((old,new),count) in sort!(collect(overlap);by=first)
+        push!(get!(Vector{Tuple{Int,Int}},from,old),(new,count))
+        push!(get!(Vector{Tuple{Int,Int}},to,new),(old,count))
+    end
+    for (index,targets) in sort!(collect(from);by=first)
+        length(targets) > 1 || continue
+        push!(splits,(;before=index,after=targets,lost=length(left.groups[index])-sum(last,targets)))
+    end
+    for (index,sources) in sort!(collect(to);by=first)
+        length(sources) > 1 || continue
+        push!(merges,(;before=sources,after=index,gained=length(right.groups[index])-sum(last,sources)))
+    end
+    return (;status="observed_overlap",splits,merges)
+end
+
+function receipt_regions(entry; previous=nothing,previous_regions=nothing)
     entry.event["completion"] == "confirmed" || error("Only confirmed receipts can publish regions")
     frames = entry.observation.frames
     entry.event["frame_count"] == length(frames) || error("Region receipt lost frames")
     regions = FrameRegions[]
     differences = Union{Nothing,Int}[]
+    topology = Union{Nothing,NamedTuple}[]
     earlier = isnothing(previous) ? nothing : last(previous.observation.frames)
     if !isnothing(previous)
         entry.event["before_ref"] == previous.event["event_id"] || error("Region receipt predecessor mismatch")
+    end
+    prior = if !isnothing(previous_regions)
+        isnothing(previous) && error("Region predecessor requires a confirmed receipt")
+        previous_regions.event == previous.event["event_id"] || error("Cached region predecessor differs")
+        last(previous_regions.frames)
+    elseif !isnothing(earlier)
+        frame_regions(earlier)
     end
     for frame in frames
         change = isnothing(earlier) || size(earlier) != size(frame) ? nothing :
             count(pair -> first(pair) != last(pair),zip(earlier,frame))
         push!(differences,change)
-        region = change == 0 && !isempty(regions) ? last(regions) : frame_regions(frame)
+        region = change == 0 ? prior : frame_regions(frame)
+        transition = isnothing(earlier) || change == 0 ? nothing :
+            region_partition_change(earlier,frame,prior,region)
         push!(regions,region)
+        push!(topology,transition)
         earlier = frame
+        prior = region
     end
-    return ReceiptRegions(entry.event["event_id"],regions,differences)
+    return ReceiptRegions(entry.event["event_id"],regions,differences,topology)
 end
 
 function support_candidates(frame; max_support_pixels=96)

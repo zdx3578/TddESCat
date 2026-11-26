@@ -1,5 +1,6 @@
 function sequence_observation_key(obs)
-    return semantic_hash([obs.levels_completed,obs.available_actions,JSON.json(last(obs.frames))])
+    frame = last(obs.frames)
+    return semantic_hash([obs.levels_completed,obs.available_actions,size(frame),content_hash(vec(frame))])
 end
 
 function confirmed_segments(events; close_revisits=false)

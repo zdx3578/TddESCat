@@ -8,6 +8,55 @@ function intervention_entry(ref,action,frame,available;before="")
     return (;event=Dict("event_id"=>ref,"before_ref"=>before),observation)
 end
 
+@testset "Frame role postings keep coordinates, counts and ambiguous bindings" begin
+    frame = fill(UInt8(0),64,64)
+    frame[11:13,11:13] .= 4
+    frame[32:34,32:34] .= 4
+    groups = TC.public_components(frame)
+    candidates = filter(shape->first(shape)[3] == 4,groups)
+    source = TC.point_component(groups,(11,11))
+    model = TC.EffectModel(:translation,TC.shape_template(source),nothing,[3,0],TC.MotionShape(),false)
+    roles = TC.EffectRoleIndex()
+    @test TC.model_binding(model,groups,[];role_index=roles) === nothing
+    @test TC.model_binding(model,groups,[];position=(10,10),role_index=roles) == source
+    @test TC.model_binding(model,groups,[];role_index=roles) === nothing
+    @test TC.result_model(model,frame,groups,[],Dict("id"=>1);position=(31,31),role_index=roles) ==
+        TC.result_model(model,frame,groups,[],Dict("id"=>1);position=(31,31))
+
+    count = TC.EffectModel(:count,TC.shape_template(source),nothing,[1],TC.ColorCell[(10,10,4)],false)
+    measured = TC.result_model(count,frame,groups,[],Dict("id"=>1);role_index=roles)
+    @test measured == TC.result_model(count,frame,groups,[],Dict("id"=>1))
+    @test measured.value == 2 && measured.expected == 3
+    @test measured.token_support == sort!(vcat(candidates...))
+    @test TC.result_model(count,frame,groups,[],Dict("id"=>1);shift=(0,3),role_index=roles) === nothing
+end
+
+@testset "An intermediate frame witnesses a split and a merge within one receipt" begin
+    merged = fill(UInt8(0),5,7)
+    merged[3,2:6] .= 4
+    split = copy(merged)
+    split[3,4] = 0
+    event(ref,parent,frames) = (event=Dict("event_id"=>ref,"before_ref"=>parent,
+        "frame_count"=>length(frames),"completion"=>"confirmed"),observation=(;frames))
+    initial = event("base",nothing,[merged])
+    view = TC.receipt_regions(initial)
+    next = event("transition","base",[split,merged,merged])
+    region = TC.receipt_regions(next;previous=initial,previous_regions=view)
+    @test region.differences == [1,1,0]
+    @test region.frames[2] === region.frames[3]
+    cutting = only(region.topology[1].splits)
+    @test cutting.before == view.frames[1].owner[3,4]
+    @test Dict(cutting.after) == Dict(region.frames[1].owner[3,2]=>2,region.frames[1].owner[3,6]=>2)
+    @test cutting.lost == 1
+    joining = only(region.topology[2].merges)
+    @test joining.after == region.frames[2].owner[3,4]
+    @test joining.gained == 1 && joining.before == cutting.after
+    @test isnothing(region.topology[3])
+    reframe = TC.receipt_regions(event("small","transition",[merged[1:4,:]]);
+        previous=next,previous_regions=region)
+    @test only(reframe.topology).status == "incompatible_frame_domains"
+end
+
 @testset "Coordinate alternatives remain complete and spatially spread" begin
     points = TC.spatial_probe_point.(0:4095)
     @test length(Set(points)) == 4096

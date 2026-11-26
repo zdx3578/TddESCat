@@ -112,3 +112,21 @@ end
     @test next.intent == :revise_failed_trace && next.action != action && next.action["id"] == 6
     @test next.reads == ["failure"]
 end
+
+@testset "An exhausted representative opens a legal coordinate experiment" begin
+    agenda, search = TC.RelationAgenda(), TC.PublicFrontier()
+    board = zeros(UInt8,64,64)
+    before = recorded("reset",nothing,board,0,[6])
+    action = TC.click_action((10,10))
+    for i in 1:2
+        observation = TC.PublicObservation("frontier-fixture","fixture-run",[board],"NOT_FINISHED",0,1,action,[6],false)
+        after = (event=Dict("event_id"=>"click-$i","before_ref"=>before.event["event_id"]),observation)
+        TC.observe_relations!(agenda,before,after,TC.observed_effects(before,after),nothing,NamedTuple[],nothing)
+        TC.frontier_observe!(search,agenda)
+        before = after
+    end
+    proposal = TC.frontier_choice(search,agenda,before.observation,(ranked=[(;action)],),nothing,action)
+    @test proposal.action == TC.click_action((0,0))
+    @test proposal.obligation.source == "untried_public_configuration"
+    @test "click-2" in proposal.reads
+end

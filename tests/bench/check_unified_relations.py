@@ -24,7 +24,11 @@ class Fixture(ARCBaseGame):
     def __init__(self, seed=0):
         frame = np.zeros((64, 64), dtype=np.int8)
         frame[10:13, 8:11] = 4
-        if MODE in ("directions", "restart", "restart-choices"):
+        if MODE == "bridge-partition":
+            frame[10:13, 8:11] = 0
+            frame[20, 14:23] = 4
+            frame[40, 45] = 2
+        elif MODE in ("directions", "restart", "restart-choices"):
             frame[10:13, 23:26] = 4
             frame[10:13, 38:41] = 4
         else:
@@ -32,7 +36,8 @@ class Fixture(ARCBaseGame):
         actions = {"delayed": [5, 7], "remote": [5, 6], "directions": [6],
             "restart": [6], "progress-restart": [6], "restart-choices": [6],
             "advancement-transfer": [6], "history-refinement": [1, 4],
-            "history-continuation": [1, 4], "outcome-preparation": [5, 7]}
+            "history-continuation": [1, 4], "outcome-preparation": [5, 7],
+            "bridge-partition": [5]}
         levels = [Level(sprites=[Sprite(frame.copy(), name="board")])]
         if MODE == "progress-restart":
             frame[10:13, 23:26] = 4
@@ -70,7 +75,14 @@ class Fixture(ARCBaseGame):
             self.complete_action()
             return
         pixels = self.current_level.get_sprites_by_name("board")[0].pixels
-        if MODE == "outcome-preparation":
+        if MODE == "bridge-partition":
+            if action == 5:
+                pixels[20, 18] = 0
+                self._available_actions = [6]
+            elif pixels[self.action.data["y"], self.action.data["x"]] == 4:
+                pixels[20, 18] = 4
+                self.next_level()
+        elif MODE == "outcome-preparation":
             if action == 5:
                 self._available_actions = [6]
             elif action == 7:
@@ -170,7 +182,10 @@ def capture(
         f"MODE = {fixture_mode!r}\nGAME = {game!r}\n{fixture}"
     )
     compute_enabled = compute or mode == "history-dispatch"
-    extended_timeout = compute_enabled or mode == "outcome-preparation"
+    extended_timeout = compute_enabled or mode in (
+        "outcome-preparation",
+        "bridge-partition",
+    )
     public = run / "public"
     public.mkdir()
     with environment_server(
@@ -302,6 +317,21 @@ def verify(mode, public):
         )
         return [record["event"]]
     rows = list(observed_steps(public))
+    if mode == "bridge-partition":
+        cut, joined = rows
+        assert cut[0]["action"] == {"id": 5}
+        source = cut[0]["event_id"]
+        topology = read(public / "grounding" / (source + ".json"))["frames"][-1][
+            "topology"
+        ]
+        assert len(topology["splits"]) == 1 and topology["splits"][0]["lost"] == 1
+        assert sorted(count for _, count in topology["splits"][0]["after"]) == [4, 4]
+        assert joined[3]["intent"] == "probe_partition_binding"
+        assert joined[3]["obligation"]["source"] == source
+        assert joined[3]["obligation"]["status"] == "unresolved"
+        assert joined[1]["frame"][-1][20][joined[0]["action"]["x"]] == 4
+        assert joined[2]["state"] == "WIN"
+        return [source, joined[0]["event_id"]]
     if mode in ("history-refinement", "history-continuation"):
         failed = next(row for row in rows if row[2]["state"] == "GAME_OVER")
         resolved = next(row for row in rows if "history_refinement" in row[4])
@@ -491,6 +521,7 @@ def main(config, run):
         "outcome-preparation",
         "history-refinement",
         "history-dispatch",
+        "bridge-partition",
     )
     with ThreadPoolExecutor(max_workers=len(modes)) as pool:
         cases = {

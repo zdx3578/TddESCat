@@ -220,29 +220,59 @@ end
 
 binding_view(model) = model.enclosed ? "geometry-support" : "color-support"
 
-function model_binding(model, groups, enclosed_targets; position=nothing)
-    if model.enclosed
-        candidates = filter(s -> geometry(s) == geometry(model.template), enclosed_targets)
-    else
-        expected = support_grid(model.template).canonical
-        candidates = filter(s -> support_grid(s).canonical == expected, groups)
+struct EffectRoleIndex
+    grids::IdDict{MotionShape,NamedTuple}
+    signatures::Dict{Symbol,Dict{Any,Vector{MotionShape}}}
+end
+
+EffectRoleIndex() = EffectRoleIndex(IdDict(),Dict())
+
+indexed_grid(shape,::Nothing) = support_grid(shape)
+indexed_grid(shape,index::EffectRoleIndex) = get!(() -> support_grid(shape),index.grids,shape)
+
+function support_signature(shape,view,index)
+    view == :appearance && return shape_template(shape)
+    grid = indexed_grid(shape,index).canonical
+    return view == :enclosure ? [(x,y) for (x,y,_) in grid] : grid
+end
+
+function matching_supports(index,groups,view,expected)
+    if isnothing(index)
+        return filter(shape->support_signature(shape,view,index) == expected,groups)
     end
-    isnothing(position) || filter!(shape->anchor(shape) == position,candidates)
+    postings = get!(index.signatures,view) do
+        by_signature = Dict{Any,Vector{MotionShape}}()
+        for shape in groups
+            key = support_signature(shape,view,index)
+            push!(get!(Vector{MotionShape},by_signature,key),shape)
+        end
+        by_signature
+    end
+    return get(postings,expected,MotionShape[])
+end
+
+function model_binding(model, groups, enclosed_targets; position=nothing, role_index=nothing)
+    view = model.enclosed ? :enclosure : :grid
+    expected = support_signature(model.template,view,role_index)
+    candidates = matching_supports(role_index,model.enclosed ? enclosed_targets : groups,view,expected)
+    isnothing(position) || (candidates = filter(shape->anchor(shape) == position,candidates))
     return length(candidates) == 1 ? only(candidates) : nothing
 end
 
+visible_support(frame,visibility) = all(cell -> checkbounds(Bool,frame,cell[2]+1,cell[1]+1) &&
+    frame[cell[2]+1,cell[1]+1] == cell[3],visibility)
+
 function model_count(model, frame, groups; visibility=model.visibility)
-    all(cell -> checkbounds(Bool, frame, cell[2]+1,cell[1]+1) &&
-        frame[cell[2]+1,cell[1]+1] == cell[3], visibility) || return nothing
+    visible_support(frame,visibility) || return nothing
     return count(s -> shape_template(s) == model.template, groups)
 end
 
 function result_model(model, before, groups, enclosure, action; meters=(),clicked=nothing,
-                      position=nothing,shift=nothing)
+                      position=nothing,shift=nothing,role_index=nothing)
     if model.family == :translation
-        bound = model_binding(model, groups, [role.target for role in enclosure];position)
+        bound = model_binding(model, groups, [role.target for role in enclosure];position,role_index)
         isnothing(bound) && return nothing
-        source_unit, observed_unit = support_grid(model.template).unit, support_grid(bound).unit
+        source_unit, observed_unit = indexed_grid(model.template,role_index).unit, indexed_grid(bound,role_index).unit
         scaled = model.values .* observed_unit
         all(v -> mod(v,source_unit) == 0,scaled) || return nothing
         return (family=:translation, basis=bound, expected=Tuple(div.(scaled,source_unit)), value=anchor(bound),
@@ -250,9 +280,10 @@ function result_model(model, before, groups, enclosure, action; meters=(),clicke
     elseif model.family == :count
         visibility = isnothing(shift) ? model.visibility :
             ColorCell[(x+shift[1],y+shift[2],color) for (x,y,color) in model.visibility]
-        n = model_count(model, before, groups;visibility)
-        isnothing(n) && return nothing
-        support = sort!(reduce(vcat,(part for part in groups if shape_template(part) == model.template);init=ColorCell[]))
+        visible_support(before,visibility) || return nothing
+        matches = matching_supports(role_index,groups,:appearance,model.template)
+        n = length(matches)
+        support = sort!(reduce(vcat,matches;init=ColorCell[]))
         return (family=:count,basis=n,expected=n+only(model.values),value=n,token_support=support,
             instance=semantic_hash(["discrete-component-count",model.template]),visibility)
     elseif model.family == :measurement
@@ -305,7 +336,7 @@ end
 click_role_signature(binding,point) = merge(binding,(;click=relative_click(point,binding.origin,binding.unit)))
 
 function evaluate_joint_rule(rule, before, groups, enclosure, action; meters=(), relative_transfer=false,
-                             observed_click=nothing, trained_click=nothing)
+                             observed_click=nothing, trained_click=nothing,role_index=nothing)
     clicked = nothing
     support = nothing
     relative = false
@@ -334,7 +365,7 @@ function evaluate_joint_rule(rule, before, groups, enclosure, action; meters=(),
     end
     positions = relative ? [isnothing(offset) ? nothing : anchor(support) .+ offset for offset in rule.click.offsets] :
         fill(nothing,length(rule.effects))
-    fragments = [result_model(effect,before,groups,enclosure,action;meters,clicked,position,shift)
+    fragments = [result_model(effect,before,groups,enclosure,action;meters,clicked,position,shift,role_index)
         for (effect,position) in zip(rule.effects,positions)]
     any(isnothing,fragments) && return (truth=unknown_truth, fragments, reason="incomplete_effect_binding")
     relative && (fragments = [merge(part,(click_origin=anchor(support),)) for part in fragments])

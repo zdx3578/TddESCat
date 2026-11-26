@@ -59,6 +59,9 @@ function frontier_observe!(search,agenda)
     index = length(agenda.samples)
     row = agenda.samples[index]
     context = row.context
+    options = get!(Vector{PublicActionKey},search.options,context)
+    key = action_key(row.effects.action)
+    key in options || push!(options,key)
     all_visits = push!(get!(Vector{Int},search.visits,context),index)
     bucket = index_frontier_observation!(search,agenda,index)
     context in search.unresolved && return nothing
@@ -170,7 +173,14 @@ function frontier_choice(search,agenda,obs,decision,intervention,preferred)
             tests=NamedTuple[],reads=unique([history_reads;relation_refs(latest)]),obligation)
     end
     found = frontier_path(search,agenda,node)
-    isnothing(found) && return nothing
+    if isnothing(found)
+        fresh = frontier_new_configuration(search,node,obs.available_actions)
+        isnothing(fresh) && return nothing
+        obligation = (previous=relation_ref(latest),baseline=preferred,context,
+            source="untried_public_configuration")
+        return (;action=concrete_action(fresh),intent=:distinguish_public_frontier,
+            tests=NamedTuple[],reads=unique([history_reads;relation_refs(latest)]),obligation)
+    end
     edge = agenda.samples[first(found.route)]
     plan_refs = unique([ref for i in found.route for ref in relation_refs(agenda.samples[i])])
     obligation = (expected=edge.next_context,advanced=false,target=first(found.target),

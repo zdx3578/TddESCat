@@ -37,7 +37,8 @@ function publish_receipt_regions!(knowledge,store,entry,view=receipt_regions(ent
     event = entry.event
     view.event == event["event_id"] || error("Grounding belongs to a different public receipt")
     frames = [(frame=index-1,shape=size(regions.owner),regions=length(regions.groups),
-        shared_boundaries=length(regions.boundaries),changed_pixels=view.differences[index])
+        shared_boundaries=length(regions.boundaries),changed_pixels=view.differences[index],
+        topology=view.topology[index])
         for (index,regions) in enumerate(view.frames)]
     atomic_json(store_path(store,"grounding",view.event * ".json"),
         (;schema_version=1,event=view.event,before=event["before_ref"],frames,
@@ -234,9 +235,9 @@ function mechanism_key(rule; composing=false)
 end
 
 function candidate_evaluation(active, before, groups, enclosure, action, history; transients=nothing,meters=(),
-                              observed_click=nothing,trained_click=nothing)
+                              observed_click=nothing,trained_click=nothing,role_index=nothing)
     rule = active.rule
-    result = evaluate_joint_rule(rule,before,groups,enclosure,action;meters,observed_click,trained_click)
+    result = evaluate_joint_rule(rule,before,groups,enclosure,action;meters,observed_click,trained_click,role_index)
     result.truth == proven || return result
     scope = measured_scope(result.fragments)
     if !isnothing(scope) && scope ∉ active.meter_scopes
@@ -335,6 +336,7 @@ function ranked_public_actions(knowledge, observation, history, attempts, max_ac
     version(model) = get!(() -> active_id(model),versions,model.rule.id)
     click_roles = Dict{String,NamedTuple}()
     click_bindings = IdDict{Vector{ColorCell},NamedTuple}()
+    role_index = EffectRoleIndex()
     frame_regions = isnothing(regions) ? nothing : last(regions.frames)
     no_models = ActiveMechanism[]
     for action in values.actions
@@ -352,7 +354,7 @@ function ranked_public_actions(knowledge, observation, history, attempts, max_ac
             trained_click = isnothing(scope) ? nothing : get!(
                 () -> click_role_signature(click_support_signature(scope.support),scope.point),click_roles,model.rule.id)
             selected = candidate_evaluation(model,values.frame,values.groups,values.enclosure,action,history;
-                transients,meters,observed_click,trained_click)
+                transients,meters,observed_click,trained_click,role_index)
             for atom in model.condition.atoms
                 atom isa RelationPredicate || continue
                 selected.reason in ("published_joint_effects","learned_condition_false","learned_condition_unknown") || continue
@@ -752,7 +754,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             event = read_json(store_path(rec.store,"events",rec.before_ref * ".json"))
             reset_entry = (;event,observation=rec.observation)
             register_evidence_obligation!(rec.store,reset_entry;frozen)
-            reset_regions = relation_tasks ? receipt_regions(reset_entry;previous=entry) : nothing
+            reset_regions = relation_tasks ? receipt_regions(reset_entry;previous=entry,previous_regions=knowledge.receipt) : nothing
             entry = reset_entry
             sequence_enabled && push!(sequence_events,entry)
             continuation = nothing
@@ -950,15 +952,16 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         end
         context = relation_tasks ? relation_context(obs) : nothing
         relation_choice = if relation_tasks
-            relation_experiment(relations,obs,decision,intervention,context;meters,
+            proposed = relation_experiment(relations,obs,decision,intervention,context;meters,
                 uncertainty=circuit_experiment_scores(responses,relations),circuit_ref=responses.scope,
                 history_model=history_experiment(responses,relations,context,obs.levels_completed),
                 frontier=exploration_frontier)
+            isnothing(proposed) ? partition_experiment(relations,click_scene,obs,context,knowledge.receipt) : proposed
         end
         if relation_tasks && !isnothing(exploration_frontier)
             preferred = !isnothing(relation_choice) ? relation_choice.action :
                 isnothing(intervention) ? item.action : intervention.action
-            if isnothing(relation_choice) || relation_choice.intent == :test_concrete_effect
+            if isnothing(relation_choice) || relation_choice.intent in (:test_concrete_effect,:test_delayed_effect)
                 alternate = frontier_choice(exploration_frontier,relations,obs,decision,intervention,preferred)
                 isnothing(alternate) || (relation_choice = alternate)
             else
@@ -1176,7 +1179,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         isnothing(experiment) || record_experiment_service!(experiments,rec.store,experiment,event)
         sample = motion_example(entry,resulting;history)
         before_regions = knowledge.receipt
-        after_regions = relation_tasks ? receipt_regions(resulting;previous=entry) : nothing
+        after_regions = relation_tasks ? receipt_regions(resulting;previous=entry,previous_regions=knowledge.receipt) : nothing
         effects = observed_effects(entry,resulting;meters=measurement,before_regions,after_regions)
         intervention_feedback = observe_intervention!(intervention_memory,intervention,entry,resulting,effects;
             learn=!frozen,ordinal=count+1)
