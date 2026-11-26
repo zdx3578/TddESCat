@@ -47,6 +47,7 @@ mutable struct RelationAgenda
     delayed::Dict{String,Vector{Tuple{Int,String}}}
     advancement::Dict{Tuple{Int,Int},Vector{Int}}
     advancement_roles::Dict{Int,Tuple}
+    advancement_counterexamples::Dict{NamedTuple,Int}
     preparation_roles::Dict{Int,Tuple}
     outcomes::Vector{NamedTuple}
     outcome_relations::Vector{OutcomeRelationWitness}
@@ -60,7 +61,7 @@ mutable struct RelationAgenda
 end
 
 RelationAgenda() = RelationAgenda(RelationSample[],Dict(),Dict(),Dict(),Dict(),Dict(),Set(),Dict(),Set(),Dict(),Set(),
-    Dict(),Dict(),Dict(),Dict(),NamedTuple[],OutcomeRelationWitness[],Dict(),Set(),1,1,0,nothing,nothing)
+    Dict(),Dict(),Dict(),Dict(),Dict(),NamedTuple[],OutcomeRelationWitness[],Dict(),Set(),1,1,0,nothing,nothing)
 
 relation_context(obs) = semantic_hash([obs.levels_completed,size(last(obs.frames)),
     content_hash(vec(last(obs.frames))),sort(obs.available_actions)])
@@ -264,6 +265,14 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
         feedback = merge(feedback,(result=observed ? :established : :refuted,))
     elseif !isnothing(proposal) && proposal.intent in (:probe_observed_advancement,:continue_outcome_relation)
         feedback = merge(feedback,(result=sample.advanced ? :established : :refuted,))
+        if proposal.intent == :probe_observed_advancement && !sample.advanced
+            transfer = proposal.obligation.transfer
+            if !isnothing(transfer)
+                counterexample = get!(agenda.advancement_counterexamples,transfer,index)
+                feedback = merge(feedback,(;withdrawn_transfer=(;
+                    scope=transfer,event=relation_ref(agenda.samples[counterexample]))))
+            end
+        end
     elseif !isnothing(proposal) && proposal.intent == :prepare_public_outcome
         legal = proposal.obligation.action in next.available_actions
         feedback = merge(feedback,(result=next.state == "NOT_FINISHED" && legal ? :established : :refuted,))
@@ -434,6 +443,7 @@ function advancement_probe(agenda,obs,decision,context)
     previous = previous_key(agenda,agenda.previous)
     current_history = relation_history_key(agenda,context,agenda.previous)
     available = Set(obs.available_actions)
+    domain = Tuple(sort!(collect(available)))
     scene = nothing
     choices = NamedTuple[]
     for item in decision.ranked
@@ -452,25 +462,32 @@ function advancement_probe(agenda,obs,decision,context)
             isnothing(scene) && (scene = visible_role_multiset(decision.groups))
             scene
         end
+        transfer = (level=obs.levels_completed,action=first(key),previous=first(previous),
+            role=profile,available=domain)
         for index in Iterators.reverse(history)
             row = agenda.samples[index]
             Set(row.available) == available || continue
-            if row.context == context && relation_history_key(agenda,context,row.preceding) != current_history
-                continue
+            new_instance = row.context != context
+            if new_instance
+                # A failed experiment withdraws the broad transfer claim.
+                # Other bindings still compete through normal exploration.
+                haskey(agenda.advancement_counterexamples,transfer) && continue
+            else
+                relation_history_key(agenda,context,row.preceding) == current_history || continue
             end
             matches = first(key) == 6 ? !isnothing(row.binding) && row.binding.appearance == profile :
                 get(agenda.advancement_roles,index,nothing) == profile
             matches || continue
-            push!(choices,(;action=item.action,row,unverified_instance=row.context != context,
+            push!(choices,(;action=item.action,row,transfer=new_instance ? transfer : nothing,
                 prior=length(prior),rank=item.rank))
             break
         end
     end
     isempty(choices) && return nothing
-    best = argmin(item->(item.unverified_instance,item.prior,item.rank),choices)
+    best = argmin(item->(!isnothing(item.transfer),item.prior,item.rank),choices)
     obligation = (;source=relation_ref(best.row),expected="public_advancement",
-        scope=best.unverified_instance ? "new_instance" : "observed_instance",
-        source_level=best.row.level)
+        scope=isnothing(best.transfer) ? "observed_instance" : "new_instance",
+        source_level=best.row.level,transfer=best.transfer)
     return (;action=best.action,intent=:probe_observed_advancement,tests=NamedTuple[],
         reads=relation_refs(best.row),obligation)
 end

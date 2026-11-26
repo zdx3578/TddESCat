@@ -37,7 +37,7 @@ class Fixture(ARCBaseGame):
             frame[40:42, 44:46] = 2
         actions = {"delayed": [5, 7], "remote": [5, 6], "directions": [6],
             "restart": [6], "progress-restart": [6], "restart-choices": [6],
-            "advancement-transfer": [6], "history-refinement": [1, 4],
+            "advancement-transfer": [6], "advancement-refutation": [5, 6], "history-refinement": [1, 4],
             "history-continuation": [1, 4], "history-matrix": [1, 4], "history-receipt": [1, 4], "long-history": [1, 4],
             "outcome-preparation": [5, 7], "outcome-chain": [5, 7], "role-outcome": [5, 6],
             "bridge-partition": [5], "frontier-dispatch": [1, 2], "frontier-route": [2],
@@ -49,6 +49,10 @@ class Fixture(ARCBaseGame):
             levels.append(Level(sprites=[Sprite(frame, name="board")]))
         if MODE == "advancement-transfer":
             frame[10:13, 8:11] = 3
+            frame[10:13, 38:41] = 4
+            levels.append(Level(sprites=[Sprite(frame, name="board")]))
+        if MODE == "advancement-refutation":
+            frame[10:13, 8:11] = 0
             frame[10:13, 38:41] = 4
             levels.append(Level(sprites=[Sprite(frame, name="board")]))
         if MODE in ("outcome-preparation", "outcome-chain", "role-outcome"):
@@ -124,6 +128,15 @@ class Fixture(ARCBaseGame):
                 pixels[40:42, 44:46] = 7
             elif pixels[40, 44] == 7 and pixels[self.action.data["y"], self.action.data["x"]] == 4:
                 self.next_level()
+        elif MODE == "advancement-refutation":
+            if action == 5:
+                self.next_level()
+            elif pixels[self.action.data["y"], self.action.data["x"]] == 4:
+                if self.level_index == 0:
+                    self.next_level()
+                else:
+                    self.hits += 1
+                    pixels[40:42, 44:46] = 7 + self.hits % 2
         elif MODE in ("outcome-preparation", "outcome-chain"):
             if action == 5:
                 self._available_actions = [2] if MODE == "outcome-chain" else [6]
@@ -256,6 +269,7 @@ def capture(
         "history-receipt",
         "long-history",
         "coordinate-restart",
+        "advancement-refutation",
         "sequence-experiment",
     )
     public = run / "public"
@@ -296,6 +310,7 @@ def capture(
             settings = settings.replace("history_lengths = [0, 1, 2, 4]", "history_lengths = [0, 1]")
         agent.write_text(settings + additions)
         direct_tests = {
+            "advancement-refutation": "advancement_refutation_public.jl",
             "history-dispatch": "history_public.jl",
             "circuit-role": "circuit_role_public.jl",
             "coordinate-restart": "coordinate_restart_public.jl",
@@ -388,6 +403,18 @@ def observed_steps(public):
 
 
 def verify(mode, public):
+    if mode == "advancement-refutation":
+        record = read(public / "advancement-refutation.json")
+        trace = receipts(public)
+        source, failed, won = (record[key] for key in ("source", "failed", "won"))
+        first, failure, last = (trace[ref] for ref in (source, failed, won))
+        assert first[1]["levels_completed"] == 1 and first[0]["action"]["x"] == 9
+        assert failure[1]["levels_completed"] == 1 and failure[0]["action"]["x"] == 39
+        assert trace[failure[0]["before_ref"]][1]["frame"][-1] != failure[1]["frame"][-1]
+        assert record["transfer"]["event"] == failed and record["transfer"]["scope"]["level"] == 1
+        assert last[0]["before_ref"] == failed and last[0]["action"] == {"id": 5}
+        assert last[1]["state"] == "WIN" and last[1]["levels_completed"] == 2
+        return [source, failed, won]
     if mode == "coordinate-restart":
         record = read(public / "coordinate-restart.json")
         trace = receipts(public)
@@ -802,6 +829,7 @@ def main(config, run):
         "progress-restart",
         "restart-choices",
         "advancement-transfer",
+        "advancement-refutation",
         "outcome-preparation",
         "outcome-chain",
         "role-outcome",
