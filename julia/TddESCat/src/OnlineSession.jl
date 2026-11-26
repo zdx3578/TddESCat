@@ -1014,7 +1014,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         isnothing(experiment) || record_experiment_service!(experiments,rec.store,experiment,event)
         sample = motion_example(entry,resulting;history)
         effects = observed_effects(entry,resulting;meters=measurement)
-        intervention_feedback = observe_intervention!(intervention_memory,intervention,entry,resulting,effects;learn=!frozen)
+        intervention_feedback = observe_intervention!(intervention_memory,intervention,entry,resulting,effects;
+            learn=!frozen,ordinal=count+1)
         knowledge.observations[effects.event_id] = effects
         if sequence_enabled
             push!(sequence_events,resulting)

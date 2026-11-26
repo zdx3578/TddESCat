@@ -3,9 +3,11 @@ mutable struct InterventionMemory
     probes::Dict{Tuple{Int,String},Int}
     points::Set{Tuple{Int,Pixel}}
     fallback_cursor::Dict{Int,Int}
+    primitive_schedule::Dict{Tuple{Int,Int},Tuple{Int,Int}}
+    prior_observation::Union{Nothing,Tuple{String,PublicObservation}}
 end
 
-InterventionMemory() = InterventionMemory(NamedTuple[],Dict(),Set(),Dict())
+InterventionMemory() = InterventionMemory(NamedTuple[],Dict(),Set(),Dict(),Dict(),nothing)
 
 function component_probe(shape)
     left,top = anchor(shape)
@@ -110,6 +112,57 @@ end
 
 click_action(point) = Dict("id"=>6,"x"=>point[1],"y"=>point[2])
 
+function same_intervention_context(a,b)
+    return a.levels_completed == b.levels_completed && a.state == b.state &&
+        a.available_actions == b.available_actions
+end
+
+intervention_frame_distance(a,b) = count(pair->first(pair) != last(pair),zip(a,b))
+
+function primitive_outcome(earlier,prev,next)
+    same_intervention_context(prev,next) || return :new_observation
+    before,after = last(prev.frames),last(next.frames)
+    all(==(before),next.frames) && return :unchanged
+    if !isnothing(earlier) && same_intervention_context(earlier,prev)
+        prior = last(earlier.frames)
+        restored = intervention_frame_distance(prior,after)
+        if restored < min(intervention_frame_distance(prior,before),intervention_frame_distance(before,after))
+            return :revisited
+        end
+    end
+    return :new_observation
+end
+
+intervention_appearance(features) = (features.geometry,features.pigment)
+
+function object_effect_followup(memory,level,candidates)
+    by_appearance = Dict{Tuple{String,Int},Vector{NamedTuple}}()
+    for row in memory.samples
+        row.level == level || continue
+        key = intervention_appearance(row.features)
+        push!(get!(Vector{NamedTuple},by_appearance,key),row)
+    end
+    learned = Dict{Tuple{String,Int},NamedTuple}()
+    for (appearance,rows) in by_appearance
+        witnessed = filter(row->!isempty(row.object_effects),rows)
+        length(witnessed) > length(rows)-length(witnessed) || continue
+        length(unique(row.point for row in witnessed)) >= 2 || continue
+        kinds = reduce(intersect,(Set(row.object_effects) for row in witnessed))
+        isempty(kinds) && continue
+        reads = sort!(unique!([ref for row in rows for ref in (row.before,row.event)]))
+        learned[appearance] = (point=last(witnessed).point,reads,effects=sort!(collect(kinds)))
+    end
+    options = NamedTuple[]
+    for candidate in candidates
+        (level,candidate.point) in memory.points && continue
+        witness = get(learned,intervention_appearance(candidate.features),nothing)
+        isnothing(witness) && continue
+        distance = sum(abs,candidate.point .- witness.point)
+        push!(options,(;candidate,distance,witness.reads,witness.effects))
+    end
+    return isempty(options) ? nothing : argmin(row->(row.distance,row.candidate.point),options)
+end
+
 function choose_intervention(memory,scene,obs,ranked,attempts;
                              explore,goal_learning,confirmed_count)
     level = obs.levels_completed
@@ -122,7 +175,11 @@ function choose_intervention(memory,scene,obs,ranked,attempts;
             reason="apply_learned_object_advancement")
     end
     explore || return nothing
-    primitive = filter(row->row.action["id"] != 6,ranked)
+    primitive = filter(ranked) do row
+        id = row.action["id"]
+        _,eligible_at = get(memory.primitive_schedule,(level,id),(0,0))
+        return id != 6 && confirmed_count >= eligible_at
+    end
     if !isempty(primitive) && iseven(confirmed_count)
         row = argmin(item->(get(attempts,action_key(item.action),0),item.rank),primitive)
         return (action=row.action,probe=:primitive,candidate=nothing,goal=nothing,fallback=nothing,
@@ -131,7 +188,14 @@ function choose_intervention(memory,scene,obs,ranked,attempts;
     role = [c for c in scene if get(memory.probes,(level,c.instance),0) == 0]
     fallback = coordinate_intervention(memory,level,obs.available_actions)
     if !isempty(role) && (isnothing(fallback) || mod(confirmed_count,7) != 6)
-        candidate = argmin(c->(c.broad,c.features.shape_multiplicity,-length(c.support),c.point),role)
+        followup = object_effect_followup(memory,level,role)
+        if !isnothing(followup)
+            return (action=click_action(followup.candidate.point),probe=:representative,
+                candidate=followup.candidate,goal=nothing,fallback=nothing,
+                hypothesis=(;followup.reads,followup.effects),reason="extend_observed_object_effect")
+        end
+        candidate = argmin(c->(c.broad,(level,c.point) in memory.points,c.features.shape_multiplicity,
+            -length(c.support),c.point),role)
         return (action=click_action(candidate.point),probe=:representative,candidate,goal=nothing,
             fallback=nothing,reason="probe_visible_object")
     end
@@ -145,7 +209,10 @@ end
 
 function executed_intervention(choice,scene,action)
     isnothing(choice) || return choice
-    action["id"] == 6 || return nothing
+    if action["id"] != 6
+        return (;action,probe=:primitive,candidate=nothing,goal=nothing,fallback=nothing,
+            reason="observed_primitive")
+    end
     point = (action["x"],action["y"])
     found = findfirst(c->any(cell->(cell[1],cell[2]) == point,c.support),scene)
     candidate = isnothing(found) ? nothing : scene[found]
@@ -157,15 +224,18 @@ function intervention_record(choice,before)
     candidate = choice.candidate
     binding = isnothing(candidate) ? nothing : (id=candidate.instance,
         point=candidate.point,features=candidate.features,cells=length(candidate.support))
-    return (;before,probe=choice.probe,action=choice.action,binding,goal=choice.goal,reason=choice.reason)
+    return (;before,probe=choice.probe,action=choice.action,binding,goal=choice.goal,
+        hypothesis=get(choice,:hypothesis,nothing),reason=choice.reason)
 end
 
-function observe_intervention!(memory,choice,before,after,effects;learn=true)
-    isnothing(choice) && return nothing
+function observe_intervention!(memory,choice,before,after,effects;learn=true,ordinal)
     prev,next = before.observation,after.observation
-    choice.action == next.action || error("Intervention differs from the public receipt")
     event = after.event["event_id"]
     prior = before.event["event_id"]
+    earlier = memory.prior_observation
+    memory.prior_observation = (prior,prev)
+    isnothing(choice) && return nothing
+    choice.action == next.action || error("Intervention differs from the public receipt")
     level = prev.levels_completed
     advanced = next.levels_completed > level
     if choice.action["id"] == 6
@@ -178,12 +248,23 @@ function observe_intervention!(memory,choice,before,after,effects;learn=true)
         key = (level,candidate.instance)
         memory.probes[key] = get(memory.probes,key,0)+1
         if learn
+            object_effects = advanced ? Symbol[] : unique(effect.family for effect in effects.effects
+                if effect.family != :measurement && candidate.point in effect.changed)
             push!(memory.samples,(;level,event,before=prior,probe=choice.probe,advanced,
-                features=candidate.features))
+                features=candidate.features,point=candidate.point,object_effects))
         end
+    end
+    schedule = if choice.probe == :primitive && learn
+        key = (level,choice.action["id"])
+        repeats,_ = get(memory.primitive_schedule,key,(0,0))
+        outcome = primitive_outcome(isnothing(earlier) ? nothing : last(earlier),prev,next)
+        repeats = outcome == :new_observation ? 0 : repeats+1
+        eligible_at = ordinal + 2*(repeats+1)^2
+        memory.primitive_schedule[key] = (repeats,eligible_at)
+        (;outcome,eligible_at,repeats,earlier=outcome == :revisited ? first(earlier) : nothing)
     end
     return (;event,before=prior,probe=choice.probe,action=choice.action,
         advanced,won=next.state == "WIN",result=isnothing(choice.goal) ? "observed" :
             advanced ? "established" : "refuted",
-        effect_scope=unique(string(effect.family) for effect in effects.effects))
+        effect_scope=unique(string(effect.family) for effect in effects.effects),schedule)
 end

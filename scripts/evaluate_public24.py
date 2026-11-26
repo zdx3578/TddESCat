@@ -84,6 +84,7 @@ def evaluate_one(task_dir):
     learned_tasks, learned_policies, outcomes = 0, 0, []
     established_tasks, policy_stops = 0, 0
     clicks, object_probes, coordinate_probes = 0, 0, 0
+    object_effect_followups = 0
     intervention_goals, intervention_confirmed, intervention_refuted = 0, 0, 0
     for event, response in ordered:
         if not event["action"]["id"]:
@@ -122,6 +123,13 @@ def evaluate_one(task_dir):
             )
             object_probes += source["probe"] == "representative"
             coordinate_probes += source["probe"] == "coordinate"
+            if hypothesis := source.get("hypothesis"):
+                assert source["probe"] == "representative" and hypothesis["effects"]
+                assert all(
+                    trace[ref][0]["sequence"] < event["sequence"]
+                    for ref in hypothesis["reads"]
+                )
+                object_effect_followups += 1
             if goal := source["goal"]:
                 predicted = load(public / "predictions" / command)
                 assert predicted["predicted_values"]["public_advancement"] is True
@@ -181,6 +189,7 @@ def evaluate_one(task_dir):
         clicks=clicks,
         object_probes=object_probes,
         coordinate_probes=coordinate_probes,
+        object_effect_followups=object_effect_followups,
         intervention_goals=intervention_goals,
         intervention_confirmed=intervention_confirmed,
         intervention_refuted=intervention_refuted,
