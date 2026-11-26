@@ -494,6 +494,81 @@ def autonomous_report(root, run):
     }
 
 
+def verify_autonomous_capture(root, run, code):
+    public = run / "public"
+    identifier = "autonomous_public_win"
+    report = autonomous_report(root, run)
+    report["solver_exit"] = code
+    passed = code == 0 and report["passed"]
+    report["passed"] = passed
+    append_assertion(
+        run,
+        identifier,
+        passed,
+        ["public/autonomous-verification.json", "grade/autonomous-replay.log"],
+        None if passed else "missing_cold_learning_and_full_game_win",
+    )
+    agent = tomllib.loads((public / "agent.toml").read_text())
+    if agent.get("planning", {}).get("relation_goals", False):
+        tasks = report.get("relation_tasks", [])
+        achieved = [row for row in tasks if row["outcome"] == "established"]
+        solved = any(
+            any(
+                earlier["level"] == complete["level"]
+                and earlier["model"] == complete["model"]
+                and earlier["producer"]["target"] == complete["producer"]["target"]
+                and earlier["outcome"] == "continue"
+                and any(value == "missing" for _, value in earlier["requirements"])
+                for earlier in tasks[: tasks.index(complete)]
+            )
+            for complete in achieved
+        )
+        learned_task = solved and not report.get("audit_errors")
+        append_assertion(
+            run,
+            "autonomous_learned_task",
+            learned_task,
+            ["public/autonomous-verification.json"],
+            None if learned_task else "missing_learned_goal_and_precondition_chain",
+        )
+        passed &= learned_task
+    if agent["learning"].get("sequences", False):
+        program = audit_live_goal_programs(public)
+        report["program_control"] = program
+        goal_program = (
+            bool(program["uses"])
+            and program["ordinary_choice_changed"]
+            and program["cross_level"]
+            and not program["errors"]
+        )
+        append_assertion(
+            run,
+            "autonomous_goal_program",
+            goal_program,
+            ["public/autonomous-verification.json"],
+            None
+            if goal_program
+            else "missing_verified_in_session_program_choice_and_transfer",
+        )
+        passed &= goal_program
+        if agent.get("planning", {}).get("relation_goals", False):
+            policy_ok = any(
+                row["status"] == "stopped"
+                for row in report.get("learned_policy_uses", [])
+            ) and not report.get("audit_errors")
+            append_assertion(
+                run,
+                "autonomous_learned_policy",
+                policy_ok,
+                ["public/autonomous-verification.json"],
+                None if policy_ok else "missing_published_policy_actually_consumed",
+            )
+            passed &= policy_ok
+    report["passed"] = passed
+    write_json(public / "autonomous-verification.json", report)
+    return int(not passed)
+
+
 def main(config, run):
     root = Path.cwd()
     task = read_task(config)
@@ -513,75 +588,7 @@ def main(config, run):
         )
         return code
     if autonomous and (public / "agent.toml").is_file():
-        report = autonomous_report(root, run)
-        report["solver_exit"] = code
-        passed = code == 0 and report["passed"]
-        report["passed"] = passed
-        append_assertion(
-            run,
-            identifier,
-            passed,
-            ["public/autonomous-verification.json", "grade/autonomous-replay.log"],
-            None if passed else "missing_cold_learning_and_full_game_win",
-        )
-        agent = tomllib.loads((public / "agent.toml").read_text())
-        if agent.get("planning", {}).get("relation_goals", False):
-            tasks = report.get("relation_tasks", [])
-            achieved = [row for row in tasks if row["outcome"] == "established"]
-            solved = any(
-                any(
-                    earlier["level"] == complete["level"]
-                    and earlier["model"] == complete["model"]
-                    and earlier["producer"]["target"] == complete["producer"]["target"]
-                    and earlier["outcome"] == "continue"
-                    and any(value == "missing" for _, value in earlier["requirements"])
-                    for earlier in tasks[: tasks.index(complete)]
-                )
-                for complete in achieved
-            )
-            learned_task = solved and not report.get("audit_errors")
-            append_assertion(
-                run,
-                "autonomous_learned_task",
-                learned_task,
-                ["public/autonomous-verification.json"],
-                None if learned_task else "missing_learned_goal_and_precondition_chain",
-            )
-            passed &= learned_task
-        if agent["learning"].get("sequences", False):
-            program = audit_live_goal_programs(public)
-            report["program_control"] = program
-            goal_program = (
-                bool(program["uses"])
-                and program["ordinary_choice_changed"]
-                and program["cross_level"]
-                and not program["errors"]
-            )
-            append_assertion(
-                run,
-                "autonomous_goal_program",
-                goal_program,
-                ["public/autonomous-verification.json"],
-                None
-                if goal_program
-                else "missing_verified_in_session_program_choice_and_transfer",
-            )
-            passed &= goal_program
-            if agent.get("planning", {}).get("relation_goals", False):
-                policy_ok = any(
-                    row["status"] == "stopped"
-                    for row in report.get("learned_policy_uses", [])
-                ) and not report.get("audit_errors")
-                append_assertion(
-                    run,
-                    "autonomous_learned_policy",
-                    policy_ok,
-                    ["public/autonomous-verification.json"],
-                    None if policy_ok else "missing_published_policy_actually_consumed",
-                )
-                passed &= policy_ok
-        write_json(public / "autonomous-verification.json", report)
-        return int(not passed)
+        return verify_autonomous_capture(root, run, code)
     if code:
         append_assertion(
             run,

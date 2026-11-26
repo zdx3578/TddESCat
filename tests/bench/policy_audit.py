@@ -10,11 +10,15 @@ def read(path):
     return json.loads(path.read_bytes())
 
 
+def activation_key(row):
+    return row["definition"], row["publication"], row["available_after"]
+
+
 class PolicyAudit:
     def __init__(self, public):
         self.public = public
         self.activations = {
-            row["definition"]: (file.parent, record, row)
+            activation_key(row): (file.parent, record, row)
             for file in (public / "learning").glob("job-*/policy-publication.json")
             if (record := read(file))
             for row in record["policies"]
@@ -33,8 +37,10 @@ class PolicyAudit:
         row = self.pending if decision is None else decision
         definition = row["definition"]
         require(definition not in self.refuted, "consumed_withdrawn_policy")
-        job, activation, policy = self.activations[definition]
-        if definition not in self.proofs:
+        key = activation_key(row)
+        require(key in self.activations, "unknown_policy_activation")
+        job, activation, policy = self.activations[key]
+        if key not in self.proofs:
             publication = self.public / "publication" / (row["publication"] + ".json")
             require(
                 sha256(publication.read_bytes()).hexdigest() == row["publication"],
@@ -57,7 +63,7 @@ class PolicyAudit:
                 ),
                 "policy_structural_evidence",
             )
-            self.proofs[definition] = corpus
+            self.proofs[key] = corpus
         require(
             policy["publication"] == row["publication"] == activation["publication"]
             and policy["available_after"]
