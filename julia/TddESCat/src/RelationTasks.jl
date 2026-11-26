@@ -945,11 +945,11 @@ function failure_retry!(agenda;frontier=nothing)
         origin = frontier_state(agenda,first_sample.context,first_sample.preceding)
         if isempty(frontier_untried(frontier,origin))
             reachable = frontier_path(frontier,agenda,origin)
-            if !isnothing(reachable)
-                experiment_path = reachable.route
-            elseif isnothing(frontier_new_configuration(frontier,origin,first_sample.available))
-                return nothing
+            if isnothing(reachable) && isnothing(frontier_new_configuration(frontier,origin,first_sample.available))
+                reachable = frontier_path(frontier,agenda,origin;include_configurations=true)
+                isnothing(reachable) && return nothing
             end
+            isnothing(reachable) || (experiment_path = reachable.route)
         end
     end
     push!(agenda.reopened,scope)

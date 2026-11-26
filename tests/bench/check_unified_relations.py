@@ -46,7 +46,7 @@ class Fixture(ARCBaseGame):
             "history-continuation": [1, 4], "history-matrix": [1, 4], "history-receipt": [1, 4], "long-history": [1, 4],
             "outcome-preparation": [5, 7], "outcome-chain": [5, 7], "role-outcome": [5, 6],
             "bridge-partition": [5], "concrete-object-followup": [5, 6],
-            "frontier-dispatch": [1, 2], "frontier-route": [2],
+            "frontier-dispatch": [1, 2], "frontier-route": [2], "frontier-remote-coordinate": [2],
             "sequence-experiment": [1, 2, 3], "circuit-role": [6, 7], "coordinate-restart": [6]}
         levels = [Level(sprites=[Sprite(frame.copy(), name="board")])]
         if MODE == "progress-restart":
@@ -76,7 +76,7 @@ class Fixture(ARCBaseGame):
             self._available_actions = [1, 4]
         if MODE in ("outcome-preparation", "outcome-chain"):
             self._available_actions = [5, 7]
-        if MODE == "frontier-route":
+        if MODE in ("frontier-route", "frontier-remote-coordinate"):
             self._available_actions = [2]
 
     def handle_reset(self):
@@ -115,6 +115,14 @@ class Fixture(ARCBaseGame):
                 self._available_actions = [1, 2, 3] if self.hits % 2 else [2]
             elif action == 1:
                 self.next_level()
+        elif MODE == "frontier-remote-coordinate":
+            if action == 2:
+                pixels[10, 8] = 5
+                self._available_actions = [6]
+            elif (self.action.data["x"], self.action.data["y"]) == (0, 0):
+                self.next_level()
+            else:
+                self.lose()
         elif MODE == "frontier-dispatch":
             if action == 2:
                 self.hits += 1
@@ -279,6 +287,7 @@ def capture(
         "bridge-partition",
         "frontier-dispatch",
         "frontier-route",
+        "frontier-remote-coordinate",
         "history-matrix",
         "history-receipt",
         "long-history",
@@ -332,6 +341,7 @@ def capture(
             "coordinate-restart": "coordinate_restart_public.jl",
             "frontier-dispatch": "frontier_dispatch.jl",
             "frontier-route": "frontier_route_public.jl",
+            "frontier-remote-coordinate": "frontier_remote_coordinate_public.jl",
             "history-matrix": "history_matrix_public.jl",
             "history-receipt": "history_matrix_public.jl",
             "long-history": "history_matrix_public.jl",
@@ -419,6 +429,21 @@ def observed_steps(public):
 
 
 def verify(mode, public):
+    if mode == "frontier-remote-coordinate":
+        record = read(public / "frontier-remote-coordinate.json")
+        trace = receipts(public)
+        refs = [record[key] for key in ("first", "failed", "reset", "restored", "won")]
+        first, failed, reset, restored, won = (trace[ref] for ref in refs)
+        assert first[0]["action"] == restored[0]["action"] == {"id": 2}
+        assert first[1]["available_actions"] == restored[1]["available_actions"] == [6]
+        assert first[1]["frame"] == restored[1]["frame"]
+        assert failed[1]["state"] == "GAME_OVER" and failed[0]["action"] == {"id": 6, "x": 9, "y": 11}
+        assert reset[0]["action"] == {"id": 0} and reset[1]["available_actions"] == [2]
+        assert restored[0]["before_ref"] == refs[2] and won[0]["before_ref"] == refs[3]
+        assert won[0]["action"] == {"id": 6, "x": 0, "y": 0} and won[1]["state"] == "WIN"
+        prediction = read(public / "predictions" / (restored[0]["command_ref"] + ".json"))
+        assert refs[0] in prediction["event_reads"] and refs[1] in prediction["event_reads"]
+        return refs
     if mode == "concrete-object-followup":
         record = read(public / "concrete-object-followup.json")
         trace = receipts(public)
@@ -875,6 +900,7 @@ def main(config, run):
         "bridge-partition",
         "frontier-dispatch",
         "frontier-route",
+        "frontier-remote-coordinate",
         "history-matrix",
         "history-receipt",
         "long-history",

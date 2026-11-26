@@ -213,20 +213,28 @@ function frontier_successor(agenda,indices)
     return next
 end
 
-function frontier_path(search,agenda,start)
+function frontier_path(search,agenda,start;include_configurations=false)
     queue = FrontierState[start]
     parents = Dict{FrontierState,Union{Nothing,Tuple{FrontierState,Int}}}(start=>nothing)
     for node in queue
         if node != start
             untried = frontier_untried(search,node)
-            if !isempty(untried)
+            experiment = isempty(untried) ? nothing : first(untried)
+            if isnothing(experiment) && include_configurations
+                _, index = parents[node]
+                incoming = agenda.samples[index]
+                delta = get(incoming.effects.public_delta,"available_actions",nothing)
+                available = isnothing(delta) ? incoming.available : delta["after"]
+                experiment = frontier_new_configuration(search,node,available)
+            end
+            if !isnothing(experiment)
                 route = Int[]
                 cursor = node
                 while cursor != start
                     cursor,index = parents[cursor]
                     push!(route,index)
                 end
-                return (;route=reverse!(route),target=node,experiment=first(untried))
+                return (;route=reverse!(route),target=node,experiment)
             end
         end
         outcomes = get(search.outcomes,node,nothing)
@@ -249,7 +257,8 @@ function frontier_route_step(search,agenda,obs,node,route,preferred,history_read
     reads = unique([history_reads;plan_refs])
     target,experiment = first(route.target),concrete_action(route.experiment)
     if route.cursor > length(route.steps)
-        node == route.target && route.experiment in frontier_untried(search,node) &&
+        tried = get(search.outcomes,node,nothing)
+        node == route.target && (isnothing(tried) || !haskey(tried,route.experiment)) &&
             first(route.experiment) in obs.available_actions || return nothing
         obligation = (;target,source="reachable_frontier_obligation",path,baseline=preferred)
         return (;action=experiment,intent=:distinguish_public_frontier,tests=NamedTuple[],reads,obligation)
@@ -317,11 +326,14 @@ function frontier_choice(search,agenda,obs,decision,intervention,preferred)
     found = frontier_path(search,agenda,node)
     if isnothing(found)
         fresh = frontier_new_configuration(search,node,obs.available_actions)
-        isnothing(fresh) && return nothing
-        obligation = (previous=relation_ref(latest),baseline=preferred,context,
-            source="untried_public_configuration")
-        return (;action=concrete_action(fresh),intent=:distinguish_public_frontier,
-            tests=NamedTuple[],reads=unique([history_reads;relation_refs(latest)]),obligation)
+        if !isnothing(fresh)
+            obligation = (previous=relation_ref(latest),baseline=preferred,context,
+                source="untried_public_configuration")
+            return (;action=concrete_action(fresh),intent=:distinguish_public_frontier,
+                tests=NamedTuple[],reads=unique([history_reads;relation_refs(latest)]),obligation)
+        end
+        found = frontier_path(search,agenda,node;include_configurations=true)
+        isnothing(found) && return nothing
     end
     route = FrontierRoute(found.route,1,found.target,found.experiment)
     return frontier_route_step(search,agenda,obs,node,route,preferred,history_reads)
