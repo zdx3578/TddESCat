@@ -947,7 +947,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 agenda=relation_tasks ? relations : nothing)
         end
         experiment = if !object_probes && !frozen && !composing && isnothing(program_cursor) && isnothing(spatial_choice)
-            select_experiment!(experiments,rec.store,decision.ranked,obs.available_actions,rec.before_ref)
+            select_experiment!(experiments,rec.store,decision.ranked,obs.available_actions,rec.before_ref;
+                level=obs.levels_completed,history)
         end
         context = relation_tasks ? relation_context(obs) : nothing
         relation_choice = if relation_tasks
@@ -1040,6 +1041,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         isnothing(task) || append!(plan_reads,task.reads)
         isnothing(policy_task) || append!(plan_reads,policy_task.reads)
         isnothing(intervention_goal) || append!(plan_reads,intervention_goal.reads)
+        if !isnothing(experiment) && hasproperty(experiment,:obligation)
+            push!(plan_reads,experiment.obligation.baseline_event)
+        end
         isnothing(policy_counterexample) || push!(plan_reads,policy_counterexample.event)
         isnothing(policy_note) || append!(plan_reads,get(policy_note,"event_reads",String[]))
         if program_selected
@@ -1183,6 +1187,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         event = read_json(store_path(rec.store,"events",rec.before_ref * ".json"))
         resulting = (; event,observation=rec.observation)
         register_evidence_obligation!(rec.store,resulting;frozen)
+        if relation_tasks
+            record_experiment_prefix!(experiments,obs.levels_completed,obs.available_actions,history,item.action,event["event_id"])
+        end
         isnothing(experiment) || record_experiment_service!(experiments,rec.store,experiment,event)
         sample = motion_example(entry,resulting;history)
         before_regions = knowledge.receipt

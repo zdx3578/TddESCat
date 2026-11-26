@@ -38,7 +38,8 @@ class Fixture(ARCBaseGame):
             "advancement-transfer": [6], "history-refinement": [1, 4],
             "history-continuation": [1, 4], "history-matrix": [1, 4],
             "outcome-preparation": [5, 7], "outcome-chain": [5, 7],
-            "bridge-partition": [5], "frontier-dispatch": [1, 2], "frontier-route": [2]}
+            "bridge-partition": [5], "frontier-dispatch": [1, 2], "frontier-route": [2],
+            "sequence-experiment": [1, 2, 3]}
         levels = [Level(sprites=[Sprite(frame.copy(), name="board")])]
         if MODE == "progress-restart":
             frame[10:13, 23:26] = 4
@@ -78,7 +79,14 @@ class Fixture(ARCBaseGame):
             self.complete_action()
             return
         pixels = self.current_level.get_sprites_by_name("board")[0].pixels
-        if MODE == "frontier-route":
+        if MODE == "sequence-experiment":
+            if action == 3 and self.previous == 2 and self.hits >= 7:
+                self.next_level()
+            else:
+                self.hits += 1
+                self.previous = action
+                pixels[40, 45] = 8 + self.hits % 8
+        elif MODE == "frontier-route":
             if action == 2:
                 self.hits += 1
                 pixels[10, 8] = 5 if self.hits % 2 else 4
@@ -219,6 +227,7 @@ def capture(
         "frontier-dispatch",
         "frontier-route",
         "history-matrix",
+        "sequence-experiment",
     )
     public = run / "public"
     public.mkdir()
@@ -259,6 +268,7 @@ def capture(
             "frontier-dispatch": "frontier_dispatch.jl",
             "frontier-route": "frontier_route_public.jl",
             "history-matrix": "history_matrix_public.jl",
+            "sequence-experiment": "sequence_experiment_public.jl",
         }
         if mode in direct_tests:
             name = direct_tests[mode]
@@ -340,6 +350,24 @@ def observed_steps(public):
 
 
 def verify(mode, public):
+    if mode == "sequence-experiment":
+        record = read(public / "sequence-experiment.json")
+        trace = receipts(public)
+        event, reply = trace[record["event"]]
+        prior = [(row, raw) for row, raw in trace.values() if row["sequence"] < event["sequence"]]
+        controls = [row["action"]["id"] for row, _ in prior if row["action"]["id"]]
+        prefix = record["proposal"]["obligation"]["prefix"]
+        observed = [controls[i] for i in range(2, len(controls)) if controls[i-2:i] == prefix]
+        assert observed.count(1) == observed.count(2) == 1 and 3 not in observed
+        assert prefix == controls[-2:]
+        earlier = trace[record["proposal"]["obligation"]["baseline_event"]][0]
+        assert earlier["sequence"] < event["sequence"] and earlier["action"] == {"id": 1}
+        assert len({tuple(tuple(line) for line in raw["frame"][-1]) for _, raw in prior}) == len(prior)
+        assert reply["state"] == "WIN" and event["action"] == {"id": 3}
+        service = read(public / "experiments" / ("service-" + event["event_id"] + ".json"))
+        assert service["prefix_obligation"] == record["proposal"]["obligation"]
+        assert service["cursor"] == record["proposal"]["cursor"] == 1
+        return [event["event_id"]]
     if mode == "history-matrix":
         record = read(public / "history-matrix.json")
         task = record["task"]
@@ -653,6 +681,7 @@ def main(config, run):
         "frontier-dispatch",
         "frontier-route",
         "history-matrix",
+        "sequence-experiment",
     )
     with ThreadPoolExecutor(max_workers=len(modes)) as pool:
         cases = {
@@ -692,6 +721,7 @@ if __name__ == "__main__":
                 "frontier-dispatch",
                 "frontier-route",
                 "history-matrix",
+                "sequence-experiment",
             )
             else 9,
             compute=bool(extra),
