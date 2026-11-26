@@ -40,7 +40,10 @@ class Fixture(ARCBaseGame):
             frame[10:13, 38:41] = 4
         else:
             frame[40:42, 44:46] = 2
+        if MODE == "context-reprobe":
+            frame[10:13, 23:26] = 4
         actions = {"delayed": [5, 7], "remote": [5, 6], "directions": [6],
+            "context-reprobe": [5, 6],
             "restart": [6], "progress-restart": [6], "restart-choices": [6],
             "advancement-transfer": [6], "advancement-refutation": [5, 6], "history-refinement": [1, 4],
             "history-continuation": [1, 4], "history-matrix": [1, 4], "history-receipt": [1, 4], "long-history": [1, 4],
@@ -141,6 +144,12 @@ class Fixture(ARCBaseGame):
                 self._available_actions = [6]
             elif pixels[self.action.data["y"], self.action.data["x"]] == 4:
                 pixels[20, 18] = 4
+                self.next_level()
+        elif MODE == "context-reprobe":
+            if action == 5:
+                self.hits += 1
+                pixels[40:42, 44:46] = (7, 2, 8)[self.hits - 1]
+            elif pixels[40, 44] == 8 and self.action.data["x"] == 24:
                 self.next_level()
         elif MODE == "role-outcome":
             if action == 5:
@@ -301,6 +310,7 @@ def capture(
         "primitive-outcome",
         "outcome-relation-chain",
         "bridge-partition",
+        "context-reprobe",
         "frontier-dispatch",
         "policy-yield",
         "frontier-route",
@@ -357,6 +367,7 @@ def capture(
             "history-dispatch": "history_public.jl",
             "circuit-role": "circuit_role_public.jl",
             "coordinate-restart": "coordinate_restart_public.jl",
+            "context-reprobe": "context_reprobe_public.jl",
             "frontier-dispatch": "frontier_dispatch.jl",
             "policy-yield": "policy_yield_public.jl",
             "frontier-route": "frontier_route_public.jl",
@@ -451,6 +462,22 @@ def observed_steps(public):
 
 
 def verify(mode, public):
+    if mode == "context-reprobe":
+        record = read(public / "context-reprobe.json")
+        trace = receipts(public)
+        first_event, first = trace[record["first"]]
+        won_event, won = trace[record["won"]]
+        first_before = trace[first_event["before_ref"]][1]
+        won_before = trace[won_event["before_ref"]][1]
+        assert first["frame"][-1] == first_before["frame"][-1]
+        assert first_before["frame"][-1][40][44] == 7
+        assert won_before["frame"][-1][40][44] == 8
+        assert first_event["action"] == {"id": 6, "x": 9, "y": 11}
+        assert won_event["action"] == {"id": 6, "x": 24, "y": 11}
+        assert first_event["event_id"] in record["reads"]
+        assert record["prior_confirmed_tests"] == 0
+        assert won["state"] == "WIN"
+        return [first_event["event_id"], won_event["event_id"]]
     if mode == "policy-yield":
         record = read(public / "policy-yield.json")
         trace = receipts(public)
@@ -955,6 +982,7 @@ def main(config, run):
         "circuit-role",
         "coordinate-restart",
         "bridge-partition",
+        "context-reprobe",
         "frontier-dispatch",
         "policy-yield",
         "frontier-route",

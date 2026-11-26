@@ -40,6 +40,7 @@ mutable struct RelationAgenda
     produced_at::Dict{String,Vector{Int}}
     relation_replays::Set{Tuple{String,Tuple,PublicActionKey}}
     visits::Dict{Tuple{String,PublicActionKey},Vector{Int}}
+    context_comparisons::Dict{Tuple{Int,PublicActionKey,String},Vector{Int}}
     pairs::Set{Tuple{String,PublicActionKey,PublicActionKey}}
     failures::Dict{Tuple{String,PublicActionKey,PublicActionKey},Int}
     reopened::Set{Tuple{String,PublicActionKey,PublicActionKey}}
@@ -59,7 +60,7 @@ mutable struct RelationAgenda
     preparing::Union{Nothing,NamedTuple}
 end
 
-RelationAgenda() = RelationAgenda(RelationSample[],Dict(),Dict(),Dict(),Dict(),Dict(),Set(),Dict(),Set(),Dict(),Set(),
+RelationAgenda() = RelationAgenda(RelationSample[],Dict(),Dict(),Dict(),Dict(),Dict(),Set(),Dict(),Dict(),Set(),Dict(),Set(),
     Dict(),Dict(),Dict(),Dict(),Dict(),NamedTuple[],OutcomeRelationWitness[],Dict(),Set(),1,1,0,nothing,nothing)
 
 relation_context(obs) = semantic_hash([obs.levels_completed,size(last(obs.frames)),
@@ -289,6 +290,14 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
     elseif !isnothing(proposal) && proposal.intent == :prepare_public_outcome
         legal = proposal.obligation.action in next.available_actions
         feedback = merge(feedback,(result=next.state == "NOT_FINISHED" && legal ? :established : :refuted,))
+    elseif !isnothing(proposal) && proposal.intent == :distinguish_changed_context && !isnothing(binding)
+        scope = (sample.level,action,binding.appearance)
+        comparisons = get!(Vector{Int},agenda.context_comparisons,scope)
+        previous_comparison = isempty(comparisons) ? nothing : relation_ref(agenda.samples[last(comparisons)])
+        push!(comparisons,index)
+        comparison = (;prior=proposal.obligation.prior,previous_comparison,confirmed_tests=length(comparisons),
+            response_changed=!sample.unchanged)
+        feedback = merge(feedback,(;comparison))
     end
     if !isnothing(feedback)
         for row in feedback.tests
@@ -872,6 +881,9 @@ function changed_context_probe(agenda,obs,scene)
     agenda.previous == 0 && return nothing
     latest = agenda.samples[agenda.previous]
     latest.context == latest.next_context && return nothing
+    best = nothing
+    fewest_tests = typemax(Int)
+    comparison_reads = String[]
     for candidate in scene
         action = click_action(candidate.point)
         key = action_key(action)
@@ -880,16 +892,25 @@ function changed_context_probe(agenda,obs,scene)
         isempty(original) && continue
         earlier = agenda.samples[last(original)]
         earlier.unchanged || continue
-        !isnothing(earlier.binding) && earlier.binding.appearance == click_profile(candidate.support,candidate.point) ||
-            continue
-        # The binding survived. The scene changed elsewhere, so the earlier
-        # observation is insufficient to decide this case.
-        obligation = (;reads=unique([relation_refs(earlier);relation_refs(latest)]),
-            prior=relation_ref(earlier),previous_context=latest.context,context=latest.next_context)
-        return (;action,probe=:representative,candidate,goal=nothing,fallback=nothing,
-            changed_context=obligation,reason="distinguish_changed_object_context")
+        isnothing(earlier.binding) && continue
+        appearance = click_profile(candidate.support,candidate.point)
+        earlier.binding.appearance == appearance || continue
+        comparisons = get(agenda.context_comparisons,(obs.levels_completed,key,appearance),nothing)
+        count = isnothing(comparisons) ? 0 : length(comparisons)
+        count > 0 && push!(comparison_reads,relation_ref(agenda.samples[last(comparisons)]))
+        count < fewest_tests || continue
+        best = (;candidate,action,earlier)
+        fewest_tests = count
+        count == 0 && break
     end
-    return nothing
+    isnothing(best) && return nothing
+    # A different context still permits a comparison after earlier attempts.
+    # Give the eligible binding with fewer confirmed comparisons the first turn.
+    obligation = (;reads=unique([relation_refs(best.earlier);relation_refs(latest);comparison_reads]),
+        prior=relation_ref(best.earlier),previous_context=latest.context,context=latest.next_context,
+        prior_confirmed_tests=fewest_tests)
+    return (;best.action,probe=:representative,best.candidate,goal=nothing,fallback=nothing,
+        changed_context=obligation,reason="distinguish_changed_object_context")
 end
 
 """Dispatch a rebound role only through the producer that will check the actual receipt."""
