@@ -134,8 +134,14 @@ function request_response_model!(memory,worker,agenda,snapshot,batch)
         evaluated.execution == "completed" && evaluated.answer == "value" &&
             evaluated.value["status"] == "supported" || return nothing
         predictions = evaluated.value["rows"]
-        scores = Dict(key=>Float64.(row["probabilities"]) for (key,row) in zip(conditions,predictions)
-            if row["status"] == "supported")
+        scores = Dict{Tuple{Int,Int},Vector{Float64}}()
+        for (key,row) in zip(conditions,predictions)
+            row["status"] == "supported" || continue
+            values = row["probabilities"]
+            length(values) == last(dimensions) || continue
+            total = normalized_probability_total(values)
+            isnothing(total) || (scores[key] = Float64.(values)./total)
+        end
         key_of(row) = length(dimensions)==3 ? (row.values[2],row.values[1]+1) : (0,row.values[1]+1)
         trained_keys = Set(key_of.(training))
         filter!(pair->first(pair) in trained_keys,scores)

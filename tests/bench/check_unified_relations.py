@@ -36,7 +36,7 @@ class Fixture(ARCBaseGame):
         actions = {"delayed": [5, 7], "remote": [5, 6], "directions": [6],
             "restart": [6], "progress-restart": [6], "restart-choices": [6],
             "advancement-transfer": [6], "history-refinement": [1, 4],
-            "history-continuation": [1, 4], "outcome-preparation": [5, 7],
+            "history-continuation": [1, 4], "outcome-preparation": [5, 7], "outcome-chain": [5, 7],
             "bridge-partition": [5], "frontier-dispatch": [1, 2], "frontier-route": [2]}
         levels = [Level(sprites=[Sprite(frame.copy(), name="board")])]
         if MODE == "progress-restart":
@@ -47,7 +47,7 @@ class Fixture(ARCBaseGame):
             frame[10:13, 8:11] = 3
             frame[10:13, 38:41] = 4
             levels.append(Level(sprites=[Sprite(frame, name="board")]))
-        if MODE == "outcome-preparation":
+        if MODE in ("outcome-preparation", "outcome-chain"):
             frame[10:13, 8:11] = 0
             frame[10:13, 38:41] = 4
             levels.append(Level(sprites=[Sprite(frame, name="board")]))
@@ -60,7 +60,7 @@ class Fixture(ARCBaseGame):
         self.hits = 0
         if MODE in ("history-refinement", "history-continuation"):
             self._available_actions = [1, 4]
-        if MODE == "outcome-preparation":
+        if MODE in ("outcome-preparation", "outcome-chain"):
             self._available_actions = [5, 7]
         if MODE == "frontier-route":
             self._available_actions = [2]
@@ -98,8 +98,10 @@ class Fixture(ARCBaseGame):
             elif pixels[self.action.data["y"], self.action.data["x"]] == 4:
                 pixels[20, 18] = 4
                 self.next_level()
-        elif MODE == "outcome-preparation":
+        elif MODE in ("outcome-preparation", "outcome-chain"):
             if action == 5:
+                self._available_actions = [2] if MODE == "outcome-chain" else [6]
+            elif action == 2:
                 self._available_actions = [6]
             elif action == 7:
                 self.lose()
@@ -200,6 +202,7 @@ def capture(
     compute_enabled = compute or mode == "history-dispatch"
     extended_timeout = compute_enabled or mode in (
         "outcome-preparation",
+        "outcome-chain",
         "bridge-partition",
         "frontier-dispatch",
         "frontier-route",
@@ -473,6 +476,28 @@ def verify(mode, public):
         assert result["result"] == "win" and not result["local_effects_complete"]
         assert result["preparation"]["event"] == prepared[0]["event_id"]
         return [row[0]["event_id"] for row in rows]
+    if mode == "outcome-chain":
+        first, enabled, advanced, rebound, continued, won = rows
+        assert [row[0]["action"]["id"] for row in rows] == [5, 2, 6, 5, 2, 6]
+        assert first[2]["available_actions"] == rebound[2]["available_actions"] == [2]
+        assert enabled[2]["available_actions"] == continued[2]["available_actions"] == [6]
+        assert all(
+            all(frame == row[1]["frame"][-1] for frame in row[2]["frame"])
+            for row in (first, enabled, rebound, continued)
+        )
+        expected = [(first[0]["event_id"], 2), (enabled[0]["event_id"], 6)]
+        requirements = advanced[4]["public_outcome"]["requirements"]
+        assert [(row["event"], row["action"]) for row in requirements] == expected
+        for step, row in enumerate((rebound, continued), 1):
+            assert row[3]["intent"] == "prepare_public_outcome"
+            obligation = row[3]["obligation"]
+            assert obligation["outcome"] == advanced[0]["event_id"]
+            assert obligation["step"] == step
+            assert [(part["event"], part["action"]) for part in obligation["chain"]] == expected
+            assert row[4]["feedback"]["result"] == "established"
+        assert advanced[0]["action"]["x"] != won[0]["action"]["x"]
+        assert won[2]["levels_completed"] == 2 and won[2]["state"] == "WIN"
+        return [row[0]["event_id"] for row in rows]
     if mode == "restart-choices":
         assert [row[2]["state"] for row in rows] == ["GAME_OVER", "GAME_OVER", "WIN"]
         assert len({row[0]["action"]["x"] for row in rows}) == 3
@@ -578,6 +603,7 @@ def main(config, run):
         "restart-choices",
         "advancement-transfer",
         "outcome-preparation",
+        "outcome-chain",
         "history-refinement",
         "history-dispatch",
         "bridge-partition",
@@ -618,6 +644,7 @@ if __name__ == "__main__":
                 "history-refinement",
                 "history-continuation",
                 "outcome-preparation",
+                "outcome-chain",
                 "frontier-dispatch",
                 "frontier-route",
             )

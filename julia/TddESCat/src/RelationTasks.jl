@@ -76,24 +76,31 @@ function visible_role_multiset(groups)
     return Tuple(sort!([semantic_hash(shape_template(group)) for group in groups if 4length(group) <= total]))
 end
 
+function witnessed_outcome_requirements(agenda,index)
+    requirements = NamedTuple[]
+    while true
+        row = agenda.samples[index]
+        row.preceding == 0 && break
+        prior = agenda.samples[row.preceding]
+        action = row.effects.action["id"]
+        delta = get(prior.effects.public_delta,"available_actions",nothing)
+        same_scope = prior.attempt == row.attempt && prior.level == row.level && prior.next_context == row.context
+        same_scope && !isnothing(delta) && action ∉ delta["before"] && action in delta["after"] || break
+        index = row.preceding
+        push!(requirements,(;index,event=relation_ref(prior),action,relation="available_action"))
+    end
+    return reverse!(requirements)
+end
+
 function record_public_outcome!(agenda,index)
     row = agenda.samples[index]
     result = row.state == "WIN" ? :win : row.state == "GAME_OVER" ? :failure :
         row.advanced ? :advancement : nothing
     isnothing(result) && return nothing
-    preparation = nothing
-    if row.preceding != 0
-        prior = agenda.samples[row.preceding]
-        previous = row.effects.action["id"]
-        law = get(prior.effects.public_delta,"available_actions",nothing)
-        if prior.attempt == row.attempt && prior.level == row.level && prior.next_context == row.context &&
-                !isnothing(law) && previous ∉ law["before"] && previous in law["after"]
-            preparation = (;index=row.preceding,event=relation_ref(prior),action=previous,
-                relation="available_action")
-        end
-    end
+    requirements = witnessed_outcome_requirements(agenda,index)
+    preparation = isempty(requirements) ? nothing : last(requirements)
     outcome = (;index,result,event=relation_ref(row),before=row.effects.before_id,
-        attempt=row.attempt,level=row.level,preparation,dependency=row.dependency,
+        attempt=row.attempt,level=row.level,preparation,requirements,dependency=row.dependency,
         local_effects_complete=row.effects.complete && isempty(row.effects.residual))
     push!(agenda.outcomes,outcome)
     return outcome
@@ -267,28 +274,40 @@ end
 
 function outcome_preparation(agenda,obs,decision,context)
     appearances = nothing
+    current_history = relation_history_key(agenda,context,agenda.previous)
     for outcome in Iterators.reverse(agenda.outcomes)
-        preparation = outcome.preparation
-        (outcome.result == :failure || isnothing(preparation) || preparation.action in obs.available_actions) && continue
-        row = agenda.samples[preparation.index]
-        Set(row.available) == Set(obs.available_actions) || continue
-        if isnothing(row.binding)
-            isnothing(appearances) && (appearances = visible_role_multiset(decision.groups))
-            get(agenda.preparation_roles,preparation.index,nothing) == appearances || continue
+        (outcome.result == :failure || isempty(outcome.requirements) ||
+            outcome.preparation.action in obs.available_actions) && continue
+        for (step,preparation) in enumerate(outcome.requirements)
+            preparation.action in obs.available_actions && continue
+            row = agenda.samples[preparation.index]
+            Set(row.available) == Set(obs.available_actions) || continue
+            if isnothing(row.binding)
+                isnothing(appearances) && (appearances = visible_role_multiset(decision.groups))
+                get(agenda.preparation_roles,preparation.index,nothing) == appearances || continue
+            end
+            candidate = findfirst(decision.ranked) do option
+                key = action_key(option.action)
+                first(key) == row.effects.action["id"] || return false
+                observed = get(agenda.visits,(context,key),Int[])
+                any(i->relation_history_key(agenda,context,agenda.samples[i].preceding) == current_history,observed) &&
+                    return false
+                isnothing(row.binding) && return true
+                support = point_component(decision.groups,key[2:3])
+                return !isnothing(support) && click_profile(support,key[2:3]) == row.binding.appearance
+            end
+            isnothing(candidate) && continue
+            reads = relation_refs(agenda.samples[outcome.index])
+            for required in outcome.requirements
+                append!(reads,relation_refs(agenda.samples[required.index]))
+            end
+            links = [(;required.event,required.action,required.relation) for required in outcome.requirements]
+            obligation = (;outcome=outcome.event,preparation=relation_ref(row),action=preparation.action,
+                relation=preparation.relation,scope=row.context == context ? "observed_instance" : "new_instance",
+                chain=links,step)
+            return (;action=decision.ranked[candidate].action,intent=:prepare_public_outcome,tests=NamedTuple[],
+                reads=unique!(reads),obligation)
         end
-        candidate = findfirst(decision.ranked) do option
-            key = action_key(option.action)
-            first(key) == row.effects.action["id"] || return false
-            haskey(agenda.visits,(context,key)) && return false
-            isnothing(row.binding) && return true
-            support = point_component(decision.groups,key[2:3])
-            return !isnothing(support) && click_profile(support,key[2:3]) == row.binding.appearance
-        end
-        isnothing(candidate) && continue
-        reads = unique([relation_refs(row);relation_refs(agenda.samples[outcome.index])])
-        obligation = (;outcome=outcome.event,preparation=relation_ref(row),action=preparation.action,
-            relation=preparation.relation,scope=row.context == context ? "observed_instance" : "new_instance")
-        return (;action=decision.ranked[candidate].action,intent=:prepare_public_outcome,tests=NamedTuple[],reads,obligation)
     end
     return nothing
 end

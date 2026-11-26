@@ -39,13 +39,40 @@ end
     @test successor.complete
     @test successor.relation.evidence == Dict((0,3)=>Set(["r01","r13"]))
     @test successor.witnesses[(0,3)] == Set([1])
+    @test successor.blocked[0] == Set([2])
+    @test TC.possible_precondition(successor.relation,Set([3]),domain,domain) == Set([0])
+    @test isempty(TC.safe_precondition(successor,Set([3]),domain,domain,domain))
     right = TC.finite_relation(domain,domain,[(1,3,["r13"]),(2,3,["r23"])])
     full = TC.compose_relations(relation,right;max_work=20)
     @test full.witnesses[(0,3)] == Set([1,2])
     @test full.relation.evidence[(0,3)] == Set(["r01","r02","r13","r23"])
+    @test TC.safe_precondition(full,Set([3]),domain,domain,domain) == Set([0])
+    denied = TC.compose_relations(relation,right;max_work=20,
+        guard=Dict(1=>TC.proven,2=>TC.disproven,3=>TC.proven))
+    @test denied.blocked[0] == Set([2]) && isempty(denied.unresolved)
+    @test isempty(TC.safe_precondition(denied,Set([3]),domain,domain,domain))
+    unknown = TC.compose_relations(relation,right;max_work=20,guard=Dict(1=>TC.proven))
+    @test unknown.unresolved[0] == Set([2]) && !unknown.complete
+    @test TC.possible_precondition(unknown.relation,Set([3]),domain,domain) == Set([0])
+    @test isempty(TC.safe_precondition(unknown,Set([3]),domain,domain,domain))
     cut = TC.compose_relations(relation,right;max_work=1)
     @test !cut.complete && cut.stop_reason == "work_limit"
     @test isempty(TC.safe_precondition(cut.relation,Set([3]),domain,domain,domain))
+    @test isempty(TC.safe_precondition(cut,Set([3]),domain,domain,domain))
+end
+
+@testset "Probabilistic preimages use normalized distributions on verified successor domains" begin
+    domain = Set(0:3)
+    relation = TC.finite_relation(domain,domain,[(0,1,["a"]),(0,2,["b"]),(1,3,["c"])])
+    weights = Dict(0=>Dict(1=>3//4,2=>1//4),1=>Dict(3=>1//1),2=>Dict{Int,Rational{Int}}())
+    result = TC.probability_precondition(relation,Set([2,3]),Set([0,1,2]),domain,domain,weights)
+    @test result.mass == Dict(0=>1//4,1=>1//1) && result.unresolved == Set([2])
+    invalid = Dict(0=>Dict(1=>1.0),1=>Dict(3=>NaN))
+    result = TC.probability_precondition(relation,Set([2,3]),Set([0,1]),domain,domain,invalid)
+    @test isempty(result.mass) && result.unresolved == Set([0,1])
+    @test TC.normalized_probability_total([0.0,1.0]) == 1.0
+    @test TC.normalized_probability_total([1.01,-0.01]) === nothing
+    @test TC.normalized_probability_total([true]) === nothing
 end
 
 function scope(states;known=true,complete=true,refs=["rule"])
