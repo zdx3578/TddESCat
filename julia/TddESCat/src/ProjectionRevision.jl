@@ -192,7 +192,9 @@ function projection_patch(choice,before)
     size(before) == patch.shape || return nothing
     moved = filter(part -> part.family == :translation, choice.fragments)
     shift = (0,0)
-    if !isempty(moved)
+    if relative_effect_roles(rule.click)
+        shift = first(choice.fragments).click_origin
+    elseif !isempty(moved)
         offsets = [part.value .- source for (part,source) in zip(moved,rule.anchors)]
         length(offsets) == length(moved) == length(rule.anchors) || return nothing
         allequal(offsets) || return nothing
@@ -237,7 +239,7 @@ function projection_patch(choice,before)
     end
     observed = measure_joint((model=rule,fragments=choice.fragments),target)
     !isempty(observed.assessments) && all(==("supported"),values(observed.assessments)) || return nothing
-    origin = !isempty(moved) ? anchor(first(moved).basis) :
+    origin = relative_effect_roles(rule.click) ? shift : !isempty(moved) ? anchor(first(moved).basis) :
         !isnothing(rule.click) && rule.click.local_pigment ? shift : nothing
     return (;frame=target,writes=sort!(collect(touched)),binding_reads=sort!(collect(binding_reads)),
         bindings,quantities,channels,origin)

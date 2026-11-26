@@ -124,7 +124,7 @@ def audit(public, scenes):
     assert last[0]["outcome"] == "refuted"
     assert all(row["outcome"] == "observed" for row in last[1:])
     assert last[0]["point"] != last[-1]["point"]
-    assert last[-1]["reason"] == "probe_visible_object"
+    assert last[-1]["reason"] in ("probe_visible_object", "test_delayed_effect")
     return actions
 
 

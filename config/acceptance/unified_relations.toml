@@ -1,0 +1,5 @@
+schema_version = 1
+kind = "unified_relations"
+output_name = "unified-public-relations"
+environment_config = "../bench_server.toml"
+timeout_seconds = 600

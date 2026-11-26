@@ -133,38 +133,8 @@ function primitive_outcome(earlier,prev,next)
     return :new_observation
 end
 
-intervention_appearance(features) = (features.geometry,features.pigment)
-
-function object_effect_followup(memory,level,candidates)
-    by_appearance = Dict{Tuple{String,Int},Vector{NamedTuple}}()
-    for row in memory.samples
-        row.level == level || continue
-        key = intervention_appearance(row.features)
-        push!(get!(Vector{NamedTuple},by_appearance,key),row)
-    end
-    learned = Dict{Tuple{String,Int},NamedTuple}()
-    for (appearance,rows) in by_appearance
-        witnessed = filter(row->!isempty(row.object_effects),rows)
-        length(witnessed) > length(rows)-length(witnessed) || continue
-        length(unique(row.point for row in witnessed)) >= 2 || continue
-        kinds = reduce(intersect,(Set(row.object_effects) for row in witnessed))
-        isempty(kinds) && continue
-        reads = sort!(unique!([ref for row in rows for ref in (row.before,row.event)]))
-        learned[appearance] = (point=last(witnessed).point,reads,effects=sort!(collect(kinds)))
-    end
-    options = NamedTuple[]
-    for candidate in candidates
-        (level,candidate.point) in memory.points && continue
-        witness = get(learned,intervention_appearance(candidate.features),nothing)
-        isnothing(witness) && continue
-        distance = sum(abs,candidate.point .- witness.point)
-        push!(options,(;candidate,distance,witness.reads,witness.effects))
-    end
-    return isempty(options) ? nothing : argmin(row->(row.distance,row.candidate.point),options)
-end
-
 function choose_intervention(memory,scene,obs,ranked,attempts;
-                             explore,goal_learning,confirmed_count)
+                             explore,goal_learning,confirmed_count,agenda=nothing)
     level = obs.levels_completed
     models = goal_learning ? intervention_models(memory) : NamedTuple[]
     for candidate in scene
@@ -175,6 +145,10 @@ function choose_intervention(memory,scene,obs,ranked,attempts;
             reason="apply_learned_object_advancement")
     end
     explore || return nothing
+    if !isnothing(agenda)
+        reopened = changed_context_probe(agenda,obs,scene)
+        isnothing(reopened) || return reopened
+    end
     primitive = filter(ranked) do row
         id = row.action["id"]
         _,eligible_at = get(memory.primitive_schedule,(level,id),(0,0))
@@ -188,11 +162,10 @@ function choose_intervention(memory,scene,obs,ranked,attempts;
     role = [c for c in scene if get(memory.probes,(level,c.instance),0) == 0]
     fallback = coordinate_intervention(memory,level,obs.available_actions)
     if !isempty(role) && (isnothing(fallback) || mod(confirmed_count,7) != 6)
-        followup = object_effect_followup(memory,level,role)
+        followup = isnothing(agenda) ? nothing : object_effect_followup(agenda,level,role)
         if !isnothing(followup)
-            return (action=click_action(followup.candidate.point),probe=:representative,
-                candidate=followup.candidate,goal=nothing,fallback=nothing,
-                hypothesis=(;followup.reads,followup.effects),reason="extend_observed_object_effect")
+            return (action=click_action(followup.point),probe=:representative,
+                candidate=followup,goal=nothing,fallback=nothing,reason="extend_observed_object_effect")
         end
         candidate = argmin(c->(c.broad,(level,c.point) in memory.points,c.features.shape_multiplicity,
             -length(c.support),c.point),role)
@@ -248,10 +221,8 @@ function observe_intervention!(memory,choice,before,after,effects;learn=true,ord
         key = (level,candidate.instance)
         memory.probes[key] = get(memory.probes,key,0)+1
         if learn
-            object_effects = advanced ? Symbol[] : unique(effect.family for effect in effects.effects
-                if effect.family != :measurement && candidate.point in effect.changed)
             push!(memory.samples,(;level,event,before=prior,probe=choice.probe,advanced,
-                features=candidate.features,point=candidate.point,object_effects))
+                features=candidate.features,point=candidate.point))
         end
     end
     schedule = if choice.probe == :primitive && learn

@@ -23,7 +23,11 @@ struct ClickBinding
     support::MotionShape
     point::Pixel
     local_pigment::Bool
+    offsets::Vector{Union{Nothing,Pixel}}
 end
+
+ClickBinding(support,point,local_pigment) = ClickBinding(support,point,local_pigment,Union{Nothing,Pixel}[])
+relative_effect_roles(click) = !isnothing(click) && !isempty(click.offsets)
 
 struct JointMechanism
     id::String
@@ -49,11 +53,12 @@ function frame_patch(output, before, after, anchors; click=nothing)
     fixed = Set{Pixel}()
     for effect in output.effects
         effect.family == :measurement && continue
-        portable = effect.family == :translation || !isnothing(click) && click.local_pigment
+        portable = effect.family == :translation || relative_effect_roles(click) ||
+            !isnothing(click) && click.local_pigment
         union!(portable ? moving : fixed, effect.changed)
     end
     isdisjoint(moving, fixed) || return nothing
-    shift_x, shift_y = isempty(anchors) ?
+    shift_x, shift_y = relative_effect_roles(click) ? anchor(click.support) : isempty(anchors) ?
         isnothing(click) || !click.local_pigment ? (0,0) : anchor(click.support) : first(anchors)
     changes(points, dx, dy) = PixelChange[(x-dx,y-dy,before[y+1,x+1],after[y+1,x+1])
         for (x,y) in sort!(collect(points))]
@@ -118,18 +123,36 @@ function joint_model(compiled, program, original, definitions, calls, occurrence
     effects = compiled.output.effects
     terms = flatten_effect_terms(expanded)
     length(terms) == length(effects) || error("Published effects differ from the certified relation")
-    int_value(term) = term["value"]::Int
+    for (effect, term, (pre, post)) in zip(effects, terms, compiled.roles)
+        term == decode_model_term(effect, pre, post) ||
+            error("A published effect does not use its typed binding")
+    end
+    references = sort!(unique(String[call["definition_ref"] for call in calls]))
+    id = "joint-" * content_hash(JSON.json([compiled.output.event_id, references, compiled.roles]))
+    joint = observed_joint_model(compiled.output,before,after;id,references)
+    moved = findall(effect->effect.family == :translation,joint.effects)
+    (isempty(moved) || length(moved) == length(joint.effects)) && return [joint]
+    projected = projection_references(moved,original,calls,occurrences)
+    isempty(projected) && return [joint]
+    subid = "joint-" * content_hash(JSON.json([id,moved,projected]))
+    click = joint.click
+    if relative_effect_roles(click)
+        click = ClickBinding(click.support,click.point,false,click.offsets[moved])
+    end
+    return [joint,JointMechanism(subid,joint.action_id,joint.effects[moved],projected,joint.training_event,
+        joint.anchors,joint.spacing,joint.entry_colors,id,nothing,click)]
+end
+
+"""Compile specific public effects with the same binding and feedback semantics as a published definition."""
+function observed_joint_model(output,before,after;id="observed-" * output.event_id,references=String[])
+    effects = output.effects
     before_groups = public_components(before)
     enclosed = enclosure_pairs(before_groups)
     enclosed_targets = [item.target for item in enclosed]
     models = EffectModel[]
     moving = MotionShape[]
-    for (effect, term, (pre, post)) in zip(effects, terms, compiled.roles)
-        expected = decode_model_term(effect, pre, post)
-        term == expected || error("A published effect does not use its typed binding")
+    for effect in effects
         before_role = effect.before
-        parameters = term["args"][3:end]
-        values = effect.family in (:translation,:selection) ? int_value.(only(parameters)["args"]) : int_value.(parameters)
         if effect.family == :translation
             push!(moving, before_role)
         end
@@ -138,7 +161,7 @@ function joint_model(compiled, program, original, definitions, calls, occurrence
             isnothing(meter) ? shape_template(before_role) : MotionShape()
         position = effect.family == :pigment ? anchor(before_role) : nothing
         visibility = effect.family == :count ? effect.context.visibility : ColorCell[]
-        push!(models, EffectModel(effect.family, prototype, position, values, visibility,
+        push!(models, EffectModel(effect.family, prototype, position, copy(effect.values), visibility,
             effect.family == :translation && before_role in enclosed_targets,meter))
     end
     anchors = anchor.(moving)
@@ -151,24 +174,22 @@ function joint_model(compiled, program, original, definitions, calls, occurrence
         union!(entering, setdiff(Set((x+dx,y+dy) for (x,y,_) in effect.before), old_support))
     end
     entry_colors = sort!(unique(UInt8[before[y+1,x+1] for (x,y) in entering]))
-    references = sort!(unique(String[call["definition_ref"] for call in calls]))
-    id = "joint-" * content_hash(JSON.json([compiled.output.event_id, references, compiled.roles]))
-    action = compiled.output.action["id"]
-    event = compiled.output.event_id
+    action = output.action["id"]
+    event = output.event_id
     click = if action == 6
-        point = (compiled.output.action["x"],compiled.output.action["y"])
+        point = (output.action["x"],output.action["y"])
         support = point_component(before_groups,point)
-        isnothing(support) ? nothing : ClickBinding(support,point,
-            all(effect->effect.family == :pigment && effect.before == support,effects))
+        if !isnothing(support)
+            local_pigment = all(effect->effect.family == :pigment && effect.before == support,effects)
+            relative = all(effect->effect.family in (:translation,:pigment,:count),effects)
+            offsets = relative ? Union{Nothing,Pixel}[
+                effect.family == :count ? nothing : anchor(effect.before) .- anchor(support)
+                for effect in effects] : Union{Nothing,Pixel}[]
+            ClickBinding(support,point,local_pigment,offsets)
+        end
     end
-    patch = frame_patch(compiled.output,before,after,anchors;click)
-    joint = JointMechanism(id,action,models,references,event,anchors,spacing,entry_colors,nothing,patch,click)
-    moved = findall(effect->effect.family == :translation,models)
-    (isempty(moved) || length(moved) == length(models)) && return [joint]
-    projected = projection_references(moved,original,calls,occurrences)
-    isempty(projected) && return [joint]
-    subid = "joint-" * content_hash(JSON.json([id,moved,projected]))
-    return [joint,JointMechanism(subid,action,models[moved],projected,event,anchors,spacing,entry_colors,id,nothing,click)]
+    patch = frame_patch(output,before,after,anchors;click)
+    return JointMechanism(id,action,models,references,event,anchors,spacing,entry_colors,nothing,patch,click)
 end
 
 function decode_model_term(effect, pre, post)
@@ -199,36 +220,41 @@ end
 
 binding_view(model) = model.enclosed ? "geometry-support" : "color-support"
 
-function model_binding(model, groups, enclosed_targets)
+function model_binding(model, groups, enclosed_targets; position=nothing)
     if model.enclosed
         candidates = filter(s -> geometry(s) == geometry(model.template), enclosed_targets)
     else
         expected = support_grid(model.template).canonical
         candidates = filter(s -> support_grid(s).canonical == expected, groups)
     end
+    isnothing(position) || filter!(shape->anchor(shape) == position,candidates)
     return length(candidates) == 1 ? only(candidates) : nothing
 end
 
-function model_count(model, frame, groups)
+function model_count(model, frame, groups; visibility=model.visibility)
     all(cell -> checkbounds(Bool, frame, cell[2]+1,cell[1]+1) &&
-        frame[cell[2]+1,cell[1]+1] == cell[3], model.visibility) || return nothing
+        frame[cell[2]+1,cell[1]+1] == cell[3], visibility) || return nothing
     return count(s -> shape_template(s) == model.template, groups)
 end
 
-function result_model(model, before, groups, enclosure, action; meters=(),clicked=nothing)
+function result_model(model, before, groups, enclosure, action; meters=(),clicked=nothing,
+                      position=nothing,shift=nothing)
     if model.family == :translation
-        bound = model_binding(model, groups, [role.target for role in enclosure])
+        bound = model_binding(model, groups, [role.target for role in enclosure];position)
         isnothing(bound) && return nothing
         source_unit, observed_unit = support_grid(model.template).unit, support_grid(bound).unit
         scaled = model.values .* observed_unit
         all(v -> mod(v,source_unit) == 0,scaled) || return nothing
-        return (family=:translation, basis=bound, expected=Tuple(div.(scaled,source_unit)), value=anchor(bound))
+        return (family=:translation, basis=bound, expected=Tuple(div.(scaled,source_unit)), value=anchor(bound),
+            relative=!isnothing(position))
     elseif model.family == :count
-        n = model_count(model, before, groups)
+        visibility = isnothing(shift) ? model.visibility :
+            ColorCell[(x+shift[1],y+shift[2],color) for (x,y,color) in model.visibility]
+        n = model_count(model, before, groups;visibility)
         isnothing(n) && return nothing
         support = sort!(reduce(vcat,(part for part in groups if shape_template(part) == model.template);init=ColorCell[]))
         return (family=:count,basis=n,expected=n+only(model.values),value=n,token_support=support,
-            instance=semantic_hash(["discrete-component-count",model.template]))
+            instance=semantic_hash(["discrete-component-count",model.template]),visibility)
     elseif model.family == :measurement
         binding = match_meter(model.measurement,meters)
         isnothing(binding) && return nothing
@@ -237,7 +263,7 @@ function result_model(model, before, groups, enclosure, action; meters=(),clicke
         return (family=:measurement,basis=n,expected=n+only(model.values),value=n,binding,
             instance=meter_identity(binding))
     elseif model.family == :pigment
-        position = isnothing(clicked) ? model.position : anchor(clicked)
+        position = isnothing(clicked) ? something(position,model.position) : anchor(clicked)
         x,y = position
         seen = isnothing(clicked) ? [s for s in groups if anchor(s) == position &&
             position_offsets(s) == position_offsets(model.template)] : [clicked]
@@ -257,24 +283,35 @@ function result_model(model, before, groups, enclosure, action; meters=(),clicke
     return (family=:selection, basis=only(targets), expected=anchor(only(targets)), value=anchor(only(enclosure).target))
 end
 
-function evaluate_joint_rule(rule, before, groups, enclosure, action; meters=())
+function evaluate_joint_rule(rule, before, groups, enclosure, action; meters=(), relative_transfer=false)
     clicked = nothing
+    support = nothing
+    relative = false
+    shift = nothing
     if rule.action_id == 6 && !all(effect->effect.family == :selection,rule.effects)
         scope = rule.click
         if !isnothing(scope)
             point = (action["x"],action["y"])
             support = point_component(groups,point)
+            relative = relative_effect_roles(scope)
             matches = !isnothing(support) && geometry(support) == geometry(scope.support) &&
                 relative_click(point,support) == relative_click(scope.point,scope.support) &&
-                (scope.local_pigment || anchor(support) == anchor(scope.support))
+                (scope.local_pigment || anchor(support) == anchor(scope.support) ||
+                    relative && relative_transfer) &&
+                (!relative || scope.local_pigment || shape_template(support) == shape_template(scope.support))
             matches && scope.local_pigment && (clicked = support)
+            matches && relative && (shift = anchor(support) .- anchor(scope.support))
         else
             matches = false
         end
         matches || return (truth=unknown_truth, fragments=fill(nothing,length(rule.effects)),reason="click_role_unproved")
     end
-    fragments = [result_model(effect,before,groups,enclosure,action;meters,clicked) for effect in rule.effects]
+    positions = relative ? [isnothing(offset) ? nothing : anchor(support) .+ offset for offset in rule.click.offsets] :
+        fill(nothing,length(rule.effects))
+    fragments = [result_model(effect,before,groups,enclosure,action;meters,clicked,position,shift)
+        for (effect,position) in zip(rule.effects,positions)]
     any(isnothing,fragments) && return (truth=unknown_truth, fragments, reason="incomplete_effect_binding")
+    relative && (fragments = [merge(part,(click_origin=anchor(support),)) for part in fragments])
     for (effect,fragment) in zip(rule.effects, fragments)
         if effect.family == :count && fragment.expected < 0
             return (truth=disproven, fragments, reason="resource_precondition")
@@ -298,7 +335,7 @@ function evaluate_joint_rule(rule, before, groups, enclosure, action; meters=())
         if !allunique(anchors) || !aligned
             return (truth=disproven, fragments, reason="joint_role_placement")
         end
-        if any(part->part.family == :count, fragments) && anchors != rule.anchors
+        if any(part->part.family == :count, fragments) && anchors != rule.anchors && !relative
             return (truth=unknown_truth, fragments, reason="resource_interaction_scope")
         end
         prior = Set(pixel for item in movers for pixel in effect_points(item.basis))
@@ -354,12 +391,24 @@ function measure_joint(choice, after)
     enclosure = enclosure_pairs(groups)
     actual = Dict{String,Any}()
     assessments = Dict{String,String}()
+    remaining = Set(groups)
     for (model,part) in zip(choice.model.effects,choice.fragments)
         value = if part.family == :translation
-            corresponding = model_binding(model,groups,[role.target for role in enclosure])
+            targets = [role.target for role in enclosure]
+            corresponding = if get(part,:relative,false)
+                destination = part.value .+ part.expected
+                # Other identical supports do not certify that the bound one moved.
+                at_origin = model_binding(model,groups,targets;position=part.value)
+                at_target = model_binding(model,groups,targets;position=destination)
+                isnothing(at_origin) && !isnothing(at_target) && at_target in remaining ?
+                    at_target : !isnothing(at_origin) && isnothing(at_target) ? at_origin : nothing
+            else
+                model_binding(model,groups,targets)
+            end
+            isnothing(corresponding) || delete!(remaining,corresponding)
             isnothing(corresponding) ? nothing : anchor(corresponding) .- part.value
         elseif part.family == :count
-            model_count(model,after,groups)
+            model_count(model,after,groups;visibility=get(part,:visibility,model.visibility))
         elseif part.family == :measurement
             read_meter(after,part.binding)
         elseif part.family == :pigment

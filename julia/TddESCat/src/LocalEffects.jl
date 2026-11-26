@@ -222,7 +222,7 @@ function observed_effects(previous, current; meters=MeterContext())
                     sort!(collect(intersect(changed, pixels))),
                     (before_signal=before_role.signal, after_signal=after_role.signal)))
             end
-        elseif !isempty(changed)
+        elseif !isempty(changed) && (!isempty(from) || !isempty(to))
             push!(alternatives, "ambiguous_selection_binding")
         end
     end

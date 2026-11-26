@@ -632,6 +632,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     pairs = []
     experiments = ExperimentSchedule()
     intervention_memory = InterventionMemory()
+    relations = RelationAgenda()
     publications = String[]
     count = 0
     continuation = nothing
@@ -659,6 +660,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     relation_goals = !isnothing(config.planning) && get(config.planning,"relation_goals",false)
     spatial = !isnothing(config.planning) && get(config.planning,"autonomous",false) ? SpatialLearning() : nothing
     visual = isnothing(spatial) ? nothing : isnothing(visual_state) ? VisualControl() : visual_state
+    relation_tasks = !frozen && !isnothing(visual) && relation_goals
     goal = composing ? bind_observed_goal(last(rec.observation.frames),config.planning["goal"]) : nothing
     limits = mechanism_limits(config)
     coordinates = isnothing(config.search) ? 4096 : config.search["max_action_coordinates"]
@@ -677,21 +679,45 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         obs = rec.observation
         meter_context!(measurement,obs)
         meters = collect(values(measurement.bindings))
-        obs.state in ("WIN","GAME_OVER") && break
-        if !isnothing(visual) && !isnothing(visual.resource) &&
-                read_meter(last(obs.frames),visual.resource) == 0
-            may_retry_visual_attempt!(visual,spatial,obs.levels_completed) || break
+        obs.state == "WIN" && break
+        failed = obs.state == "GAME_OVER"
+        retry = failed && relation_tasks ? failure_retry!(relations) : nothing
+        failed && isnothing(retry) && break
+        exhausted = !isnothing(visual) && !isnothing(visual.resource) &&
+            read_meter(last(obs.frames),visual.resource) == 0
+        if failed || exhausted
+            failed || may_retry_visual_attempt!(visual,spatial,obs.levels_completed) || break
             reset = reset!(rec,obs.game_id)
-            reset["completion"] == "confirmed" && rec.observation.levels_completed == obs.levels_completed || break
+            reset["completion"] == "confirmed" || break
             event = read_json(store_path(rec.store,"events",rec.before_ref * ".json"))
             entry = (;event,observation=rec.observation)
             register_evidence_obligation!(rec.store,entry;frozen)
             sequence_enabled && push!(sequence_events,entry)
+            continuation = nothing
+            goal_pending = nothing
             program_cursor = nothing
             contact_pending = nothing
             pending_policy = nothing
             policy_counterexample = nothing
-            begin_visual_attempt!(visual)
+            fresh_binding = failed || rec.observation.levels_completed != obs.levels_completed
+            if fresh_binding
+                begin_visual_level!(visual,spatial)
+                spatial = SpatialLearning()
+                measurement = MeterContext()
+                empty!(attempts)
+                empty!(program_attempts)
+                empty!(refuted_steps)
+                empty!(blocked_policies)
+                intervention_memory = InterventionMemory(intervention_memory.samples,Dict(),Set(),Dict(),Dict(),nothing)
+            else
+                begin_visual_attempt!(visual)
+                intervention_memory.prior_observation = nothing
+            end
+            begin_relation_attempt!(relations,retry)
+            atomic_json(store_path(rec.store,"attempts",reset["command_id"] * ".json"),(;
+                event=rec.before_ref,prior=event["before_ref"],attempt=relations.attempt,revision=retry,
+                previous_level=obs.levels_completed,level=rec.observation.levels_completed,
+                full_reset=rec.observation.full_reset,session=rec.observation.guid,rebound=fresh_binding))
             history = [0]
             ready_at = time_ns()
             continue
@@ -845,44 +871,56 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 end
             end
         end
-        intervention = if object_probes && isnothing(program_cursor) && !continuing_contact
-            contact = get(something(spatial_choice,(;)),:contact,nothing)
-            certified_motion = !isnothing(contact) && contact.conditions.judgment == :admitted &&
-                contact.progress.judgment == :progress
+        intervention = if object_probes
             choose_intervention(intervention_memory,click_scene,obs,decision.ranked,attempts;
-                explore=!frozen && !certified_motion,goal_learning=relation_goals,confirmed_count=count)
-        end
-        if !isnothing(intervention)
-            choice = findfirst(row->row.action == intervention.action,decision.ranked)
-            if isnothing(choice)
-                decision = ranked_public_actions(knowledge,obs,history,attempts,coordinates;
-                    required_action=intervention.action,meters,object_probes)
-                choice = findfirst(row->row.action == intervention.action,decision.ranked)
-            end
-            item = merge(decision.ranked[choice],(reason=intervention.reason,))
-            spatial_choice = nothing
-            policy_note = nothing
+                explore=!frozen,goal_learning=relation_goals,confirmed_count=count,
+                agenda=relation_tasks ? relations : nothing)
         end
         experiment = if !object_probes && !frozen && !composing && isnothing(program_cursor) && isnothing(spatial_choice)
             select_experiment!(experiments,rec.store,decision.ranked,obs.available_actions,rec.before_ref)
         end
-        if !isnothing(experiment) && experiment.action != item.action
-            choice = findfirst(row->row.action == experiment.action,decision.ranked)
+        context = relation_tasks ? relation_context(obs) : nothing
+        relation_choice = if relation_tasks
+            relation_experiment(relations,obs,decision,intervention,context;meters)
+        end
+        arbitration = task_arbitration(item,spatial_choice,intervention,relation_choice,experiment;
+            program=!isnothing(program_cursor),continuing_contact,
+            conditional=!isnothing(goal_cursor) || !isnothing(item.follow) ||
+                get(something(policy_note,Dict()),"status",nothing) == "ready",
+            object_probes)
+        selected = arbitration.choice
+        if selected.action != item.action || selected.source in (:spatial,:intervention,:relation)
+            choice = findfirst(row->row.action == selected.action,decision.ranked)
             if isnothing(choice)
                 decision = ranked_public_actions(knowledge,obs,history,attempts,coordinates;
-                    required_action=experiment.action,meters)
-                choice = findfirst(row->row.action == experiment.action,decision.ranked)
+                    composing,required_action=selected.action,meters,object_probes)
+                choice = findfirst(row->row.action == selected.action,decision.ranked)
             end
-            item = decision.ranked[choice]
-            policy_note = nothing
+            item = merge(decision.ranked[choice],(reason=selected.reason,))
         end
-        if !isnothing(spatial_choice) && isnothing(program_cursor)
-            requested = first(row for row in decision.ranked if row.action == Dict("id"=>spatial_choice.id))
-            item = merge(requested,(reason=spatial_choice.reason,))
-            policy_note = nothing
+        if selected.source ∉ (:spatial,:program)
+            if !isnothing(spatial_choice)
+                visual.continuation = nothing
+                spatial_choice = nothing
+            end
         end
+        if selected.source ∉ (:base,:program)
+            policy_note = nothing
+            goal_cursor = nothing
+        end
+        selected.source == :experiment || (experiment = nothing)
+        !isnothing(intervention) && selected.action == intervention.action || (intervention = nothing)
         object_probes && (intervention = executed_intervention(intervention,click_scene,item.action))
         intervention_goal = isnothing(intervention) ? nothing : intervention.goal
+        relation_proposal = if relation_tasks
+            if !isnothing(relation_choice) && selected.action == relation_choice.action
+                relation_choice
+            else
+                tests = prepare_relation_tests(relations,context,obs,decision.groups,item.action;meters)
+                isempty(tests) ? nothing : (action=item.action,intent=:apply_relation,tests,reads=String[],obligation=nothing)
+            end
+        end
+        relation_task = isnothing(relation_proposal) ? nothing : relation_task_record(relation_proposal)
         task = advancement_task(learned_goal,visual,spatial,obs,spatial_choice)
         policy_task = policy_task_record(selected_policy,learned_goal,spatial_choice,blocked_policies)
         plan_reads = isnothing(goal_cursor) ? String[] : reduce(vcat,
@@ -925,6 +963,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             append!(plan_reads,[projected.training;projected.reads])
         end
         prediction = predict_public(rec,item;plan_reads,intervention_goal)
+        isnothing(relation_task) || (prediction = relation_prediction(rec,item,prediction,relation_task))
         if !isnothing(spatial_choice)
             reads = unique([rec.before_ref;spatial_choice.reads])
             spatial_version = "spatial-" * content_hash(JSON.json(spatial_choice))
@@ -964,6 +1003,10 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 "attempted"=>sum(key[1] == 6 for key in keys(attempts);init=0)))
         isnothing(policy_note) || (decision_record["policy"] = policy_note)
         isnothing(task) || (decision_record["relation_task"] = task)
+        if relation_tasks
+            decision_record["task_arbitration"] = arbitration
+            isnothing(relation_task) || (decision_record["public_relation_task"] = relation_task)
+        end
         isnothing(policy_task) || (decision_record["learned_policy"] = policy_task)
         isnothing(intervention) || (decision_record["intervention"] = intervention_record(intervention,rec.before_ref))
         isnothing(spatial_choice) || (decision_record["spatial_experiment"] = spatial_choice)
@@ -1064,6 +1107,12 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         end
         assessment = isnothing(item.chosen) ? (actual=Dict(),assessments=Dict()) :
             measure_joint((model=item.chosen.model.rule,fragments=item.chosen.fragments),sample.after)
+        relation_feedback = if relation_tasks
+            observation = observe_relations!(relations,entry,resulting,effects,contact_feedback,site_transitions,
+                relation_proposal;groups=decision.groups)
+            finish_relation_dispatch!(relations,relation_proposal)
+            observation
+        end
         projection_feedback = if !isnothing(projected)
             local_feedback = projection_choice === item.chosen ? assessment :
                 measure_joint((model=projection_choice.model.rule,fragments=projection_choice.fragments),sample.after)
@@ -1164,6 +1213,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 "policy"=>policy_note,"program"=>program_note,"projection"=>projection_feedback,
                 "task_feedback"=>advancement_feedback(task,entry,resulting,contact_feedback),
                 "intervention_feedback"=>intervention_feedback,
+                "public_relation_feedback"=>relation_feedback,
                 "learned_policy_feedback"=>policy_result,
                 "spatial_feedback"=>spatial_feedback,
                 "visual_feedback"=>visual_feedback,"contact_feedback"=>contact_feedback,

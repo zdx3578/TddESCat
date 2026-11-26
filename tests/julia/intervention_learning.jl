@@ -2,10 +2,10 @@ using Test, TddESCat
 
 const TC = TddESCat
 
-function intervention_entry(ref,action,frame,available)
+function intervention_entry(ref,action,frame,available;before="")
     observation = TC.PublicObservation("abstract-trial","test-session",[frame],"NOT_FINISHED",
         0,2,action,available,false)
-    return (;event=Dict("event_id"=>ref),observation)
+    return (;event=Dict("event_id"=>ref,"before_ref"=>before),observation)
 end
 
 @testset "Coordinate alternatives remain complete and spatially spread" begin
@@ -67,6 +67,7 @@ end
     end
     image[4,4] = 0x02
     memory = TC.InterventionMemory()
+    agenda = TC.RelationAgenda()
     next = intervention_entry("first",Dict("id"=>0),image,[6])
     for (ordinal,x) in enumerate((5,20))
         scene = TC.intervention_scene(image,TC.public_components(image))
@@ -76,25 +77,21 @@ end
         painted = copy(image)
         painted[11:13,x+1:x+3] .= 0x04
         before = next
-        next = intervention_entry("confirmed-$ordinal",action,painted,[6])
-        support = choice.candidate.support
-        after_support = TC.MotionShape([(u,v,0x04) for (u,v,_) in support])
-        pixels = sort!(collect(TC.effect_points(support)))
-        change = TC.LocalEffect(:pigment,support,after_support,[8,4],pixels,(;))
-        TC.observe_intervention!(memory,choice,before,next,(effects=[change],);ordinal)
+        next = intervention_entry("confirmed-$ordinal",action,painted,[6];before=before.event["event_id"])
+        effects = TC.observed_effects(before,next)
+        TC.observe_intervention!(memory,choice,before,next,effects;ordinal)
+        TC.observe_relations!(agenda,before,next,effects,nothing,NamedTuple[],nothing)
         image = painted
-        if ordinal == 1
-            remaining = TC.intervention_scene(image,TC.public_components(image))
-            @test isnothing(TC.object_effect_followup(memory,0,remaining))
-        end
     end
     scene = TC.intervention_scene(image,TC.public_components(image))
     choice = TC.choose_intervention(memory,scene,next.observation,[],Dict{String,Int}();
-        explore=true,goal_learning=true,confirmed_count=2)
+        explore=true,goal_learning=true,confirmed_count=2,agenda)
     @test choice.action == TC.click_action((31,11))
     @test choice.reason == "extend_observed_object_effect"
-    @test Set(choice.hypothesis.reads) == Set(["first","confirmed-1","confirmed-2"])
-    @test choice.hypothesis.effects == [:pigment] && isnothing(choice.goal)
+    tests = TC.prepare_relation_tests(agenda,TC.relation_context(next.observation),
+        next.observation,TC.public_components(image),choice.action)
+    @test Set(only(tests).reads) == Set(["first","confirmed-1","confirmed-2"])
+    @test only(tests).scope == :replicated && only(only(tests).rule.effects).family == :pigment
 end
 
 @testset "Click effects follow a witnessed object and exact relative point" begin
