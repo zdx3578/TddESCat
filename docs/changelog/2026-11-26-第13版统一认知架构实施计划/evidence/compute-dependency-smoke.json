@@ -1,0 +1,81 @@
+{
+  "status": "passed",
+  "scope": "isolated_library_capabilities_only",
+  "checked_at_utc": "2026-11-26T12:40:02.244728+00:00",
+  "python": "3.12.14",
+  "project_python_pin": "3.12.9",
+  "project_python_matched": false,
+  "project_toolchain_status": "not_validated",
+  "unvalidated_toolchains": [
+    "julia",
+    "rust"
+  ],
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "execution": {
+    "script_command": [
+      "python",
+      "python/compute/tests/dependency_smoke.py",
+      "--history"
+    ],
+    "script_path": "python/compute/tests/dependency_smoke.py",
+    "script_sha256": "1262379179d5b1ef29c69016b717a4cd4f45c6489a4afb98e3822a75d28c69d3",
+    "lock_path": "python/compute/uv.lock",
+    "lock_sha256": "3969293272609b3655559dff3173abbd195f918dcb3d55b845f7093f774abc42",
+    "launcher_command": [
+      "uv",
+      "run",
+      "--locked",
+      "--project",
+      "python/compute",
+      "--python",
+      "3.12.14",
+      "--extra",
+      "history",
+      "python",
+      "python/compute/tests/dependency_smoke.py",
+      "--history"
+    ],
+    "working_directory": "staging_root_with_repository_relative_paths",
+    "exit_code": 0
+  },
+  "versions": {
+    "cvc5": "1.4.2",
+    "libcirkit": "0.3.1",
+    "torch": "2.15.0+cpu",
+    "aalpy": "2.0.0"
+  },
+  "solver": {
+    "sat_model": 1,
+    "contradiction": "unsat",
+    "incremental_restore": "sat",
+    "sygus_solution": "(lambda ((argument Int)) (+ argument 1))",
+    "sygus_counterexample_query": "unsat"
+  },
+  "circuit": {
+    "device": "cpu",
+    "torch": "2.15.0+cpu",
+    "joint_probabilities": [
+      0.23999999775993489,
+      0.2600000043428993,
+      0.3599999986665281,
+      0.1399999992306377
+    ],
+    "mass_before": 1.0,
+    "marginals": [
+      0.4999999978971657,
+      0.599999996426463
+    ],
+    "conditional": 0.7200000003611375,
+    "loss_before": 1.5952483349865942,
+    "loss_after": 1.5945277696327507,
+    "mass_after": 1.0,
+    "parameters_updated": true,
+    "adam_learning_rate": 0.001
+  },
+  "history": {
+    "states": 2,
+    "observed_prefixes_checked": 4,
+    "input_completeness": null,
+    "unknown_inputs_preserved": true
+  }
+}
