@@ -5,11 +5,17 @@ import re
 import subprocess
 import sys
 import tomllib
+from contextlib import ExitStack
 from hashlib import sha256
 from importlib.metadata import version
 from pathlib import Path
 
-from tddesc_tools.isolation import environment_server, isolation_probe, solver_sandbox
+from tddesc_tools.isolation import (
+    EnvironmentStartupError,
+    environment_server,
+    isolation_probe,
+    solver_sandbox,
+)
 from tddesc_tools.public_run import (
     absolute_compute_settings,
     SUPERVISOR_BLOCKED,
@@ -76,17 +82,42 @@ def offline_capture(root, task, run):
             "engine": version("arcengine"),
         },
     )
-    with environment_server(
-        root,
-        runtime,
-        task["environment_config"],
-        games,
-        private / "server",
-        run / "grade/environment.log",
-        startup_timeout=90
-        if values["execution"]["max_public_commands"] == "unlimited"
-        else 20,
-    ) as (url, server_pid):
+    unlimited = values["execution"]["max_public_commands"] == "unlimited"
+    timeout = 90 if unlimited else 20
+
+    def server(directory, log):
+        return environment_server(
+            root,
+            runtime,
+            task["environment_config"],
+            games,
+            private / directory,
+            run / "grade" / log,
+            startup_timeout=timeout,
+        )
+
+    with ExitStack() as stack:
+        try:
+            url, server_pid = stack.enter_context(server("server", "environment.log"))
+        except EnvironmentStartupError as first:
+            if not unlimited:
+                raise
+            status = {"first": {"reason": first.reason, "exit_code": first.exit_code}}
+            retry_record = run / "grade/environment-startup-retry.json"
+            write_json(retry_record, status)
+            try:
+                url, server_pid = stack.enter_context(
+                    server("server-start-retry", "environment-start-retry.log")
+                )
+            except EnvironmentStartupError as second:
+                status["retry"] = {
+                    "reason": second.reason,
+                    "exit_code": second.exit_code,
+                }
+                write_json(retry_record, status)
+                raise
+            status["retry"] = {"reason": "ready"}
+            write_json(retry_record, status)
         agent = public / "agent.toml"
         engine = (original.parent / values["learning"]["engine"]).resolve()
         projection = re.sub(

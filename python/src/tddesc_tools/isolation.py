@@ -11,6 +11,13 @@ from time import monotonic, sleep
 from .run import clean_environment
 
 
+class EnvironmentStartupError(RuntimeError):
+    def __init__(self, log, exit_code):
+        self.exit_code = exit_code
+        self.reason = "startup_deadline" if exit_code is None else "server_exit"
+        super().__init__(f"Official HTTP server {self.reason}; see {log}")
+
+
 def bubblewrap():
     executable = shutil.which("bwrap")
     if executable is None:
@@ -140,10 +147,9 @@ def environment_server(
             deadline = monotonic() + startup_timeout
             ready = work / "ready.json"
             while not ready.exists():
-                if server.poll() is not None or monotonic() >= deadline:
-                    raise RuntimeError(
-                        f"Official HTTP server failed to start; see {log}"
-                    )
+                exit_code = server.poll()
+                if exit_code is not None or monotonic() >= deadline:
+                    raise EnvironmentStartupError(log, exit_code)
                 sleep(0.05)
             port = json.loads(ready.read_bytes())["port"]
             yield f"http://127.0.0.1:{port}", server.pid
