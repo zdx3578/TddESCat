@@ -4,7 +4,7 @@ struct VisualSite
     event::String
 end
 
-const CONTACT_DOMAIN = "visible-site-obligations-v2"
+const CONTACT_DOMAIN = "observed-site-obligations-v3"
 
 struct ContactFacts
     # These candidates were bound in the current instance. Visibility does not
@@ -133,15 +133,40 @@ function contact_observed(samples, level, point, context, value; facts=nothing, 
 end
 
 const PROGRESS_VARIABLES = (:remaining_sites, :action, :previous_action)
+const JOINT_PROGRESS_VARIABLES = [(PROGRESS_VARIABLES[i],PROGRESS_VARIABLES[j])
+    for i in eachindex(PROGRESS_VARIABLES) for j in i+1:length(PROGRESS_VARIABLES)]
 
 function progress_value(variable, facts, action)
     variable == :remaining_sites && return length(facts.remaining)
     return variable == :action ? action : facts.previous_action
 end
 
+progress_value(variables::Tuple, facts, action) =
+    Tuple(progress_value(variable,facts,action) for variable in variables)
+uses_progress_history(variable::Symbol) = variable == :previous_action
+uses_progress_history(variables::Tuple) = :previous_action in variables
+
 function progress_witnesses(sample)
     return unique([sample.before;sample.event;sample.facts.domain_reads;
         [site.event for (_,site) in sample.facts.remaining]])
+end
+
+function joint_progress_values(variables, entries, witnesses)
+    refs = unique(reduce(vcat,witnesses;init=String[]))
+    scope = RelationScope("completed-attempts",last(entries).before,"advancement","public","before")
+    evaluation = RelationEvaluation(scope,Dict(ref=>i for (i,ref) in enumerate(refs)),length(refs)+1)
+    header = [("EventRef","before"),("Integer","before")]
+    function atom(variable)
+        rows = [(sample.event,progress_value(variable,sample.facts,sample.action)) for sample in entries]
+        return observe_relation!(evaluation,string(variable),header,rows;
+            event_reads=refs,domain_complete=false)
+    end
+    tables = atom.(variables)
+    joined = exact_relation_join(evaluation,tables...,Dict(
+        "shared"=>[(0,0)],"output"=>[0,1,3],"distinct"=>Tuple{Int,Int}[]))
+    by_attempt = Dict(row[1]=>(row[2],row[3]) for row in keys(joined.rows))
+    length(by_attempt) == length(entries) || error("Joint advancement inputs lost their public occurrence")
+    return [by_attempt[sample.event] for sample in entries]
 end
 
 function fit_progress_relations(samples)
@@ -151,20 +176,25 @@ function fit_progress_relations(samples)
         sample.outcome in (:entered,:progress) && sample.point in first.(sample.facts.remaining)
     end
     outcomes = Bool[sample.outcome == :progress for sample in entries]
-    models = Pair{Symbol,FiniteRelation{Int,Bool}}[]
+    models = Pair{Any,FiniteRelation}[]
     witnesses = progress_witnesses.(entries)
     reads = sort!(unique!(reduce(vcat,witnesses;init=String[])))
     if any(outcomes) && !all(outcomes)
-        for variable in PROGRESS_VARIABLES
-            values = [progress_value(variable,sample.facts,sample.action) for sample in entries]
-            relation = empirical_relation(values,outcomes,witnesses)
-            isnothing(relation) || push!(models,variable=>relation)
+        for variables in (PROGRESS_VARIABLES,JOINT_PROGRESS_VARIABLES)
+            for variable in variables
+                values = variable isa Tuple ? joint_progress_values(variable,entries,witnesses) :
+                    [progress_value(variable,sample.facts,sample.action) for sample in entries]
+                relation = empirical_relation(values,outcomes,witnesses)
+                isnothing(relation) || push!(models,variable=>relation)
+            end
+            isempty(models) || break
         end
     end
     rules = [(variable=variable,rows=sort!(collect(keys(relation.evidence))))
         for (variable,relation) in models]
     model = isempty(models) ? nothing : "progress-" * semantic_hash(
-        [CONTACT_DOMAIN,[[string(row.variable),row.rows] for row in rules]])
+        [CONTACT_DOMAIN,[[row.variable isa Tuple ? string.(row.variable) : string(row.variable),row.rows]
+            for row in rules]])
     return (;models,rules,model,reads,samples=[sample.event for sample in entries])
 end
 

@@ -6,7 +6,12 @@ struct ProjectionTrial
     quantities::Vector{Int}
     outcome::String
     correction::Vector{NTuple{5,Int}}
+    origin::Union{Nothing,Pixel}
+    channels::Vector{String}
 end
+
+ProjectionTrial(event,before_ref,before,history,quantities,outcome,correction) =
+    ProjectionTrial(event,before_ref,before,history,quantities,outcome,correction,nothing,String[])
 
 struct ProjectionScope
     version::String
@@ -14,6 +19,7 @@ struct ProjectionScope
     conditions::Vector
     corrections::Dict{String,Vector{NTuple{5,Int}}}
     disputed::Bool
+    relative::Bool
 end
 
 mutable struct ProjectionMemory
@@ -29,56 +35,132 @@ function projection_identity(memory,rule)
     end
 end
 
-function projection_feature(feature, frame, history, quantities)
+function projection_feature(feature, frame, history, quantities, origin=nothing, channels=String[])
     kind,index = feature
-    if kind == "pixel"
+    if kind in ("pixel","relative")
+        kind == "relative" && isnothing(origin) && return nothing
         x,y = index
+        kind == "relative" && ((x,y) = (x,y) .+ origin)
         return checkbounds(Bool,frame,y+1,x+1) ? Int(frame[y+1,x+1]) : nothing
     elseif kind == "history"
         return length(history) < index ? nothing : Tuple(last(history,index))
+    elseif kind == "meter"
+        i = findall(==(index),channels)
+        return length(i) == 1 ? quantities[only(i)] : nothing
+    elseif kind == "joint"
+        values = Tuple(projection_feature(part,frame,history,quantities,origin,channels) for part in index)
+        return any(isnothing,values) ? nothing : values
     end
     return index <= length(quantities) ? quantities[index] : nothing
 end
 
 projection_feature(feature,trial::ProjectionTrial) =
-    projection_feature(feature,trial.before,trial.history,trial.quantities)
+    projection_feature(feature,trial.before,trial.history,trial.quantities,trial.origin,trial.channels)
+
+function shift_correction(correction,offset)
+    dx,dy = offset
+    return [(x+dx,y+dy,old,base,new) for (x,y,old,base,new) in correction]
+end
+
+function supported_relative_patch(trials)
+    any(trial->isnothing(trial.origin),trials) && return false
+    anchors = Dict{String,Set{Pixel}}()
+    for trial in trials
+        isempty(trial.correction) && continue
+        relative = shift_correction(trial.correction,(-trial.origin[1],-trial.origin[2]))
+        push!(get!(Set{Pixel},anchors,semantic_hash(relative)),trial.origin)
+    end
+    return !isempty(anchors) && all(group->length(group)>1,values(anchors))
+end
+
+function projection_condition(feature,trials,outcomes,witnesses)
+    readings = Any[projection_feature(feature,trial) for trial in trials]
+    (any(isnothing,readings) || allequal(readings)) && return nothing
+    relation = empirical_relation(readings,outcomes,witnesses)
+    isnothing(relation) && return nothing
+    repeated = Dict{Any,Set{String}}()
+    for (input,trial) in zip(readings,trials)
+        push!(get!(Set{String},repeated,input),frame_key(trial.before))
+    end
+    any(rows->length(rows)>1,values(repeated)) || return nothing
+    return (;feature,relation,repeated)
+end
 
 function fit_projection_scope(trials, history_lengths)
-    corrections = Dict(trial.outcome=>trial.correction for trial in trials if trial.outcome != "unresolved")
-    outcomes = [trial.outcome for trial in trials]
+    relative = supported_relative_patch(trials)
+    patches = [relative ? shift_correction(trial.correction,(-trial.origin[1],-trial.origin[2])) :
+        trial.correction for trial in trials]
+    outcomes = [relative && !isempty(patch) ? semantic_hash(patch) : trial.outcome
+        for (trial,patch) in zip(trials,patches)]
+    corrections = Dict(outcome=>patch for (outcome,patch) in zip(outcomes,patches) if outcome != "unresolved")
     disputed = any(!=("unchanged"),outcomes)
-    variables = Set{Tuple{String,Any}}(("pixel",(change[1],change[2]))
-        for trial in trials for change in trial.correction)
+    variables = Set{Tuple{String,Any}}((relative ? "relative" : "pixel",(change[1],change[2]))
+        for patch in patches for change in patch)
     for length in history_lengths
         length > 0 && push!(variables,("history",length))
     end
-    for index in 1:minimum(length(trial.quantities) for trial in trials)
-        push!(variables,("quantity",index))
+    if all(trial->isempty(trial.channels),trials)
+        for index in 1:minimum(length(trial.quantities) for trial in trials)
+            push!(variables,("quantity",index))
+        end
+    else
+        for channel in reduce(intersect,(Set(trial.channels) for trial in trials))
+            push!(variables,("meter",channel))
+        end
     end
     conditions = NamedTuple[]
     if disputed && !allequal(outcomes)
         witnesses = [[trial.before_ref,trial.event] for trial in trials]
         for feature in sort!(collect(variables);by=repr)
-            values = Any[projection_feature(feature,trial) for trial in trials]
-            (any(isnothing,values) || allequal(values)) && continue
-            relation = empirical_relation(values,outcomes,witnesses)
-            isnothing(relation) && continue
-            # A distinct reading for every observation gives no evidence for reusing a condition.
-            repeated = Dict{Any,Set{String}}()
-            for (value,trial) in zip(values,trials)
-                push!(get!(Set{String},repeated,value),frame_key(trial.before))
+            result = projection_condition(feature,trials,outcomes,witnesses)
+            isnothing(result) || push!(conditions,result)
+        end
+        if isempty(conditions) && relative
+            local_inputs = sort!([feature for feature in variables if first(feature) == "relative" &&
+                !allequal(projection_feature(feature,trial) for trial in trials)];by=repr)
+            for i in eachindex(local_inputs), j in i+1:length(local_inputs)
+                feature = ("joint",(local_inputs[i],local_inputs[j]))
+                row = projection_condition(feature,trials,outcomes,witnesses)
+                isnothing(row) || push!(conditions,row)
             end
-            any(rows->length(rows)>1,Base.values(repeated)) || continue
-            push!(conditions,(;feature,relation,repeated))
+        end
+        if isempty(conditions) && all(trial->!isnothing(trial.origin),trials)
+            # Search a dependency between an already named role/quantity input
+            # and a fixed context pixel. Reject private or one-off table keys.
+            named = filter(feature->!allequal(projection_feature(feature,trial) for trial in trials),
+                sort!(collect(variables);by=repr))
+            h,w = size(first(trials).before)
+            if !isempty(named) && all(trial->size(trial.before) == (h,w),trials)
+                run_pixel = Dict{Tuple,Vector{Pixel}}()
+                for y in 0:h-1, x in 0:w-1
+                    readings = Tuple(trial.before[y+1,x+1] for trial in trials)
+                    allequal(readings) && continue
+                    length(unique(readings)) < length(trials) || continue
+                    push!(get!(Vector{Pixel},run_pixel,readings),(x,y))
+                end
+                for positions in values(run_pixel)
+                    fixed = ("pixel",first(positions))
+                    for feature in named
+                        row = projection_condition(("joint",(feature,fixed)),trials,outcomes,witnesses)
+                        isnothing(row) && continue
+                        for point in positions
+                            push!(conditions,merge(row,(feature=("joint",(feature,("pixel",point))),)))
+                        end
+                    end
+                end
+                sort!(conditions;by=row->repr(row.feature))
+            end
         end
     end
     rows = [(item.feature,sort!(collect(keys(item.relation.evidence));by=repr),
         sort!([key for (key,rows) in item.repeated if length(rows) > 1];by=repr)) for item in conditions]
-    version = "projection-scope-" * semantic_hash([disputed,sort!(unique(outcomes)),rows])
-    return ProjectionScope(version,trials,conditions,corrections,disputed)
+    identity = [disputed,sort!(unique(outcomes)),rows]
+    relative && push!(identity,"relative")
+    version = "projection-scope-" * semantic_hash(identity)
+    return ProjectionScope(version,trials,conditions,corrections,disputed,relative)
 end
 
-function projection_applicability(memory, id, before, history, quantities)
+function projection_applicability(memory, id, before, history, quantities;origin=nothing,channels=String[])
     scope = get(memory.scopes,id,nothing)
     (isnothing(scope) || !scope.disputed) &&
         return (status="witnessed_base",version=id,reads=String[],correction=NTuple{5,Int}[])
@@ -88,14 +170,19 @@ function projection_applicability(memory, id, before, history, quantities)
     isempty(scope.conditions) && return unresolved
     outcomes = String[]
     for item in scope.conditions
-        input = projection_feature(item.feature,before,history,quantities)
+        input = projection_feature(item.feature,before,history,quantities,origin,channels)
         value = empirical_successor(item.relation,input)
         isnothing(value) && return unresolved
         length(item.repeated[input]) > 1 || return unresolved
         push!(outcomes,value)
     end
     allequal(outcomes) && haskey(scope.corrections,first(outcomes)) || return unresolved
-    return merge(unresolved,(status="conditioned_projection",correction=scope.corrections[first(outcomes)]))
+    correction = scope.corrections[first(outcomes)]
+    if scope.relative
+        isnothing(origin) && return unresolved
+        correction = shift_correction(correction,origin)
+    end
+    return merge(unresolved,(status="conditioned_projection",correction))
 end
 
 function projection_patch(choice,before)
@@ -123,6 +210,7 @@ function projection_patch(choice,before)
         end
     end
     quantities = Int[]
+    channels = String[]
     binding_reads = Set{Pixel}()
     bindings = []
     for part in choice.fragments
@@ -136,24 +224,28 @@ function projection_patch(choice,before)
             isdisjoint(touched,affected) && render_meter!(target,part.binding,part.expected) || return nothing
             union!(touched,affected)
             push!(quantities,part.basis)
+            push!(channels,meter_identity(part.binding))
         elseif part.family == :count
             union!(binding_reads,effect_points(part.token_support))
             push!(quantities,part.basis)
+            push!(channels,part.instance)
         else
             union!(binding_reads,effect_points(part.basis))
         end
     end
     observed = measure_joint((model=rule,fragments=choice.fragments),target)
     !isempty(observed.assessments) && all(==("supported"),values(observed.assessments)) || return nothing
+    origin = isempty(moved) ? nothing : anchor(first(moved).basis)
     return (;frame=target,writes=sort!(collect(touched)),binding_reads=sort!(collect(binding_reads)),
-        bindings,quantities)
+        bindings,quantities,channels,origin)
 end
 
 function projected_contract(memory,choice,before,history)
     patch = projection_patch(choice,before)
     isnothing(patch) && return nothing
     id = projection_identity(memory,choice.model.rule)
-    scope = projection_applicability(memory,id,before,history,patch.quantities)
+    scope = projection_applicability(memory,id,before,history,patch.quantities;
+        origin=patch.origin,channels=patch.channels)
     target = copy(patch.frame)
     status = scope.status
     for (x,y,old,base,new) in scope.correction
@@ -178,7 +270,7 @@ function projected_contract(memory,choice,before,history)
     end
     return (;id,scope.version,status,scope.reads,frame=target,base=patch.frame,writes,
         base_scope=patch.writes,
-        patch.bindings,patch.binding_reads,patch.quantities,history=copy(history),
+        patch.bindings,patch.binding_reads,patch.quantities,patch.channels,patch.origin,history=copy(history),
         mechanism=active_id(choice.model),rule=choice.model.rule.id,
         training=choice.model.rule.training_event,body=choice.model.rule.patch,
         conditions=predicate_record.(choice.model.condition.atoms))
@@ -203,6 +295,7 @@ function projection_record(projection,before)
         "mechanism_patch"=>projection.body,
         "conditions"=>projection.conditions,"condition_reads"=>projection.reads,
         "history"=>projection.history,"quantities"=>projection.quantities,
+        "anchor"=>projection.origin,"quantity_channels"=>projection.channels,
         "bindings"=>projection.bindings,"binding_reads"=>projection.binding_reads,
         "writes"=>projection.writes,"base_scope"=>projection.base_scope,
         "invariance"=>"all_undeclared_cells_and_public_state",
@@ -252,7 +345,7 @@ function check_projection!(memory, projection, before, after, effects, assessmen
     if !frozen
         old = get(memory.scopes,projection.id,nothing)
         trial = ProjectionTrial(effects.event_id,effects.before_id,before,projection.history,
-            projection.quantities,observed.outcome,observed.correction)
+            projection.quantities,observed.outcome,observed.correction,projection.origin,projection.channels)
         updated = observe_projection!(memory,projection.id,trial,history_lengths)
         previous = isnothing(old) ? projection.id : old.version
         if updated.version != previous && (updated.disputed || !isnothing(old) && old.disputed)
@@ -303,7 +396,9 @@ function replay_projection_feedback!(memory,directory,events,observations,histor
         history = collect(Int,claim["history"])
         history == prefix_actions || error("Projection action history differs from the public prefix")
         quantities = collect(Int,claim["quantities"])
-        scoped = projection_applicability(memory,id,before,history,quantities)
+        origin = isnothing(get(claim,"anchor",nothing)) ? nothing : Tuple(Int.(claim["anchor"]))
+        channels = collect(String,get(claim,"quantity_channels",String[]))
+        scoped = projection_applicability(memory,id,before,history,quantities;origin,channels)
         status = claim["status"]
         scoped.version == claim["version"] && scoped.reads == claim["condition_reads"] ||
             error("Projection claim used a different evidence prefix")
@@ -333,7 +428,8 @@ function replay_projection_feedback!(memory,directory,events,observations,histor
                 for key in keys_to_check) || error("Projection feedback differs from the public replay")
             feedback["observed_sha256"] == frame_key(after) || error("Projection feedback received a different frame")
         end
-        trial = ProjectionTrial(ref,prior.event["event_id"],before,history,quantities,observed.outcome,observed.correction)
+        trial = ProjectionTrial(ref,prior.event["event_id"],before,history,quantities,
+            observed.outcome,observed.correction,origin,channels)
         observe_projection!(memory,id,trial,history_lengths)
     end
     return memory

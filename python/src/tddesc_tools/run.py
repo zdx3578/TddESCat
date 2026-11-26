@@ -55,7 +55,10 @@ KIND_IDS = {
     "measurement_learning": ("measurement_public_feedback",),
     "measurement_goal": ("measurement_goal_execution", "program_publication_recovery"),
     "projection_revision": ("public_projection_revision",),
+    "projected_program": ("conditioned_projection_program",),
     "relation_goal": ("relation_goal_producer",),
+    "learned_relationships": ("learned_relationship_tasks",),
+    "learned_policy": ("published_policy_withheld_instances",),
 }
 MODULES = {
     "protocol": "tests.protocol.test_faults",
@@ -90,7 +93,10 @@ MODULES = {
     "measurement_learning": "tests.bench.check_measurement",
     "measurement_goal": "tests.bench.check_meter_goal",
     "projection_revision": "tests.bench.check_projection_revision",
+    "projected_program": "tests.bench.check_projected_program",
     "relation_goal": "tests.bench.check_relation_goal",
+    "learned_relationships": "tests.bench.check_learned_relation_goals",
+    "learned_policy": "tests.bench.check_learned_policy",
     "stitch_growth": "tests.bench.check_kernel",
 }
 
@@ -137,6 +143,8 @@ def read_task(path):
         required.add("offline_bundle")
     if kind == "arc_public25":
         required.update(("game_ids", "environment_config", "actions_per_game"))
+    if kind == "learned_policy":
+        required.update(("training_evidence", "training_cutoff"))
     if kind in ("stitch", "stitch_reference", "sequence_depth"):
         required.add("experiment_config")
         paths.add("experiment_config")
@@ -164,6 +172,14 @@ def read_task(path):
         if not isinstance(data["offline_bundle"], str) or not data["offline_bundle"]:
             raise ValueError("Invalid offline_bundle")
         data["offline_bundle"] = (path.parent / data["offline_bundle"]).resolve()
+    if kind == "learned_policy":
+        data["training_evidence"] = (path.parent / data["training_evidence"]).resolve()
+        if not data["training_evidence"].is_dir() or not re.fullmatch(
+            r"c[0-9]{9}", data["training_cutoff"]
+        ):
+            raise ValueError(
+                "Expected public training evidence and a confirmed command cutoff"
+            )
     if kind == "arc_public25":
         if type(data["actions_per_game"]) is not int or data["actions_per_game"] < 10:
             raise ValueError("Public25 requires at least 10 concrete actions per game")
@@ -249,13 +265,26 @@ def append_assertion(run_dir, identifier, passed, evidence, reason=None):
         output.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
-def worktree_digest(root):
+def worktree_digest(root, *, sources_only=False):
     files = subprocess.check_output(
         ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
         cwd=root,
     )
     digest = sha256()
     for name in sorted(set(files.split(b"\0")) - {b""}):
+        if sources_only and not (
+            name.startswith((b"julia/TddESCat/", b"python/src/", b"protocol/"))
+            or name
+            in (
+                b"scripts/run.jl",
+                b"config/autonomous_public.toml",
+                b"config/stitch.toml",
+                b"config/bench_server.toml",
+                b"python/uv.lock",
+                b"Cargo.lock",
+            )
+        ):
+            continue
         path = root / os.fsdecode(name)
         if path.is_file():
             digest.update(name + b"\0")
@@ -270,8 +299,12 @@ def run_task(root, config_path, task, run_dir, runtime):
     expected = task["game_ids"] if kind == "arc_public25" else KIND_IDS[kind]
     if kind == "autonomous_offline":
         agent = tomllib.loads(task["agent_config"].read_text())
+        if agent.get("planning", {}).get("relation_goals", False):
+            expected = (*expected, "autonomous_learned_task")
         if agent["learning"].get("sequences", False):
             expected = (*expected, "autonomous_goal_program")
+            if agent.get("planning", {}).get("relation_goals", False):
+                expected = (*expected, "autonomous_learned_policy")
     official_local = kind in (
         "fixture",
         "evidence",
@@ -293,7 +326,10 @@ def run_task(root, config_path, task, run_dir, runtime):
         "measurement_learning",
         "measurement_goal",
         "projection_revision",
+        "projected_program",
         "relation_goal",
+        "learned_relationships",
+        "learned_policy",
     )
     offline_arc = kind in ("arc_offline", "autonomous_offline", "arc_public25")
     isolated = (
@@ -339,6 +375,10 @@ def run_task(root, config_path, task, run_dir, runtime):
     }
     contracts.validate("manifest", manifest)
     write_json(run_dir / "public/manifest.json", manifest)
+    write_json(
+        run_dir / "public/source-identity.json",
+        {"solver_source_sha256": worktree_digest(root, sources_only=True)},
+    )
     (run_dir / "grade").mkdir()
     command = [
         runtime["python"]["executable"],
