@@ -1,11 +1,13 @@
 """Cross-check live goal program activation and action feedback against public receipts."""
 
 import json
+import tomllib
 from collections import defaultdict
 from hashlib import sha256
 
 from tests.bench.autonomous_audit import decode_value, locate_role, require, signature
 from tests.bench.measurement_audit import receipts, replay_meters, verify_step
+from tests.bench.projection_audit import ProjectionAuditor
 
 
 def frame_sha(frame):
@@ -81,7 +83,12 @@ def audit_projection_record(claim, feedback, before, response, events, event):
 
 def audit_live_goal_programs(public):
     events = receipts(public)
-    meters = replay_meters(events)
+    prior_meter = {}
+    meters = replay_meters(events, before_readings=prior_meter)
+    config = tomllib.loads((public / "agent.toml").read_text())
+    projection_scope = ProjectionAuditor(
+        config.get("search", {}).get("history_lengths", [0, 1, 2, 4])
+    )
     publications = {
         data["publication"]: (path.parent, data)
         for path in (public / "learning").glob("job-*/program-publication.json")
@@ -95,6 +102,7 @@ def audit_live_goal_programs(public):
     }
     by_definition = defaultdict(set)
     audited = {}
+    history = [0]
     for ref, (event, response) in events.items():
         if not response["action_input"]["id"]:
             if pending:
@@ -102,7 +110,10 @@ def audit_live_goal_programs(public):
                     {"first": pending[0]["event"], "last": ref, "status": "reset"}
                 )
             pending = []
+            history = [0]
             continue
+        before_history = history[:]
+        history.append(event["action"]["id"])
         command = event["command_ref"]
         path = public / "checks" / (command + ".json")
         if not path.is_file():
@@ -116,6 +127,14 @@ def audit_live_goal_programs(public):
             if (claim := decision.get("projection")) is not None:
                 audit_projection_record(
                     claim, check["projection"], before_response, response, events, event
+                )
+                projection_scope.check(
+                    claim,
+                    check["projection"],
+                    before_response,
+                    event,
+                    before_history,
+                    prior_meter.get(ref, {}),
                 )
             if not program:
                 require(not pending, "program_continuation_without_disposition")

@@ -25,6 +25,7 @@ from tddesc_tools.run import (
 )
 
 from tests.bench.autonomous_audit import (
+    OBSERVED_CONTACT_DOMAIN,
     SiteDomain,
     audit_contact_plan,
     audit_contact_sample,
@@ -33,6 +34,7 @@ from tests.bench.autonomous_audit import (
     require,
 )
 from tests.bench.program_audit import audit_live_goal_programs
+from tests.bench.policy_audit import PolicyAudit
 
 
 def offline_capture(root, task, run):
@@ -150,6 +152,8 @@ def autonomous_report(root, run):
     contact_samples = {}
     contact_control = []
     audited_actions = []
+    relation_tasks = []
+    policy_audit = PolicyAudit(public)
     bootstrap_actions = []
     audit_errors = []
     parents = {}
@@ -171,6 +175,8 @@ def autonomous_report(root, run):
                 decision = json.loads(
                     (public / "decisions" / f"{command}.json").read_bytes()
                 )
+                if not audited_actions and "site_transitions" in check:
+                    site_domain = SiteDomain(OBSERVED_CONTACT_DOMAIN)
                 site_domain.observe(
                     decision["site_surveys"], receipts, before, frame_cache=survey_cache
                 )
@@ -249,6 +255,7 @@ def autonomous_report(root, run):
                             action=decision["action"]["id"],
                             domain=domain,
                             domain_reads=domain_reads,
+                            domain_version=site_domain.version,
                         )
                         if executing:
                             reported = check.get("contact_feedback")
@@ -309,6 +316,61 @@ def autonomous_report(root, run):
                     )
                     contact_samples[ref] = sample
                     site_domain.entered(sample)
+                if task := decision.get("relation_task"):
+                    goal, producer, feedback = (
+                        task["goal"],
+                        task["producer"],
+                        check["task_feedback"],
+                    )
+                    plan = experiment["contact"]
+                    require(
+                        goal["before"] == parents[ref]
+                        and goal["scope"] == site_domain.version
+                        and goal["model"] == plan["progress"]["model"]
+                        and goal["rules"] == plan["progress"]["rules"]
+                        and plan["progress"]["judgment"] == "progress"
+                        and producer["target"] == plan["point"]
+                        and producer["guard"] == plan["conditions"]["rules"]
+                        and producer["advancement"] == goal["rules"]
+                        and set(goal["examples"]) <= receipts.keys()
+                        and (set(goal["reads"]) | set(producer["read_events"]))
+                        <= set(task["reads"])
+                        <= reads
+                        and feedback["event"] == ref
+                        and feedback["observed"]["advanced"] == (position > before)
+                        and task["recheck"] == experiment["executes_contact"],
+                        "unproved_relation_task",
+                    )
+                    if feedback["outcome"] == "established":
+                        require(
+                            task["recheck"]
+                            and sample
+                            and sample["action"] == producer["action"]
+                            and sample["outcome"] == "progress"
+                            and position > before,
+                            "unproved_task_goal",
+                        )
+                    relation_tasks.append(
+                        dict(
+                            event=ref,
+                            level=before + 1,
+                            model=goal["model"],
+                            relation=goal["relation"],
+                            producer=producer,
+                            requirements=task["requirements"],
+                            outcome=feedback["outcome"],
+                        )
+                    )
+                policy_audit.verify(
+                    decision.get("learned_policy"),
+                    check.get("learned_policy_feedback"),
+                    ref,
+                    before_receipt,
+                    receipt,
+                    receipts,
+                    site_domain.remaining(),
+                    reads,
+                )
                 if (
                     check["definition_refs"]
                     and check["assessments"]
@@ -320,6 +382,10 @@ def autonomous_report(root, run):
                 audited_actions.append(ref)
                 if position != before:
                     site_domain.reset_level()
+                elif site_domain.version == OBSERVED_CONTACT_DOMAIN:
+                    site_domain.verify_site_transitions(
+                        ref, receipt, check["site_transitions"]
+                    )
                 site_domain.observe(
                     check["site_surveys"],
                     {**receipts, ref: receipt},
@@ -330,6 +396,7 @@ def autonomous_report(root, run):
                 audit_errors.append({"event": ref, "error": str(error)})
         else:
             site_domain.reset_attempt()
+            policy_audit.pending = None
         if position != before:
             progress.append(
                 {"completed": position, "event": ref, "sha256": event["response_blob"]}
@@ -412,6 +479,8 @@ def autonomous_report(root, run):
         "learned_decisions": decisions,
         "audited_actions": len(audited_actions),
         "bootstrap_actions": bootstrap_actions,
+        "relation_tasks": relation_tasks,
+        "learned_policy_uses": policy_audit.uses,
         "audit_errors": audit_errors,
         "contact_samples": list(contact_samples.values()),
         "contact_control": contact_control,
@@ -455,6 +524,29 @@ def main(config, run):
             None if passed else "missing_cold_learning_and_full_game_win",
         )
         agent = tomllib.loads((public / "agent.toml").read_text())
+        if agent.get("planning", {}).get("relation_goals", False):
+            tasks = report.get("relation_tasks", [])
+            achieved = [row for row in tasks if row["outcome"] == "established"]
+            solved = any(
+                any(
+                    earlier["level"] == complete["level"]
+                    and earlier["model"] == complete["model"]
+                    and earlier["producer"]["target"] == complete["producer"]["target"]
+                    and earlier["outcome"] == "continue"
+                    and any(value == "missing" for _, value in earlier["requirements"])
+                    for earlier in tasks[: tasks.index(complete)]
+                )
+                for complete in achieved
+            )
+            learned_task = solved and not report.get("audit_errors")
+            append_assertion(
+                run,
+                "autonomous_learned_task",
+                learned_task,
+                ["public/autonomous-verification.json"],
+                None if learned_task else "missing_learned_goal_and_precondition_chain",
+            )
+            passed &= learned_task
         if agent["learning"].get("sequences", False):
             program = audit_live_goal_programs(public)
             report["program_control"] = program
@@ -474,6 +566,19 @@ def main(config, run):
                 else "missing_verified_in_session_program_choice_and_transfer",
             )
             passed &= goal_program
+            if agent.get("planning", {}).get("relation_goals", False):
+                policy_ok = any(
+                    row["status"] == "stopped"
+                    for row in report.get("learned_policy_uses", [])
+                ) and not report.get("audit_errors")
+                append_assertion(
+                    run,
+                    "autonomous_learned_policy",
+                    policy_ok,
+                    ["public/autonomous-verification.json"],
+                    None if policy_ok else "missing_published_policy_actually_consumed",
+                )
+                passed &= policy_ok
         write_json(public / "autonomous-verification.json", report)
         return int(not passed)
     if code:

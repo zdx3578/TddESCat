@@ -270,8 +270,12 @@ def run_task(root, config_path, task, run_dir, runtime):
     expected = task["game_ids"] if kind == "arc_public25" else KIND_IDS[kind]
     if kind == "autonomous_offline":
         agent = tomllib.loads(task["agent_config"].read_text())
+        if agent.get("planning", {}).get("relation_goals", False):
+            expected = (*expected, "autonomous_learned_task")
         if agent["learning"].get("sequences", False):
             expected = (*expected, "autonomous_goal_program")
+            if agent.get("planning", {}).get("relation_goals", False):
+                expected = (*expected, "autonomous_learned_policy")
     official_local = kind in (
         "fixture",
         "evidence",
