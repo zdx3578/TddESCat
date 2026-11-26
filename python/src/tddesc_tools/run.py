@@ -435,12 +435,15 @@ def run_task(root, config_path, task, run_dir, runtime):
         "\n".join(report) + "\n", encoding="utf-8"
     )
     if kind in (
+        "arc_public25",
         "association_recovery",
         "association_kernel",
         "association_online",
         "association_revision",
         "association_background",
         "sequence_learning",
+        "sequence_depth",
+        "trace_learning",
         "stitch_growth",
     ):
         write_artifact_index(run_dir)
