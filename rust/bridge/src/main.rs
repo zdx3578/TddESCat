@@ -3,6 +3,7 @@ mod engine;
 mod proof;
 mod protocol;
 mod resources;
+mod search_checkpoint;
 
 use anyhow::{Context, Result, ensure};
 use clap::{Parser, ValueEnum};
@@ -24,6 +25,10 @@ struct Arguments {
     manifest: PathBuf,
     #[arg(long)]
     output: PathBuf,
+    #[arg(long)]
+    resume_search: Option<PathBuf>,
+    #[arg(long, hide = true)]
+    pause_search_after: Option<usize>,
     #[arg(long, hide = true, value_enum)]
     test_fault: Option<Fault>,
 }
@@ -206,6 +211,13 @@ impl Job {
                 &self.library,
                 &self.order,
                 round_index,
+                &search_checkpoint::SearchStore {
+                    output: &args.output,
+                    resume: args.resume_search.as_deref(),
+                    input: &self.input_sha,
+                    round: round_index,
+                    pause_after: args.pause_search_after,
+                },
             )?;
             progress.heap_pops = progress
                 .heap_pops

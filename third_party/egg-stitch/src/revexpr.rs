@@ -2,7 +2,7 @@
 /// This is much better for representing partial patterns as expanding can just
 /// append to the end of the vector, and also doesn't need to worry about shifting child Ids
 /// for nodes within the vector.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default, serde::Serialize, serde::Deserialize)]
 pub struct RevExpr<L: egg::Language> {
     pub nodes: Vec<L>,
 }

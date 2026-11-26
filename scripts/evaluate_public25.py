@@ -1,6 +1,7 @@
 """Evaluate the cold controller on all 25 versioned public games until completion."""
 
 import argparse
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from hashlib import file_digest
 import json
@@ -63,11 +64,47 @@ def game_verdict(row):
     return "UNVERIFIED" if row.get("started") else "BLOCKED"
 
 
+def backend_receipts(public):
+    counts = Counter()
+    for path in (public / "learning").glob("job-*/worker-status.json"):
+        status = json.loads(path.read_bytes())
+        counts["stitch_jobs"] += 1
+        if status["failure"] or status["code"] not in (0, 10, 22):
+            counts["stitch_errors"] += 1
+        elif status["code"] == 0:
+            counts["stitch_completed"] += 1
+        else:
+            counts["stitch_partial"] += 1
+    for path in (public / "learning/circuits").glob("*.json"):
+        artifact = json.loads(path.read_bytes())
+        counts["circuit_candidates"] += 1
+        counts["circuit_calibrated"] += (
+            artifact["applicable"] and artifact["calibration"]["accepted"]
+        )
+        counts["history_candidates"] += artifact["history"] is not None
+    for path in (public / "decisions").glob("*.json"):
+        decision = json.loads(path.read_bytes())
+        if proof := decision.get("factor_role_proof"):
+            counts["factor_binding_proofs"] += (
+                proof["execution"] == "completed"
+                and (proof["value"] or {}).get("entailed") is True
+            )
+        task = decision.get("public_relation_task") or {}
+        obligation = task.get("obligation") or {}
+        counts["statistical_dispatch_changes"] += (
+            isinstance(obligation, dict) and obligation.get("circuit") is not None
+        )
+    return dict(counts)
+
+
 def campaign_report(games, finished):
     rows = [
         finished.get(game, {"game_id": game, "verdict": "PENDING"}) for game in games
     ]
     won = sum(row["verdict"] == "WIN" for row in rows)
+    compute = Counter()
+    for row in rows:
+        compute.update(row.get("compute_receipts", {}))
     return {
         "status": "PASS"
         if won == len(games)
@@ -78,6 +115,7 @@ def campaign_report(games, finished):
         "peak_levels": sum(
             row.get("peak_levels", 0) for row in rows if row.get("verified")
         ),
+        "compute_receipts": dict(compute),
         "games": rows,
     }
 
@@ -136,6 +174,7 @@ def campaign(args):
                 row = task.result()
             except Exception as error:
                 row = {"game_id": game, "error": str(error)}
+            row["compute_receipts"] = backend_receipts(output / game / "public")
             row["verdict"] = game_verdict(row)
             finished[game] = row
             report = campaign_report(games, finished)

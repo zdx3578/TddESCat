@@ -7,10 +7,10 @@ use super::{StitchDisc, StitchOp, Weights};
 /// Used to lift any program-side op into a pattern-side op: programs of language
 /// `L<O>` correspond to patterns of language `L<OpWithVar<O>>` (same Language
 /// shape, leaf-Op extended with `Var`).
-#[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub enum OpWithVar<O> {
     Node(O),
-    Var(egg::Var),
+    Var(#[serde(with = "checkpoint_var")] egg::Var),
 }
 
 impl<O: Display> Display for OpWithVar<O> {
@@ -59,5 +59,17 @@ impl<O: StitchOp> StitchOp for OpWithVar<O> {
 
     fn make_db_var(n: i32) -> Option<Self> {
         O::make_db_var(n).map(Self::Node)
+    }
+}
+
+mod checkpoint_var {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(value: &egg::Var, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(value)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<egg::Var, D::Error> {
+        String::deserialize(deserializer)?.parse().map_err(serde::de::Error::custom)
     }
 }

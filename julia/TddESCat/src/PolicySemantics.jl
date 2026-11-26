@@ -114,12 +114,16 @@ function analyze_policy_body(body,registry)
         stop=head(stop)["layout"]["relation"],variant=head(body)["layout"]["variant"])
 end
 
-function prepare_policy_learning!(knowledge,config,store,root,control;completed=Set{String}(),entries=nothing)
-    corpus = if isnothing(entries)
+function prepare_policy_learning!(knowledge,config,store,root,control;
+        completed=Set{String}(),entries=nothing,solver=nothing,snapshot="trajectory",proposal=nothing,
+        live_agenda=control)
+    corpus = if !isnothing(proposal)
+        proposal
+    elseif isnothing(entries)
         policy_corpus(control)
     else
         published = Set(row.body["scope"] for row in knowledge.policies if haskey(row.body,"scope"))
-        policy_corpus(control,entries;published)
+        policy_corpus(control,entries;published,solver,snapshot)
     end
     isnothing(corpus) && return nothing
     key = semantic_hash([corpus.model,corpus.programs])
@@ -130,6 +134,16 @@ function prepare_policy_learning!(knowledge,config,store,root,control;completed=
     library = scoped_search_library(base,corpus.signature,corpus.programs,corpus.slots)
     knowledge.learning_jobs += 1
     job = store_path(store,"learning","job-" * lpad(knowledge.learning_jobs,6,'0'))
+    cutoff = isnothing(entries) ? 0 : length(control.samples)
+    reads = isnothing(entries) ? NamedTuple[] : trajectory_reads(corpus,control)
+    if !isempty(reads)
+        conflicts = trajectory_counterexamples(reads,cutoff,live_agenda)
+        if !isempty(conflicts)
+            atomic_json(joinpath(job,"policy-rejection.json"),
+                (;key,cutoff,reads,conflicts,reason="trajectory_dependencies_changed"))
+            return nothing
+        end
+    end
     settings = read_json(store_path(store,"supervision.json"))
     policy = read(config.learning["policy_file"],String)
     content_hash(policy) == settings["policy_sha256"] || error("Session learning policy changed")
@@ -138,11 +152,11 @@ function prepare_policy_learning!(knowledge,config,store,root,control;completed=
         corpus.signature,corpus.programs,corpus.origins,corpus.slots;repo_root=root,
         config_text=policy,engine_identity=settings["engine_identity"],intent="program",
         consumer="policy-semantics",obligation_refs=corpus.events)
-    atomic_json(joinpath(job,"policy-corpus.json"),corpus)
-    return (;job,manifest,corpus,snapshot,key,agenda=isnothing(entries) ? nothing : control,entries)
+    atomic_json(joinpath(job,"policy-corpus.json"),merge(corpus,(;cutoff,reads)))
+    return (;job,manifest,corpus,snapshot,key,agenda=isnothing(entries) ? nothing : control,entries,reads,cutoff)
 end
 
-function collect_policy_learning!(knowledge,store,prepared,status;available_after)
+function collect_policy_learning!(knowledge,store,prepared,status;available_after,live_agenda=nothing)
     (;job,manifest,corpus,snapshot,key) = prepared
     status["policy_sha256"] == manifest["config_file"]["sha256"] &&
         status["binary_sha256"] == manifest["engine_pin"]["binary_sha256"] ||
@@ -152,16 +166,49 @@ function collect_policy_learning!(knowledge,store,prepared,status;available_afte
     complete = !isnothing(checked) && !isempty(checked.verified) && status["code"] in (0,10) &&
         last(checked.verified)["round_outcome"] == "no_positive_gain"
     assessment = Dict{String,Any}("kind"=>"policy","key"=>key,"status"=>status,"search_complete"=>complete)
+    if !isnothing(live_agenda) && !isempty(prepared.reads)
+        conflicts = trajectory_counterexamples(prepared.reads,prepared.cutoff,live_agenda)
+        isempty(conflicts) || return record_program_assessment(job,merge(assessment,Dict(
+            "result"=>"trajectory_dependencies_changed","counterexamples"=>conflicts)))
+    end
     if isnothing(checked) || isempty(checked.verified) || isempty(last(checked.verified)["calls"])
         return record_program_assessment(job,merge(assessment,Dict("result"=>"policy_not_discovered")))
     end
     checked.manifest["evidence_snapshot_id"] == snapshot && checked.text == corpus.programs &&
         canonical_bytes(checked.signature) == canonical_bytes(corpus.signature) ||
         error("The policy search input differs from its submitted corpus")
-    id = publish_stitch!(store_path(store,"publication"),checked;current_evidence=snapshot)
-    released = read_published_stitch(store_path(store,"publication");publication=id)
-    registry,definitions = registry_from(corpus.signature,released.snapshot.entries)
     selected = Dict{String,LearnedPolicy}()
+    confirmed = Ref{Dict{String,Int}}()
+    id = publish_stitch!(store_path(store,"publication"),checked;current_evidence=snapshot,
+        validate_consumer=released->begin
+            validate_policy_bodies!(selected,released,prepared,available_after)
+            confirmed[] = Dict{String,Int}(released.bundle["definition_depths"])
+            !isempty(selected)
+        end)
+    isnothing(id) && return record_program_assessment(job,merge(assessment,Dict(
+        "result"=>"no_verified_policy_body")))
+    verified = [selected[id] for id in sort!(collect(keys(selected)))]
+    for policy in verified
+        if !haskey(policy.body,"scope")
+            union!(policy.training,corpus.events)
+        end
+    end
+    atomic_json(joinpath(job,"policy-publication.json"),Dict("publication"=>id,"available_after"=>available_after,
+        "snapshot"=>snapshot,"input_sha256"=>checked.input_sha,"policies"=>verified))
+    for policy in verified
+        if haskey(policy.body,"scope")
+            filter!(old->get(old.body,"scope",nothing) != policy.body["scope"],knowledge.policies)
+        end
+        push!(knowledge.policies,policy)
+    end
+    merge!(knowledge.definition_depths,confirmed[])
+    return record_program_assessment(job,merge(assessment,Dict("result"=>"published","publication"=>id)))
+end
+
+function validate_policy_bodies!(selected,released,prepared,available_after)
+    corpus = prepared.corpus
+    id = released.publication
+    registry,definitions = registry_from(corpus.signature,released.snapshot.entries)
     for (i,text) in enumerate(released.bundle["rewritten_programs"])
         call = decode_program(text,registry)
         definition = get(call,"operator",nothing)
@@ -203,20 +250,7 @@ function collect_policy_learning!(knowledge,store,prepared,status;available_afte
                 "stop"=>policy.stop,"variant"=>policy.variant),String[],available_after))
         union!(prior.training,corpus.episodes[i].events)
     end
-    merge!(knowledge.definition_depths,released.bundle["definition_depths"])
-    verified = [selected[id] for id in sort!(collect(keys(selected)))]
-    for policy in verified
-        if haskey(policy.body,"scope")
-            filter!(old->get(old.body,"scope",nothing) != policy.body["scope"],knowledge.policies)
-        else
-            union!(policy.training,corpus.events)
-        end
-        push!(knowledge.policies,policy)
-    end
-    atomic_json(joinpath(job,"policy-publication.json"),Dict("publication"=>id,"available_after"=>available_after,
-        "snapshot"=>snapshot,"input_sha256"=>checked.input_sha,"policies"=>verified))
-    return record_program_assessment(job,merge(assessment,Dict("result"=>isempty(selected) ?
-        "no_verified_policy_body" : "published","publication"=>id)))
+    return nothing
 end
 
 function active_policy(policies,goal)

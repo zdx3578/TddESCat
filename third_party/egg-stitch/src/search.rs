@@ -64,8 +64,12 @@ type SeenKey = (Box<[u32]>, Box<[u32]>);
 /// reachable successors are already reachable from it. A repeat that isn't
 /// dominated overwrites and passes through, because it unlocks expand actions
 /// the prior one had forbidden.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(bound(serialize = "F::Discriminant<OpWithVar<O>>: serde::Serialize", deserialize = "F::Discriminant<OpWithVar<O>>: serde::Deserialize<'de>"))]
 pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
+    #[serde(with = "map_as_pairs")]
     map: FxHashMap<SeenKey, Box<[bool]>>,
+    #[serde(with = "map_as_pairs")]
     symbols: FxHashMap<F::Discriminant<OpWithVar<O>>, u32>,
     traversal: Vec<Id>,
     pub hits: usize,
@@ -121,8 +125,7 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
         while let Some(id) = self.traversal.pop() {
             let node = &pattern.pattern[id];
             let next = self.symbols.len();
-            let symbol = self.symbols.entry(node.discriminant())
-                .or_insert_with(|| u32::try_from(next).expect("too many seen pattern symbols"));
+            let symbol = self.symbols.entry(node.discriminant()).or_insert_with(|| u32::try_from(next).expect("too many seen pattern symbols"));
             term.push(*symbol);
             term.push(u32::try_from(node.children().len()).expect("pattern arity overflow"));
             self.traversal.extend(node.children().iter().rev().copied());
@@ -236,7 +239,8 @@ pub enum SuccessorEnum<F: LanguageFamily, O: StitchOp> {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(bound(serialize = "F::Apply<OpWithVar<O>>: serde::Serialize", deserialize = "F::Apply<OpWithVar<O>>: serde::Deserialize<'de>"))]
 pub struct SearchState<F: LanguageFamily, O: StitchOp> {
     pub pattern: Pattern<F, O>,
     // each match represents a different eclass at which `pattern` can be rooted
@@ -613,12 +617,15 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             let sort = shared.egraph[m.root_eclass].data.sort.expect("typed seed");
             groups.entry(sort).or_default().push(m);
         }
-        groups.into_values().map(|matches| Self {
-            pattern: Pattern::single_var(),
-            num_substs: total_substs(&matches),
-            matches,
-            freeze_rule,
-        }).collect()
+        groups
+            .into_values()
+            .map(|matches| Self {
+                pattern: Pattern::single_var(),
+                num_substs: total_substs(&matches),
+                matches,
+                freeze_rule,
+            })
+            .collect()
     }
 
     pub fn sorts(&self, egraph: &StitchEgraph<F::Apply<O>>) -> Vec<u32> {
@@ -1191,5 +1198,30 @@ mod tests {
 
         let (_, order) = state.compute_rank(VarOrder::MeanNodesPerClass, &shapes);
         assert_eq!(order, vec![1, 0, 2], "least-exploding first by f-values [2,1,3]");
+    }
+}
+
+mod map_as_pairs {
+    use rustc_hash::FxHashMap;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::hash::Hash;
+
+    pub fn serialize<K: Serialize, V: Serialize, S: Serializer>(value: &FxHashMap<K, V>, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(value)
+    }
+
+    pub fn deserialize<'de, K, V, D>(deserializer: D) -> Result<FxHashMap<K, V>, D::Error>
+    where
+        K: Deserialize<'de> + Eq + Hash,
+        V: Deserialize<'de>,
+        D: Deserializer<'de>,
+    {
+        let pairs = Vec::<(K, V)>::deserialize(deserializer)?;
+        let count = pairs.len();
+        let map = pairs.into_iter().collect::<FxHashMap<_, _>>();
+        if map.len() != count {
+            return Err(serde::de::Error::custom("duplicate checkpoint keys"));
+        }
+        Ok(map)
     }
 }

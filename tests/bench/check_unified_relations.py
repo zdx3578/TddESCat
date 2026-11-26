@@ -27,14 +27,25 @@ class Fixture(ARCBaseGame):
             frame[10:13, 38:41] = 4
         else:
             frame[40:42, 44:46] = 2
-        actions = {"delayed": [5, 7], "remote": [5, 6], "directions": [6], "restart": [6]}
-        super().__init__(GAME, [Level(sprites=[Sprite(frame, name="board")])],
+        actions = {"delayed": [5, 7], "remote": [5, 6], "directions": [6], "restart": [6], "progress-restart": [6]}
+        levels = [Level(sprites=[Sprite(frame.copy(), name="board")])]
+        if MODE == "progress-restart":
+            frame[10:13, 23:26] = 4
+            frame[10:13, 38:41] = 4
+            levels.append(Level(sprites=[Sprite(frame, name="board")]))
+        super().__init__(GAME, levels,
             camera=Camera(width=64, height=64), available_actions=actions[MODE], seed=seed)
 
     def on_set_level(self, level):
         self.previous = None
         self.probed = False
         self.hits = 0
+
+    def handle_reset(self):
+        if MODE == "progress-restart" and self._state.name == "GAME_OVER":
+            self.full_reset()
+        else:
+            super().handle_reset()
 
     def step(self):
         action = self.action.id.value
@@ -69,6 +80,11 @@ class Fixture(ARCBaseGame):
                     self.hits += 1
                     if self.hits == 3:
                         self.lose()
+            if MODE == "progress-restart":
+                if self.level_index == 0 or tile in (23, 38):
+                    self.next_level()
+                elif tile == 8:
+                    self.lose()
         self.complete_action()
 """
 
@@ -120,6 +136,7 @@ def capture(
                 "\n[compute]\n"
                 f'factor_kernel = "{root / "target/release/factor-kernel"}"\n'
                 f'solver_python = "{root / "python/compute/.venv/bin/python"}"\n'
+                f'circuit_python = "{root / "python/compute/.venv/bin/python"}"\n'
             )
         agent.write_text(agent.read_text() + additions)
         assert supervise(root, agent, public) == 0, (public / "solver.log").read_text()
@@ -176,6 +193,24 @@ def observed_steps(public):
 
 def verify(mode, public):
     rows = list(observed_steps(public))
+    if mode == "progress-restart":
+        original = next(row for row in rows if row[2]["levels_completed"] == 1)
+        failure = next(row for row in rows if row[2]["state"] == "GAME_OVER")
+        recover = next(
+            row
+            for row in rows
+            if (row[3] or {}).get("intent") == "recover_confirmed_progress"
+        )
+        assert recover[1]["levels_completed"] == 0
+        assert recover[2]["levels_completed"] == 1
+        assert recover[0]["action"] == original[0]["action"]
+        assert recover[3]["obligation"]["source"] == original[0]["event_id"]
+        assert recover[4]["feedback"]["result"] == "established"
+        revised = rows[rows.index(recover) + 1]
+        assert revised[3]["intent"] == "revise_failed_trace"
+        assert revised[0]["action"] != failure[0]["action"]
+        assert revised[2]["state"] == "WIN"
+        return [row[0]["event_id"] for row in (original, failure, recover, revised)]
     if mode == "delayed":
         first, second = rows[:2]
         assert first[1]["frame"][-1] == first[2]["frame"][-1]
@@ -245,7 +280,7 @@ def main(config, run):
             )
         return verify(mode, directory / "public")
 
-    modes = ("delayed", "remote", "directions", "restart")
+    modes = ("delayed", "remote", "directions", "restart", "progress-restart")
     with ThreadPoolExecutor(max_workers=len(modes)) as pool:
         cases = {
             mode: pool.submit(case, number, mode)

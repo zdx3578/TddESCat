@@ -113,14 +113,20 @@ function sequence_policy(trace,members)
     return first
 end
 
-function policy_episodes(agenda,entries)
+function policy_episodes(agenda,entries;solver=nothing,snapshot="trajectory")
     trace = witnessed_relation_steps(agenda,entries)
     families = source_policy_episodes(agenda,trace)
     isempty(families) && return NamedTuple[]
     episodes = NamedTuple[]
     features = Dict{String,Set{String}}()
-    before(index) = policy_features!(features,trace,agenda.samples[index].effects.before_id)
-    after(index) = policy_features!(features,trace,relation_ref(agenda.samples[index]))
+    atom_features = Dict{String,Dict{String,NamedTuple}}()
+    function scene(ref)
+        isnothing(solver) && return policy_features!(features,trace,ref)
+        return get!(() -> policy_scene_atoms(trace.by_ref[ref]),atom_features,ref)
+    end
+    before(index) = scene(agenda.samples[index].effects.before_id)
+    after(index) = scene(relation_ref(agenda.samples[index]))
+    distinguish(a,b) = isnothing(solver) ? separating_feature(a,b) : typed_policy_guard(solver,a,b,snapshot)
     function emit(body,members,structure)
         rows = agenda.samples[members]
         push!(episodes,(;body,members,structure,events=unique([ref for row in rows for ref in relation_refs(row)])))
@@ -144,7 +150,7 @@ function policy_episodes(agenda,entries)
         end
         isempty(repeats) && continue
         width = length(representative)
-        guard = separating_feature([before(rows[i]) for rows in repeats for i in 1:width:length(rows)],
+        guard = distinguish([before(rows[i]) for rows in repeats for i in 1:width:length(rows)],
             [after(last(rows)) for rows in repeats])
         isnothing(guard) && continue
         test = policy_expr("RelationTest";layout=guard)
@@ -161,7 +167,7 @@ function policy_episodes(agenda,entries)
         a,b = first(left),first(right)
         trace.descriptors[first(a)] == trace.descriptors[first(b)] || continue
         trace.descriptors[a[2]] == trace.descriptors[b[2]] && continue
-        guard = separating_feature([before(first(rows)) for rows in left],
+        guard = distinguish([before(first(rows)) for rows in left],
             [before(first(rows)) for rows in right])
         isnothing(guard) && continue
         branch = policy_expr("RelationBranch",policy_expr("RelationTest";layout=guard),
@@ -173,8 +179,8 @@ function policy_episodes(agenda,entries)
     return episodes
 end
 
-function policy_corpus(agenda::RelationAgenda,entries;published=Set{String}())
-    episodes = policy_episodes(agenda,entries)
+function policy_corpus(agenda::RelationAgenda,entries;published=Set{String}(),solver=nothing,snapshot="trajectory")
+    episodes = policy_episodes(agenda,entries;solver,snapshot)
     filter!(episode->semantic_hash(episode.body) ∉ published,episodes)
     isempty(episodes) && return nothing
     signature = typed_motion_signature(Pixel[])
@@ -253,7 +259,9 @@ function relation_policy_slot(node)
     return nothing
 end
 
-function relation_predicate(layout,frame)
+function relation_predicate(layout,scene)
+    haskey(layout,"guard_schema") && return evaluate_policy_guard(layout,scene)
+    frame = scene isa PublicObservation ? last(scene.frames) : scene
     present = any(shape->4length(shape) <= length(frame) &&
         semantic_hash(shape_template(shape)) == layout["feature"],public_components(frame))
     return present == layout["present"]
@@ -264,12 +272,20 @@ mutable struct RelationPolicyCursor
     pending::Vector{NamedTuple}
     observed::Vector{String}
     outputs::Vector{Any}
+    loop_states::Set{Tuple{String,String}}
 end
 
 RelationPolicyCursor(policy) = RelationPolicyCursor(policy,
-    [(node=policy.body["tree"],iteration=0,shared=Any[])],String[],Any[])
+    [(node=policy.body["tree"],iteration=0,shared=Any[])],String[],Any[],Set{Tuple{String,String}}())
 
-function next_relation_instruction!(cursor,frame)
+function peek_relation_instruction(cursor,scene)
+    candidate = RelationPolicyCursor(cursor.policy,copy(cursor.pending),copy(cursor.observed),
+        copy(cursor.outputs),copy(cursor.loop_states))
+    result = next_relation_instruction!(candidate,scene)
+    return merge(result,(;cursor=candidate))
+end
+
+function next_relation_instruction!(cursor,scene)
     branches = NamedTuple[]
     while !isempty(cursor.pending)
         instruction = pop!(cursor.pending)
@@ -281,15 +297,20 @@ function next_relation_instruction!(cursor,frame)
             push!(cursor.pending,(node=children[2],iteration=0,shared=layout["shared"]))
             push!(cursor.pending,(node=children[1],iteration=0,shared=instruction.shared))
         elseif kind == "RelationBranch"
-            yes = relation_predicate(first(children)["layout"],frame)
+            yes = relation_predicate(first(children)["layout"],scene)
+            isnothing(yes) && return (;instruction=nothing,branches,status=:unknown_guard)
             push!(branches,(control=:branch,outcome=yes))
             push!(cursor.pending,(node=children[yes ? 2 : 3],iteration=0,shared=instruction.shared))
         elseif kind == "RelationRepeat"
-            yes = relation_predicate(first(children)["layout"],frame)
+            yes = relation_predicate(first(children)["layout"],scene)
+            isnothing(yes) && return (;instruction=nothing,branches,status=:unknown_guard)
             push!(branches,(control=:repeat,outcome=yes,iteration=instruction.iteration))
             yes || continue
-            instruction.iteration < layout["observed_bound"] ||
-                return (;instruction=nothing,branches,status=:repeat_scope_exhausted)
+            context = scene isa PublicObservation ? relation_context(scene) : content_hash(vec(scene))
+            guard_scope = (semantic_hash(node),context)
+            guard_scope in cursor.loop_states &&
+                return (;instruction=nothing,branches,status=:unresolved_repeat_progress)
+            push!(cursor.loop_states,guard_scope)
             push!(cursor.pending,(;instruction.node,iteration=instruction.iteration+1,shared=instruction.shared))
             push!(cursor.pending,(node=children[2],iteration=0,shared=instruction.shared))
         end
@@ -304,7 +325,7 @@ function verify_relation_episode(tree,episode,agenda,entries)
     earlier = nothing
     for index in episode.members
         row = agenda.samples[index]
-        next = next_relation_instruction!(cursor,last(by_ref[row.effects.before_id].frames))
+        next = next_relation_instruction!(cursor,by_ref[row.effects.before_id])
         next.status == :task || return false
         producer = get(source_producer,index,nothing)
         descriptor = policy_step(row,isnothing(producer) ? [] : producer.relations)
@@ -316,7 +337,29 @@ function verify_relation_episode(tree,episode,agenda,entries)
         end
         earlier = row
     end
-    return next_relation_instruction!(cursor,last(by_ref[relation_ref(earlier)].frames)).status == :stopped
+    return next_relation_instruction!(cursor,by_ref[relation_ref(earlier)]).status == :stopped
+end
+
+function trajectory_reads(corpus,agenda)
+    indices = unique(vcat([episode.members for episode in corpus.episodes]...))
+    return [begin
+        row = agenda.samples[index]
+        (;event=relation_ref(row),context=row.context,action=action_key(row.effects.action),
+            previous=previous_key(agenda,row.preceding),after=row.next_context,
+            state=row.state,advanced=row.advanced)
+    end for index in indices]
+end
+
+function trajectory_counterexamples(reads,cutoff,agenda)
+    conflicts = Set{String}()
+    for read in reads, index in get(agenda.visits,(read.context,read.action),Int[])
+        index > cutoff || continue
+        row = agenda.samples[index]
+        previous_key(agenda,row.preceding) == read.previous || continue
+        (row.next_context,row.state,row.advanced) == (read.after,read.state,read.advanced) && continue
+        push!(conflicts,relation_ref(row))
+    end
+    return sort!(collect(conflicts))
 end
 
 function policy_task_options(agenda,instruction,obs,decision;meters=())
@@ -381,13 +424,19 @@ function relation_policy_choice(policies,cursor,attempted,agenda,obs,decision;me
             (policy.body["scope"],context) ∉ attempted] : [cursor]
     sort!(candidates;by=row->row.policy.body["structure"] == "sequence")
     for candidate in candidates
-        next = next_relation_instruction!(candidate,last(obs.frames))
+        next = peek_relation_instruction(candidate,obs)
         next.status == :task || continue
-        proposal = bind_relation_instruction(candidate,next.instruction,obs,decision,agenda;meters)
+        proposal = bind_relation_instruction(next.cursor,next.instruction,obs,decision,agenda;meters)
         isnothing(proposal) && continue
-        return (;cursor=candidate,proposal,next.branches,context)
+        return (;cursor=next.cursor,proposal,next.branches,context)
     end
     return nothing
+end
+
+function observed_policy_port(effects,fragment)
+    matches = [effect.after for effect in effects.effects if effect.family == fragment.family &&
+        effect.before == fragment.basis]
+    return length(matches) == 1 && !isempty(only(matches)) ? only(matches) : nothing
 end
 
 function confirm_relation_policy!(selection,agenda,feedback,after)
@@ -407,12 +456,10 @@ function confirm_relation_policy!(selection,agenda,feedback,after)
     cursor.outputs = if isempty(task.tests)
         []
     else
-        [part.family == :translation ? sort!([(x+part.expected[1],y+part.expected[2],c) for (x,y,c) in part.basis]) :
-            part.family == :pigment ? [(x,y,UInt8(part.expected)) for (x,y,_) in part.basis] : nothing
-            for part in first(task.tests).fragments]
+        [observed_policy_port(row.effects,part) for part in first(task.tests).fragments]
     end
     # Peek through zero-action control nodes only after the receipt.
-    next = next_relation_instruction!(cursor,last(after.observation.frames))
+    next = next_relation_instruction!(cursor,after.observation)
     if next.status == :task
         push!(cursor.pending,next.instruction)
         return (;cursor,result=:continue,branches=next.branches)

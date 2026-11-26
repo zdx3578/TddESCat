@@ -7,7 +7,7 @@ use super::{StitchLanguage, StitchOp};
 /// Language where each enode is an operator plus a list of child Ids.
 /// This language does not have currying-by-default but is more efficient
 /// due to a smaller graph.
-#[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub struct OpChildrenLanguage<O = super::Op> {
     /// The operator for an enode.
     pub op: O,

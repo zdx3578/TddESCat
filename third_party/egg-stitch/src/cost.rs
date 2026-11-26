@@ -33,14 +33,14 @@ impl<L: StitchLanguage> CostFunction<L> for WeightedSize {
 /// slot. Because that test is per-slot (hence per-factor), the kept set is
 /// recovered on demand by [`filter_factors_by_candidate`] without ever
 /// materialising the product.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CostCandidate {
     pub variable_indices: Vec<Vec<i32>>,
 }
 
 /// Selection picked by the cost optimizer: the candidate with minimum total
 /// cost, plus that cost.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CostSelection {
     pub cost: usize,
     pub candidate: CostCandidate,
@@ -725,12 +725,7 @@ pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(mut egraph: Stitch
     egraph
 }
 
-fn apply_typed<F: LanguageFamily, O: StitchOp>(
-    mut egraph: StitchEgraph<F::Apply<O>>,
-    search_state: &SearchState<F, O>,
-    candidate: &CostCandidate,
-    fn_name: &str,
-) -> StitchEgraph<F::Apply<O>> {
+fn apply_typed<F: LanguageFamily, O: StitchOp>(mut egraph: StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>, candidate: &CostCandidate, fn_name: &str) -> StitchEgraph<F::Apply<O>> {
     assert!(search_state.pattern.var_depth.iter().all(|&depth| depth == 0));
     assert!(candidate.variable_indices.iter().all(Vec::is_empty));
     let limits = std::sync::Arc::clone(egraph.analysis.typed.as_ref().unwrap());

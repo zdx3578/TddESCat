@@ -2,6 +2,30 @@ using Test
 using TddESCat
 
 const TC = TddESCat
+const SP = TC.SymbolicPlanners
+const PDDL = TC.PDDL
+
+struct CollidingState <: PDDL.State
+    position::Int
+end
+Base.hash(::CollidingState,seed::UInt) = hash(0,seed)
+struct CollisionDomain <: PDDL.Domain end
+struct CollisionGoal <: SP.Specification end
+const COLLISION_STEP = PDDL.parse_pddl("(step)")
+PDDL.available(::CollisionDomain,::CollidingState) = [COLLISION_STEP]
+PDDL.transition(::CollisionDomain,state::CollidingState,action::PDDL.Term;check=true) =
+    CollidingState(state.position+1)
+SP.simplified(goal::CollisionGoal,::CollisionDomain,::CollidingState) = goal
+SP.is_goal(::CollisionGoal,::CollisionDomain,state::CollidingState,action) = state.position == 2
+SP.is_violated(::CollisionGoal,::CollisionDomain,::CollidingState) = false
+
+@testset "Distinct states survive intentionally identical hashes" begin
+    @test hash(CollidingState(0)) == hash(CollidingState(1))
+    @test !isequal(CollidingState(0),CollidingState(1))
+    result = SP.BreadthFirstPlanner()(CollisionDomain(),CollidingState(0),CollisionGoal())
+    @test result.status == :success
+    @test getproperty.(result.trajectory,:position) == [0,1,2]
+end
 
 @testset "Exact relation algebra and execution domain" begin
     domain = Set(0:3)
@@ -91,6 +115,7 @@ end
     model = TC.PlanningModel(states,actions,effects,observed,Dict("rule"=>"v1"))
     result = TC.solve_policy(model,Set([0]),Set([finish]))
     @test result.status == "policy" && result.rank == finish
+    @test result.backend == "symbolic_planners"
     node = result.policy
     for index in 1:finish
         @test node.action == 1

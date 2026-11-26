@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.tddescat.org/compute/v1/result.schema.json",
   "title": "Compute result envelope",
   "type": "object",
   "required": ["protocol", "request_id", "snapshot", "execution", "answer", "coverage", "value", "detail"],

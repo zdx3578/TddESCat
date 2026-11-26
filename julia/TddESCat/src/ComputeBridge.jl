@@ -52,12 +52,16 @@ function with_compute(f,config)
     try
         if !isnothing(config.compute)
             for (name,path) in config.compute
-                command = name == "solver_python" ? Cmd([path,"-m","tddesc_compute.worker"]) : Cmd([path])
+                command = endswith(name,"_python") ? Cmd([path,"-m","tddesc_compute.worker"]) : Cmd([path])
                 worker = ComputeWorker(command)
                 backends[name] = worker
-                expected = name == "solver_python" ? "cvc5" : "atddc"
+                expected = endswith(name,"_python") ? "cvc5" : "atddc"
                 capabilities = require_compute_value(compute_request!(worker,"bootstrap","capabilities"))
                 capabilities["backend"] == expected || error("Unexpected compute backend")
+            end
+            if haskey(config.compute,"solver_python") && get(config.learning,"sequences",false)
+                command = Cmd([config.compute["solver_python"],"-m","tddesc_compute.worker"])
+                backends["policy_synthesis"] = ComputeWorker(command)
             end
         end
         return f(backends)

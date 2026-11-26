@@ -15,6 +15,22 @@ def dispatch(operation, payload):
         return solver_adapter.solve(payload)
     if operation == "synthesize_guard":
         return solver_adapter.synthesize_guard(payload)
+    if operation in ("train_circuit", "query_circuit"):
+        from . import circuit_adapter
+
+        return (
+            circuit_adapter.train(payload)
+            if operation == "train_circuit"
+            else circuit_adapter.query_model(payload)
+        )
+    if operation == "learn_history":
+        try:
+            from . import history_adapter
+        except ModuleNotFoundError as error:
+            if error.name != "aalpy":
+                raise
+            raise NotImplementedError("History extra is unavailable") from error
+        return history_adapter.learn_history(payload)
     raise NotImplementedError(f"Unsupported operation {operation}")
 
 

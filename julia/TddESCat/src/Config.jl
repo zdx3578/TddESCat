@@ -78,7 +78,8 @@ function load_run_config(path::AbstractString)
 
     exec = require_keys(data["execution"], ("max_public_commands", "one_inflight_per_guid",
         "post_retry", "redirect", "memory_enforcement");
-        optional=("solver_memory_bytes", "learning_memory_bytes", "frozen_evaluation"), at="execution")
+        optional=("solver_memory_bytes", "learning_memory_bytes", "solver_heap_hint_bytes",
+            "frozen_evaluation"), at="execution")
     check_values(exec, ("max_public_commands",),
         value -> value == "unlimited" || positive_integer(value), "execution")
     exec["one_inflight_per_guid"] === true && exec["post_retry"] === false &&
@@ -86,7 +87,7 @@ function load_run_config(path::AbstractString)
     isolation = exec["memory_enforcement"]
     get(exec, "frozen_evaluation", false) isa Bool || throw(ArgumentError("Invalid execution.frozen_evaluation"))
     isolation in ("cooperative", "cgroup_v2") || throw(ArgumentError("Invalid memory_enforcement"))
-    for field in ("solver_memory_bytes", "learning_memory_bytes")
+    for field in ("solver_memory_bytes", "learning_memory_bytes", "solver_heap_hint_bytes")
         if haskey(exec, field)
             positive_integer(get(exec, field, nothing)) || throw(ArgumentError("Invalid execution.$field"))
         end
@@ -144,7 +145,7 @@ function load_run_config(path::AbstractString)
     compute = get(data,"compute",nothing)
     if !isnothing(compute)
         isnothing(learning) && throw(ArgumentError("Compute backends require a learning session"))
-        require_keys(compute,();optional=("factor_kernel","solver_python"),at="compute")
+        require_keys(compute,();optional=("factor_kernel","solver_python","circuit_python"),at="compute")
         isempty(compute) && throw(ArgumentError("No compute backend configured"))
         for field in keys(compute)
             compute[field] = config_path(dir,compute[field])

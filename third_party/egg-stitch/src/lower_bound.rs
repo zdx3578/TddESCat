@@ -18,6 +18,7 @@ pub enum PruneResult {
 /// Encapsulates the optional lower-bound pruning shared by best-first and SMC:
 /// each candidate's optimistic descendant cost is compared against the current
 /// best, and accumulated stats (hits + wall time) are reported at search end.
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct LowerBoundPruner {
     enabled: bool,
     hits: usize,

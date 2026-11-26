@@ -1,4 +1,4 @@
-"""Verify the dependency locks and the vendored Rust build inputs."""
+"""Verify the dependency locks and the vendored build inputs."""
 
 import argparse
 import hashlib
@@ -14,8 +14,8 @@ def load(path: Path) -> dict:
         return tomllib.load(source)
 
 
-def rust_build_digest(path: Path) -> str:
-    files = [path / "Cargo.toml", path / "LICENSE"]
+def build_digest(path: Path, manifest: str, license_file: str) -> str:
+    files = [path / manifest, path / license_file]
     files.extend(file for file in (path / "src").rglob("*") if file.is_file())
     digest = hashlib.sha256()
     for file in sorted(files):
@@ -41,6 +41,10 @@ def contains_github_git(value: object) -> bool:
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise SystemExit(message)
+
+
+def rust_build_digest(path: Path) -> str:
+    return build_digest(path, "Cargo.toml", "LICENSE")
 
 
 def main() -> None:
@@ -137,6 +141,20 @@ def main() -> None:
                     == source["upstream_cargo_lock_sha256"],
                     f"Upstream Cargo.lock drift: {name}",
                 )
+        elif kind == "julia-vendored":
+            path = ROOT / source["local_path"]
+            package = julia[name][0]
+            require(
+                package["version"] == version
+                and (ROOT / "julia/TddESCat" / package["path"]).resolve() == path
+                and load(path / "Project.toml")["uuid"] == package["uuid"],
+                f"Expected the pinned local Julia package: {name}",
+            )
+            require(
+                build_digest(path, "Project.toml", source["license_path"])
+                == source["build_sha256"],
+                f"Julia build input drift: {name}",
+            )
         else:
             raise SystemExit(f"Unknown source kind: {kind}")
         print(f"{name} {version}: {kind} source lock verified")

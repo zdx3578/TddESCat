@@ -8,7 +8,7 @@ use num_bigint::BigUint;
 /// Invariant: `root_eclass` and all ids in every factor row are canonical
 /// (the egraph isn't unioned during search). The factors' `slots` partition
 /// `0..arity` where `arity` is the pattern's variable count.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MatchAtEClass {
     pub root_eclass: Id,
     pub factors: Vec<Factor>,
@@ -72,9 +72,7 @@ mod tests {
     fn sparse_factors_can_exceed_machine_count() {
         let matched = MatchAtEClass {
             root_eclass: Id::from(0),
-            factors: (0..8)
-                .map(|slot| Factor::new(vec![slot], (0..256).map(|v| vec![Id::from(v)]).collect()).unwrap())
-                .collect(),
+            factors: (0..8).map(|slot| Factor::new(vec![slot], (0..256).map(|v| vec![Id::from(v)]).collect()).unwrap()).collect(),
         };
         assert_eq!(matched.exact_num_substs().to_string(), "18446744073709551616");
         let failure = std::panic::catch_unwind(|| matched.num_substs()).unwrap_err();

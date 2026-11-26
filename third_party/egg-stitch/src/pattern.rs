@@ -21,7 +21,8 @@ use rustc_hash::FxHashMap;
 /// `F::Apply<O>` with `OpWithVar<O>` swapped in as its leaf-Op.
 pub type PatternRecExpr<F, O> = RevExpr<<F as LanguageFamily>::Apply<OpWithVar<O>>>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(bound(serialize = "F::Apply<OpWithVar<O>>: serde::Serialize", deserialize = "F::Apply<OpWithVar<O>>: serde::Deserialize<'de>"))]
 pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     pub pattern: PatternRecExpr<F, O>,
     pub vars: Vec<Vec<Id>>,  // vars[k] = all RecExpr ids holding Var(k)

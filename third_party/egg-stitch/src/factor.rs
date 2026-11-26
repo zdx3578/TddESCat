@@ -1,6 +1,6 @@
 use egg::Id;
-use std::sync::Arc;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::sync::Arc;
 
 /// One factor of a match location's substitution set: a relation over a subset
 /// of the pattern's variable slots. The full substitution set at a match
@@ -16,7 +16,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 /// - `slots` is strictly ascending.
 /// - every row in `rows` has length `slots.len()`.
 /// - `rows` is a *set*: no duplicate rows, sorted for determinism, non-empty.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Factor {
     pub slots: Vec<usize>,
     pub rows: Arc<Vec<Vec<Id>>>,

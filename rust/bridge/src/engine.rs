@@ -328,6 +328,28 @@ mod search_options_tests {
     }
 }
 
+fn frozen_graph_identity(data: &Data) -> Result<String> {
+    let mut classes: Vec<_> = data.egraph.classes().collect();
+    classes.sort_by_key(|class| class.id);
+    let material = classes
+        .iter()
+        .map(|class| {
+            let mut variables: Vec<_> = class.data.fv.iter().copied().collect();
+            variables.sort_unstable();
+            (
+                class.id,
+                &class.nodes,
+                class.data.size,
+                class.data.sort,
+                variables,
+            )
+        })
+        .collect::<Vec<_>>();
+    Ok(crate::protocol::digest(&serde_json::to_vec(&(
+        data.root, material,
+    ))?))
+}
+
 pub fn search(
     config: &Config,
     args: &Args,
@@ -336,6 +358,7 @@ pub fn search(
     library: &Library,
     order: &[String],
     round: usize,
+    checkpoints: &crate::search_checkpoint::SearchStore<'_>,
 ) -> Result<Round> {
     let graph_phase = resources::phase(Phase::Graph);
     let data = make_graph(config, &registry, input, library, order)?;
@@ -343,26 +366,82 @@ pub fn search(
     let egraph_classes = data.egraph.number_of_classes();
     drop(graph_phase);
     let search_phase = resources::phase(Phase::Search);
-    let mut heap_pops = 0;
-    let mut arena_peak = 0;
-    let mut frontier_peak = 0;
-    let result = best_first::best_first_with_progress(data, args, |pops, arena, frontier| {
-        heap_pops = pops;
-        arena_peak = arena_peak.max(arena);
-        frontier_peak = frontier_peak.max(frontier);
-        if config
-            .progress
-            .search_pop_checkpoints
-            .binary_search(&pops)
-            .is_ok()
-        {
-            println!("progress round={round} heap_pops={pops} arena={arena} frontier={frontier}");
-        }
-    });
+    let graph = frozen_graph_identity(&data)?;
+    let resumed =
+        checkpoints.load::<best_first::BestFirstCheckpoint<OpChildren, Operator>>(&graph)?;
+    let (resume, pops) = resumed.map_or((None, 0), |(state, pops)| (Some(state), pops));
+    anyhow::ensure!(
+        resume
+            .as_ref()
+            .is_none_or(|state| state.heap_pops() == pops),
+        "Search checkpoint pop count does not match the stored frontier"
+    );
+    if pops > 0 {
+        println!("resume round={round} heap_pops={pops}");
+    }
+    let mut heap_pops = pops;
+    let (mut arena_peak, mut frontier_peak) = resume.as_ref().map_or((0, 0), |state| state.peaks());
+    let mut last_saved = pops;
+    let mut error = None;
+    let result = best_first::best_first_resumable(
+        data,
+        args,
+        resume,
+        |pops, arena, frontier| {
+            heap_pops = pops;
+            arena_peak = arena_peak.max(arena);
+            frontier_peak = frontier_peak.max(frontier);
+            if config
+                .progress
+                .search_pop_checkpoints
+                .binary_search(&pops)
+                .is_ok()
+            {
+                println!(
+                    "progress round={round} heap_pops={pops} arena={arena} frontier={frontier}"
+                );
+            }
+        },
+        |state| {
+            let pops = state.heap_pops();
+            let pause = checkpoints.pause_after.is_some_and(|at| pops >= at);
+            let scheduled = pops >= 32
+                && config
+                    .progress
+                    .search_pop_checkpoints
+                    .binary_search(&pops)
+                    .is_ok();
+            if pops > last_saved && (pause || scheduled || pops % 2048 == 0) {
+                if let Err(failure) = checkpoints.save(&graph, state, pops, state.frontier_len()) {
+                    error = Some(failure);
+                    return true;
+                }
+                last_saved = pops;
+            }
+            pause
+        },
+    );
+    if let Some(error) = error {
+        return Err(error);
+    }
+    let baseline_cost = result.original_size as u64;
+    if result.heap_size_at_end != 0 {
+        return Ok(Round {
+            baseline_cost,
+            programs: Vec::new(),
+            found: None,
+            exhausted: false,
+            expansions: result.num_expansions,
+            heap_pops,
+            arena_peak,
+            frontier_peak,
+            egraph_nodes,
+            egraph_classes,
+        });
+    }
     drop(search_phase);
     let mut data = result.data;
     let mut found = None;
-    let baseline_cost = result.original_size as u64;
     let mut expected = baseline_cost;
     if let Some((cost, selection)) = result.best
         && (cost as u64) < baseline_cost
@@ -431,7 +510,7 @@ pub fn search(
         baseline_cost,
         programs,
         found,
-        exhausted: result.heap_size_at_end == 0,
+        exhausted: true,
         expansions: result.num_expansions,
         heap_pops,
         arena_peak,

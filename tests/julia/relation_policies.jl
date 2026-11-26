@@ -2,6 +2,23 @@ using Test, TddESCat
 
 const TC = TddESCat
 
+@testset "Closed rectangles expand to exactly the supported incidence" begin
+    vocabulary = ["shared","allied","adjacent","excluded"]
+    incidence = Dict((i,attribute)=>TC.proven for i in 1:3 for attribute in vocabulary[1:3])
+    incidence[(4,"shared")] = TC.proven
+    incidence[(4,"adjacent")] = TC.disproven
+    incidence[(5,"adjacent")] = TC.proven
+    actual = TC.relational_factors(1:5,vocabulary,incidence,[1:3])
+    rectangle = only(actual.factors)
+    @test rectangle.extent == [1,2,3]
+    @test rectangle.possible == [1,2,3,5]
+    @test rectangle.intent == vocabulary[1:3]
+    expanded = Set((i,attribute) for i in rectangle.extent for attribute in rectangle.intent)
+    union!(expanded,actual.residual)
+    @test expanded == Set(key for (key,value) in incidence if value == TC.proven)
+    @test (5,"allied") ∉ expanded
+end
+
 function recorded_frame(ref,previous,frame,action,available)
     observation = TC.PublicObservation("relation-trial","relation-session",[frame],
         "NOT_FINISHED",0,1,action,available,false)
@@ -45,5 +62,36 @@ end
     for (program,episode) in zip(corpus.programs,corpus.episodes)
         parsed = TC.decode_program(program,registry)
         @test TC.analyze_policy_body(parsed,registry).tree == episode.body
+    end
+    cutoff = length(agenda.samples)
+    reads = TC.trajectory_reads(corpus,agenda)
+    @test !isempty(reads)
+    TC.begin_relation_attempt!(agenda,nothing)
+    reset_frame = entries[1].observation.frames[end]
+    reset = recorded_frame("new-reset",nothing,reset_frame,Dict("id"=>0),[6])
+    ignored = recorded_frame("unrelated-click","new-reset",reset_frame,TC.click_action((0,0)),[6])
+    TC.observe_relations!(agenda,reset,ignored,TC.observed_effects(reset,ignored),
+        nothing,NamedTuple[],nothing)
+    @test isempty(TC.trajectory_counterexamples(reads,cutoff,agenda))
+    TC.begin_relation_attempt!(agenda,nothing)
+    reset = recorded_frame("next-reset",nothing,reset_frame,Dict("id"=>0),[6])
+    failed = recorded_frame("changed-response","next-reset",reset_frame,entries[2].observation.action,[6])
+    TC.observe_relations!(agenda,reset,failed,TC.observed_effects(reset,failed),
+        nothing,NamedTuple[],nothing)
+    @test TC.trajectory_counterexamples(reads,cutoff,agenda) == ["changed-response"]
+
+    python = joinpath(@__DIR__,"..","..","python","compute",".venv","bin","python")
+    if isfile(python)
+        worker = TC.ComputeWorker(`$python -m tddesc_compute.worker`)
+        try
+            compiled = TC.policy_corpus(agenda,entries;solver=worker,snapshot="fixture")
+            @test !isnothing(compiled)
+            typed_repeats = filter(row->row.structure == "repeat",compiled.episodes)
+            @test length(typed_repeats) >= 2
+            @test all(row->first(row.body["children"])["layout"]["synthesis"] == "cvc5",typed_repeats)
+            @test all(row->TC.verify_relation_episode(row.body,row,agenda,entries),typed_repeats)
+        finally
+            close(worker)
+        end
     end
 end

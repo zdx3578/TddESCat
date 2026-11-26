@@ -49,6 +49,11 @@ def main() -> None:
     parser.add_argument(
         "--julia", type=Path, help="Path to the pinned Julia executable"
     )
+    parser.add_argument(
+        "--v13",
+        action="store_true",
+        help="Install and build the Public25 computation backends",
+    )
     args = parser.parse_args()
     with args.config.open("rb") as source:
         config = tomllib.load(source)
@@ -92,6 +97,41 @@ def main() -> None:
         check=True,
     )
     check_version(python, python_version, "Python")
+    if args.v13:
+        compute_env = dict(uv_env)
+        compute_env.pop("UV_PROJECT_ENVIRONMENT")
+        subprocess.run(
+            [
+                uv,
+                "sync",
+                "--project",
+                "python/compute",
+                "--python",
+                python_version,
+                "--locked",
+                "--extra",
+                "circuit",
+                "--extra",
+                "history",
+            ],
+            cwd=ROOT,
+            env=compute_env,
+            check=True,
+        )
+        subprocess.run(
+            [
+                cargo,
+                "build",
+                "--release",
+                "--locked",
+                "-p",
+                "tddesc-stitch",
+                "-p",
+                "tddesc-factor-kernel",
+            ],
+            cwd=ROOT,
+            check=True,
+        )
     subprocess.run(
         [python, "scripts/check_sources.py", "--config", "config/sources.lock.toml"],
         cwd=ROOT,

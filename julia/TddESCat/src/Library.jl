@@ -212,6 +212,10 @@ function read_published_stitch(directory; publication=nothing)
     content_hash(bytes) == publication || error("Published artifact digest mismatch")
     bundle = parse_json(String(bytes))
     verify_published_stitch(bundle)
+    return published_result(publication,bundle)
+end
+
+function published_result(publication,bundle)
     state = get(bundle,"global_library",nothing)
     snapshot = isnothing(state) ? LibrarySnapshot(bundle["library_version"],collect(Dict{String,Any},bundle["library"])) :
         LibrarySnapshot(state["version"],collect(Dict{String,Any},state["entries"]))
@@ -262,7 +266,7 @@ function verify_published_stitch(bundle)
     return bundle
 end
 
-function publish_stitch!(directory, checkpoint; current_evidence)
+function publish_stitch!(directory, checkpoint; current_evidence,validate_consumer=nothing)
     return with_run(directory) do store
         current = read_published_stitch(store.public_dir)
         global_base = isnothing(current) ? LibrarySnapshot() : current.snapshot
@@ -284,6 +288,10 @@ function publish_stitch!(directory, checkpoint; current_evidence)
         verify_published_stitch(bundle)
         bytes = JSON.json(bundle)
         digest = content_hash(bytes)
+        if !isnothing(validate_consumer)
+            validate_consumer(published_result(digest,bundle)) === false && return nothing
+            content_hash(JSON.json(bundle)) == digest || error("Consumer mutated the staged publication")
+        end
         path = store_path(store, digest * ".json")
         if isfile(path)
             read(path, String) == bytes || error("Publication ID collision")

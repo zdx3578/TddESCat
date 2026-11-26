@@ -322,6 +322,7 @@ function collect_program_learning!(knowledge,store,prepared,status; available_af
     activation = joinpath(job,"program-publication.json")
     old = isfile(activation) ? read_json(activation) : nothing
     head = read_published_stitch(directory)
+    staged = Ref{Any}(nothing)
     id = if !isnothing(old)
         old["input_sha256"] == checked.input_sha || error("The program activation has a different input")
         available_after = old["available_after"]
@@ -329,12 +330,21 @@ function collect_program_learning!(knowledge,store,prepared,status; available_af
     elseif !isnothing(head) && head.bundle["input_sha256"] == checked.input_sha
         head.publication
     else
-        publish_stitch!(directory,checked;current_evidence=snapshot)
+        publish_stitch!(directory,checked;current_evidence=snapshot,
+            validate_consumer=released->begin
+                programs = read_program_macros(released,corpus;available_after)
+                contracts = [(definition=program.definition,contract=witnessed_program_contract(program))
+                    for program in programs]
+                staged[] = (;released,programs,contracts)
+                !isempty(programs)
+            end)
     end
-    released = read_published_stitch(directory;publication=id)
+    isnothing(id) && return record_program_assessment(job,merge(assessment,Dict("result"=>"no_proved_program")))
+    released = isnothing(staged[]) ? read_published_stitch(directory;publication=id) : staged[].released
     released.bundle["input_sha256"] == checked.input_sha || error("The published program has a different input")
-    programs = read_program_macros(released,corpus;available_after)
-    contracts = [(definition=program.definition,contract=witnessed_program_contract(program)) for program in programs]
+    programs = isnothing(staged[]) ? read_program_macros(released,corpus;available_after) : staged[].programs
+    contracts = isnothing(staged[]) ? [(definition=program.definition,contract=witnessed_program_contract(program))
+        for program in programs] : staged[].contracts
     atomic_json(activation,Dict("publication"=>id,"available_after"=>available_after,
         "snapshot"=>snapshot,"input_sha256"=>checked.input_sha,"relation_contracts"=>contracts))
     for (program,row) in zip(programs,contracts)

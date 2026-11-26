@@ -83,9 +83,20 @@ def solver_sandbox(
         for name in ("packages", "artifacts", "compiled")
         if (path := global_depot / name).is_dir()
     )
+    local_packages = tuple(
+        path for path in (root / "third_party/symbolic-planners",) if path.is_dir()
+    )
     return sandbox(
         command,
-        read=(julia, root / "julia/TddESCat", script, cache, *installed, *extra_read),
+        read=(
+            julia,
+            root / "julia/TddESCat",
+            script,
+            cache,
+            *installed,
+            *local_packages,
+            *extra_read,
+        ),
         write=(public,),
         variables={
             "JULIA_LOAD_PATH": "@:@stdlib",

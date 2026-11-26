@@ -83,7 +83,7 @@ allow_full_frame_context = true
 history_lengths = [0, 1, 2, 4]
 max_action_coordinates = 512
 [execution]
-max_public_commands = {budget}
+max_public_commands = {json.dumps(budget)}
 one_inflight_per_guid = true
 post_retry = false
 redirect = false

@@ -131,6 +131,7 @@ def synthesize_guard(payload):
     manager = cvc5.TermManager()
     solver = cvc5.Solver(manager)
     solver.setOption("sygus", "true")
+    solver.setOption("tlimit-per", "1000")
     solver.setLogic("ALL")
     boolean = manager.getBooleanSort()
     variables = [manager.mkVar(boolean, name) for name in names]

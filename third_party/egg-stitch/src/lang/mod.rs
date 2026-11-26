@@ -168,9 +168,7 @@ impl<L: StitchLanguage> Analysis<L> for StitchAnalysis {
     fn make(egraph: &mut egg::EGraph<L, Self>, enode: &L, _id: Id) -> Self::Data {
         let weights = egraph.analysis.weights;
         let disc = enode.discriminant();
-        let size = enode.children().iter().fold(disc.intrinsic_size(&weights), |cost, &c| {
-            cost.checked_add(egraph[c].data.size).expect("AST cost overflow")
-        });
+        let size = enode.children().iter().fold(disc.intrinsic_size(&weights), |cost, &c| cost.checked_add(egraph[c].data.size).expect("AST cost overflow"));
         let sort = egraph.analysis.typed.as_ref().and_then(|typed| {
             typed.check_graph(egraph.total_size().saturating_add(1));
             if enode.is_programs_node() {

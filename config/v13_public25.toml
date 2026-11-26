@@ -16,6 +16,7 @@ one_inflight_per_guid = true
 post_retry = false
 redirect = false
 memory_enforcement = "cgroup_v2"
+solver_heap_hint_bytes = 1342177280
 learning_memory_bytes = 6442450944
 
 [learning]
@@ -38,3 +39,4 @@ relation_goals = true
 [compute]
 factor_kernel = "../target/release/factor-kernel"
 solver_python = "../python/compute/.venv/bin/python"
+circuit_python = "../python/compute/.venv/bin/python"

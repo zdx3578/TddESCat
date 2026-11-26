@@ -12,8 +12,15 @@ GATlab = "f0ffcf3b-d13a-433e-917c-cc44ccf5ead2"
 Galley = "0b99cc74-af0a-4786-be99-594ac14242a4"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+PDDL = "2c8894f9-daa1-498a-9e3a-26edd9623db8"
 SHA = "ea8e919c-243c-51af-8825-aaa63cd721ce"
+SymbolicPlanners = "b6fe5377-9711-4fad-95b0-be4eed71ecbb"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
+
+[sources]
+SymbolicPlanners = {path = "../../third_party/symbolic-planners"}
+Compose = {rev = "139021151ab8cc4bafb3b8fe88c4fd659f734cf3", url = "https://github.com/GiovineItalia/Compose.jl"}
+Galley = {rev = "8eefbb52c64c9dd1f7cad39e30c9541a9ab9dc56", url = "https://github.com/finch-tensor/Galley.jl"}
 
 [compat]
 ACSets = "=0.2.29"
@@ -24,8 +31,6 @@ GATlab = "=0.2.4"
 Galley = "0.2.2"
 HTTP = "=2.13.2"
 JSON = "=1.13.4"
+PDDL = "=0.2.18"
+SymbolicPlanners = "=0.1.27"
 julia = "=1.12.6"
-
-[sources]
-Compose = {url = "https://github.com/GiovineItalia/Compose.jl", rev = "139021151ab8cc4bafb3b8fe88c4fd659f734cf3"}
-Galley = {url = "https://github.com/finch-tensor/Galley.jl", rev = "8eefbb52c64c9dd1f7cad39e30c9541a9ab9dc56"}

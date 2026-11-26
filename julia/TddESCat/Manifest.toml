@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "0c001ab49089b93e8e9f746efbe963c4ddb7009f"
+project_hash = "be4bc06d5bf19ae2cbb0707e099cb954142901a4"
 
 [[deps.ACSets]]
 deps = ["AlgebraicInterfaces", "Base64", "CompTime", "DataStructures", "JSON3", "MLStyle", "PEG", "Permutations", "Pkg", "PrettyTables", "Random", "Reexport", "SHA", "StaticArrays", "StructEquality", "StructTypes", "Tables"]
@@ -281,9 +281,9 @@ version = "0.25.135"
     Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [[deps.DocStringExtensions]]
-git-tree-sha1 = "38ef52f18cbdfa783ec6c25acc23fb1e8525ec16"
+git-tree-sha1 = "7442a5dfe1ebb773c29cc2962a8980f47221d76c"
 uuid = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
-version = "0.10.2"
+version = "0.9.5"
 
 [[deps.Downloads]]
 deps = ["ArgTools", "FileWatching", "LibCURL", "NetworkOptions"]
@@ -450,6 +450,11 @@ version = "1.14.4"
 deps = ["StyledStrings"]
 uuid = "ac6e5ff7-fb65-4e79-a425-ec3bc9c03011"
 version = "1.12.0"
+
+[[deps.Julog]]
+git-tree-sha1 = "191e4f6de2ddf2dc60d5d90c412d066814f1655b"
+uuid = "5d8bcb5e-2b2c-4a96-a2b1-d40b3d3c344f"
+version = "0.1.15"
 
 [[deps.KernelAbstractions]]
 deps = ["Adapt", "Atomix", "InteractiveUtils", "MacroTools", "PrecompileTools", "Requires", "StaticArrays", "UUIDs"]
@@ -627,6 +632,12 @@ git-tree-sha1 = "94ba93778373a53bfd5a0caaf7d809c445292ff4"
 uuid = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 version = "1.8.2"
 
+[[deps.PDDL]]
+deps = ["AutoHashEquals", "DocStringExtensions", "Julog", "ParserCombinator", "ValSplit"]
+git-tree-sha1 = "df1e12fb86d1f081833a74249335aa02657be774"
+uuid = "2c8894f9-daa1-498a-9e3a-26edd9623db8"
+version = "0.2.18"
+
 [[deps.PDMats]]
 deps = ["LinearAlgebra", "SparseArrays", "SuiteSparse"]
 git-tree-sha1 = "123266c25174ef6c8d4718920abc206452cf8de6"
@@ -641,6 +652,18 @@ weakdeps = ["StatsBase"]
 git-tree-sha1 = "7ddadb443e48ae0293de19737c8defdc4c6ad89a"
 uuid = "12d937ae-5f68-53be-93c9-3a6f997a20a8"
 version = "1.0.4"
+
+[[deps.Parameters]]
+deps = ["OrderedCollections", "UnPack"]
+git-tree-sha1 = "34c0e9ad262e5f7fc75b10a9952ca7692cfc5fbe"
+uuid = "d96e819e-fc66-5662-9728-84c9c7592b0a"
+version = "0.12.3"
+
+[[deps.ParserCombinator]]
+deps = ["AutoHashEquals", "Printf"]
+git-tree-sha1 = "5f2ab6899c7a056d475194d03393299e61a0425c"
+uuid = "fae87a5f-d1ad-5cf0-8f61-c941e1580b46"
+version = "2.2.1"
 
 [[deps.Parsers]]
 deps = ["Dates", "PrecompileTools", "UUIDs"]
@@ -935,6 +958,12 @@ deps = ["Artifacts", "Libdl", "libblastrampoline_jll"]
 uuid = "bea87d4a-7f5b-5778-9afe-8cc45184846c"
 version = "7.8.3+2"
 
+[[deps.SymbolicPlanners]]
+deps = ["AutoHashEquals", "ConstructionBase", "DataStructures", "DocStringExtensions", "Logging", "PDDL", "Parameters", "Random", "StatsBase"]
+path = "../../third_party/symbolic-planners"
+uuid = "b6fe5377-9711-4fad-95b0-be4eed71ecbb"
+version = "0.1.27"
+
 [[deps.SyntaxInterface]]
 git-tree-sha1 = "8c440d5a1dbd493841885a5d1e75eb5c5034015a"
 uuid = "b33eeca9-aacb-4496-a840-e75f1646a4fb"
@@ -963,7 +992,7 @@ uuid = "a4e569a6-e804-4fa4-b0f3-eef7a1d5b13e"
 version = "1.10.0"
 
 [[deps.TddESCat]]
-deps = ["ACSets", "AlgebraicRewriting", "Catlab", "Compose", "Dates", "GATlab", "Galley", "HTTP", "JSON", "SHA", "TOML"]
+deps = ["ACSets", "AlgebraicRewriting", "Catlab", "Compose", "Dates", "GATlab", "Galley", "HTTP", "JSON", "PDDL", "SHA", "SymbolicPlanners", "TOML"]
 path = "."
 uuid = "a2579a8f-6581-4de1-88f1-71cacdeaf14e"
 version = "0.1.0"
@@ -978,6 +1007,11 @@ git-tree-sha1 = "0c45878dcfdcfa8480052b6ab162cdd138781742"
 uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
 version = "0.11.3"
 
+[[deps.Tricks]]
+git-tree-sha1 = "311349fd1c93a31f783f977a71e8b062a57d4101"
+uuid = "410a4b4d-49e4-4fbc-ab6d-cb71b17b3775"
+version = "0.1.13"
+
 [[deps.URIs]]
 deps = ["Serialization"]
 git-tree-sha1 = "eb3b85ca904a1d1647b15acc091b113b8874b648"
@@ -988,6 +1022,11 @@ version = "1.7.3"
 deps = ["Random", "SHA"]
 uuid = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 version = "1.11.0"
+
+[[deps.UnPack]]
+git-tree-sha1 = "387c1f73762231e86e0c9c5443ce3b4a0a9a0c2b"
+uuid = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
+version = "1.0.2"
 
 [[deps.Unicode]]
 uuid = "4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5"
@@ -1004,6 +1043,12 @@ version = "0.4.0"
 
     [deps.UnsafeAtomics.weakdeps]
     GPUCompiler = "61eb1bfa-7361-4325-ad38-22787b887f55"
+
+[[deps.ValSplit]]
+deps = ["ExprTools", "Tricks"]
+git-tree-sha1 = "e00dde2141485abeca9d94c07abbd8f38da5c81d"
+uuid = "0625e100-946b-11ec-09cd-6328dd093154"
+version = "0.1.2"
 
 [[deps.XML2_jll]]
 deps = ["Artifacts", "LazyJLLWrappers", "Libdl", "Libiconv_jll", "Zlib_jll"]

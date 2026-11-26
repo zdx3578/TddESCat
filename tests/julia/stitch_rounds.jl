@@ -103,6 +103,9 @@ end
     directory = joinpath(RUN, "publication")
     @test_throws ErrorException TC.publish_stitch!(directory, result; current_evidence="unrelated")
     @test !isfile(joinpath(directory, "current.json"))
+    @test isnothing(TC.publish_stitch!(directory,result;current_evidence="snapshot-positive",
+        validate_consumer=_ -> false))
+    @test !isfile(joinpath(directory,"current.json"))
     digest = TC.publish_stitch!(directory, result; current_evidence="snapshot-positive")
     restored = TC.read_published_stitch(directory)
     @test restored.publication == digest
@@ -151,6 +154,32 @@ end
     @test isnothing(measured["managed_byte_limit"])
     @test all(key -> measured["phases"][key]["peak_live_bytes"] > 0,
         ["load","graph","search","apply","extract","proof","serialize","commit"])
+    resume_job = positive.job
+    worker = `$PYTHON -m tddesc_tools.stitch --job $resume_job --binary $WORKER`
+    paused = joinpath(RUN,"paused-frontier")
+    @test run(ignorestatus(`$worker --output $paused --pause-search-after 4`)).exitcode == 22
+    @test TC.read_json(joinpath(paused,"learning-summary.json"))["interrupted_phase"] == "search"
+    checkpoint = joinpath(paused,"search-state")
+    frontier = joinpath(checkpoint,"round-000001")
+    @test isdir(frontier)
+    restored_output = joinpath(RUN,"restored-frontier")
+    @test run(ignorestatus(`$worker --output $restored_output --resume-search $checkpoint`)).exitcode == 0
+    resumed = read_stitch_rounds(resume_job,restored_output)
+    @test resumed.summary["fixed_point"]
+    @test resumed.summary["total_heap_pops"] == result.summary["total_heap_pops"]
+    @test length(resumed.verified) == length(result.verified)
+    for (before,after) in zip(result.verified,resumed.verified)
+        for key in ("proofs","calls","definitions","rewritten_programs","cost","round_metrics")
+            @test before[key] == after[key]
+        end
+    end
+    corrupt = joinpath(RUN,"corrupt-frontier")
+    cp(checkpoint,corrupt)
+    directory = joinpath(corrupt,"round-000001")
+    file = only(filter(name->startswith(name,"state-"),readdir(directory)))
+    write(joinpath(directory,file),"{}")
+    rejected = joinpath(RUN,"rejected-frontier")
+    @test run(ignorestatus(`$worker --output $rejected --resume-search $corrupt`)).exitcode != 0
     memory = execute("resource-stop",batch(0),empty;fault="resource-load")
     @test memory.code == 22
     @test TC.read_json(joinpath(memory.output,"learning-summary.json"))["termination_reason"] == "resource_failure"

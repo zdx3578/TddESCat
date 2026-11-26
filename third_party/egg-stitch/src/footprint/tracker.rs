@@ -56,7 +56,7 @@ fn cheap_proxy_of(matches: &[MatchAtEClass], arity: usize) -> u64 {
 /// colliding bucket (the representative's), and no match set is ever cloned —
 /// only its node index is stored. Unlike the older scheme, the representative's
 /// own duplicates are now caught, so dedup is exact up to footprint-equality.
-#[derive(Default)]
+#[derive(Default, serde::Serialize, serde::Deserialize)]
 pub struct FootprintTracker {
     /// Per proxy: the bucket's deferred representative plus its materialised entries.
     proxy_buckets: FxHashMap<u64, Bucket>,
@@ -71,7 +71,7 @@ pub struct FootprintTracker {
 /// handle until a collision forces its signature) and the signatures recorded so
 /// far. `rep` is `Some` only between the fresh-proxy claim and the first
 /// collision; after that all members live in `entries`.
-#[derive(Default)]
+#[derive(Default, serde::Serialize, serde::Deserialize)]
 struct Bucket {
     rep: Option<RepHandle>,
     /// Each entry: `(signature, frozen marginals, min size, node id)`. The node id
@@ -83,6 +83,7 @@ struct Bucket {
 /// without retaining its match set. The match set is re-read from the search's
 /// (append-only) node array via `id`; `frozen` (whose length is the arity) and
 /// `size` are the small per-candidate facts the signature alone doesn't carry.
+#[derive(serde::Serialize, serde::Deserialize)]
 struct RepHandle {
     id: usize,
     frozen: Vec<bool>,

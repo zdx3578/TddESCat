@@ -11,7 +11,7 @@ use super::{StitchDisc, StitchOp, Weights};
 /// Composes with `OpWithVar` for the pattern side: `OpWithVar<OpDB<O>>` is the
 /// pattern-leaf type that admits both pattern meta-vars (`?x`) and De Bruijn
 /// vars (`$n`).
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub enum OpDB<O> {
     Node(O),
     Var(i32),

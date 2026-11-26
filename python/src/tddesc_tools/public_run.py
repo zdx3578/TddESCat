@@ -78,7 +78,7 @@ def public_settings(root, config, data, *, recovery=False):
     for name, path in compute_paths(config, data).items():
         if not path.is_file() or not os.access(path, os.X_OK):
             raise FileNotFoundError(f"Configured compute executable is missing: {path}")
-        if name == "solver_python":
+        if name.endswith("_python"):
             paths.extend(
                 (
                     path.parent.parent,
@@ -119,21 +119,32 @@ def solver_command(
 ):
     script = root / "scripts/run.jl"
     if command is None:
+        data = tomllib.loads(config.read_text(encoding="utf-8"))
+        solver = julia_command(
+            root,
+            runtime,
+            script,
+            "--recover-learning" if recovery else "--supervised",
+            "--config",
+            str(config),
+            "--public-dir",
+            str(public),
+        )
+        if data.get("compute") and not recovery:
+            solver.insert(1, "--threads=2")
+        heap_hint = data["execution"].get("solver_heap_hint_bytes")
+        if heap_hint is not None:
+            if type(heap_hint) is not int or heap_hint <= 0:
+                raise ValueError(
+                    "A solver heap hint must be a positive number of bytes"
+                )
+            solver.insert(1, f"--heap-size-hint={heap_hint}")
         command = [
             "/usr/bin/time",
             "-v",
             "-o",
             str(public / ("recovery-usage.txt" if recovery else "solver-usage.txt")),
-            *julia_command(
-                root,
-                runtime,
-                script,
-                "--recover-learning" if recovery else "--supervised",
-                "--config",
-                str(config),
-                "--public-dir",
-                str(public),
-            ),
+            *solver,
         ]
     return solver_sandbox(
         root,
@@ -178,18 +189,36 @@ def process_jobs(
             if sha256(binary.read_bytes()).hexdigest() != worker_sha:
                 raise RuntimeError("Learning executable changed during the session")
             output = job / "output"
+            resume = None
             if output.exists():
-                summary = json.loads((output / "learning-summary.json").read_bytes())
-                Contracts(root / "protocol").validate("learn_summary", summary)
-                if (
-                    summary["scope_refs"]["binary"] != worker_sha
-                    or summary["scope_refs"]["policy"] != policy_sha
+                summary_path = output / "learning-summary.json"
+                if summary_path.is_file():
+                    summary = json.loads(summary_path.read_bytes())
+                    Contracts(root / "protocol").validate("learn_summary", summary)
+                    if (
+                        summary["scope_refs"]["binary"] != worker_sha
+                        or summary["scope_refs"]["policy"] != policy_sha
+                    ):
+                        raise ValueError(
+                            "Interrupted attempt has a different worker or policy"
+                        )
+                    code = json.loads((output / "metrics.json").read_bytes())[
+                        "exit_code"
+                    ]
+                if code != 0 and any(
+                    (output / "search-state").glob("round-*/latest.json")
                 ):
-                    raise ValueError(
-                        "Interrupted attempt has a different worker or policy"
+                    preserved = job / "search-attempts"
+                    preserved.mkdir(exist_ok=True)
+                    prior = (
+                        preserved / f"attempt-{len(list(preserved.iterdir())) + 1:06}"
                     )
-                code = json.loads((output / "metrics.json").read_bytes())["exit_code"]
-            else:
+                    output.rename(prior)
+                    old_log = job / "output.worker.log"
+                    if old_log.is_file():
+                        old_log.rename(prior / "worker.log")
+                    resume = prior / "search-state"
+            if not output.exists():
                 code = run_worker(
                     root,
                     job / "input",
@@ -198,6 +227,7 @@ def process_jobs(
                     hard_memory=hard_memory,
                     expected_policy=policy_sha,
                     solver_unit=unit,
+                    resume_search=resume,
                 )
         except Exception as exc:
             failure = f"{type(exc).__name__}: {exc}"

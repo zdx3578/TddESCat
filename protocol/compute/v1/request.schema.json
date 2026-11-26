@@ -1,5 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.tddescat.org/compute/v1/request.schema.json",
   "title": "Compute request envelope",
   "type": "object",
   "required": ["protocol", "request_id", "snapshot", "operation"],
@@ -12,7 +13,7 @@
       "condition_bool", "project_bool", "count_models", "evaluate_bool",
       "evaluate_bool_batch", "equal_bool", "entails_bool", "rotate_bool",
       "describe", "export_canonical", "import_canonical", "acquire",
-      "release", "solve", "synthesize_guard"
+      "release", "solve", "synthesize_guard", "train_circuit", "query_circuit", "learn_history"
     ]},
     "payload": {"type": "object"}
   },

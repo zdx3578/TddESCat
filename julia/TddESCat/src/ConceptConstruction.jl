@@ -1,6 +1,44 @@
 const BEFORE_ROLE_COLUMN = ("RoleBefore","before")
 const BEFORE_COLOR_COLUMN = ("Color","timeless")
 
+"""
+Build witnessed Boolean rectangles. An unknown cell is eligible for the
+possible extent and can never enter the represented positive incidence.
+"""
+function relational_factors(objects,attributes,incidence,seeds)
+    domains = collect(objects)
+    vocabulary = collect(attributes)
+    allunique(domains) && allunique(vocabulary) || throw(ArgumentError("Repeated factor binding"))
+    known = Dict(attribute=>BitSet() for attribute in vocabulary)
+    excluded = Dict(attribute=>BitSet() for attribute in vocabulary)
+    for ((object,attribute),truth) in incidence
+        object in eachindex(domains) && haskey(known,attribute) ||
+            throw(ArgumentError("Factor incidence escaped its declared domain"))
+        truth == proven && push!(known[attribute],object)
+        truth == disproven && push!(excluded[attribute],object)
+    end
+    factors = NamedTuple[]
+    covered = Set{Tuple{Int,eltype(vocabulary)}}()
+    for seed in seeds
+        extent = BitSet(seed)
+        all(index->index in eachindex(domains),extent) || throw(ArgumentError("Unknown seed object"))
+        isempty(extent) && continue
+        intent = [attribute for attribute in vocabulary if issubset(extent,known[attribute])]
+        isempty(intent) && continue
+        closed = reduce(intersect,(known[attribute] for attribute in intent))
+        length(closed) * length(intent) > length(closed) + length(intent) || continue
+        possible = setdiff(BitSet(eachindex(domains)),
+            reduce(union,(excluded[attribute] for attribute in intent)))
+        factor = (;extent=collect(closed),intent,possible=collect(possible))
+        factor in factors && continue
+        union!(covered,((object,attribute) for object in closed for attribute in intent))
+        push!(factors,factor)
+    end
+    residual = sort!([(object,attribute) for attribute in vocabulary for object in known[attribute]
+        if (object,attribute) ∉ covered];by=repr)
+    return (;factors,residual)
+end
+
 struct RelationPredicate <: MotionPredicate
     candidates::Vector{String}
     programs::Vector{String}

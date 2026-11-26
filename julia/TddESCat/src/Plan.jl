@@ -55,6 +55,10 @@ function solve_policy(model::PlanningModel{S,A,O},belief,goal;depth=nothing,max_
     issubset(belief,model.states) && issubset(goal,model.states) ||
         throw(ArgumentError("Policy query is outside the model"))
     isempty(belief) && return (status="belief_needs_revision",policy=nothing,work=0)
+    if isnothing(depth) && isnothing(max_work)
+        determined = policy_from_deterministic_plan(model,belief,goal)
+        isnothing(determined) || return determined
+    end
 
     beliefs = [Set{S}(belief)]
     ids = Dict(first(beliefs)=>1)

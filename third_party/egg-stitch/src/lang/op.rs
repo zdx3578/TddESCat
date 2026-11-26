@@ -40,7 +40,7 @@ pub trait StitchOp: StitchDisc {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub enum Op {
     /// Opaque symbolic operator.
     Sym(Symbol),

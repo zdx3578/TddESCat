@@ -619,13 +619,14 @@ function finalize_learning!(knowledge, config, store, pairs, repo_root; frozen, 
     return (; publications,pending)
 end
 
-function collect_online_job!(knowledge,config,rec,job,status,publications,program_jobs,completed_cohorts)
+function collect_online_job!(knowledge,config,rec,job,status,publications,program_jobs,completed_cohorts;
+                             live_agenda=nothing)
     if job.kind == :effect
         publication = collect_effect_learning!(knowledge,config,rec.store,job.prepared,status)
         isnothing(publication) || push!(publications,publication)
     elseif job.kind == :policy
         assessment = collect_policy_learning!(knowledge,rec.store,job.prepared,status;
-            available_after=rec.before_ref)
+            available_after=rec.before_ref,live_agenda)
         haskey(assessment,"publication") && push!(publications,assessment["publication"])
     else
         assessment = collect_program_learning!(knowledge,rec.store,job.prepared,status;
@@ -647,6 +648,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     experiments = ExperimentSchedule()
     intervention_memory = InterventionMemory()
     relations = RelationAgenda()
+    responses = ResponseLearning()
     publications = String[]
     count = 0
     continuation = nothing
@@ -670,6 +672,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     relation_policy_cursor = nothing
     attempted_relation_policies = Set{Tuple{String,String}}()
     last_relation_policy_check = 0
+    pending_synthesis = nothing
     last_sequence_check = 0
     last_job = :program
     background = !frozen && get(config.learning,"background_search",false)
@@ -690,9 +693,11 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     while public_budget_available(rec) && !rec.frozen
         if !isnothing(inflight) && isfile(joinpath(inflight.job,"worker-status.json"))
             status = read_json(joinpath(inflight.job,"worker-status.json"))
-            collect_online_job!(knowledge,config,rec,inflight,status,publications,program_jobs,completed_cohorts)
+            collect_online_job!(knowledge,config,rec,inflight,status,publications,program_jobs,completed_cohorts;
+                live_agenda=relations)
             inflight = nothing
         end
+        relation_tasks && collect_response_model!(responses,rec.store,relations)
         decision_started = time_ns()
         obs = rec.observation
         meter_context!(measurement,obs)
@@ -734,9 +739,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 begin_visual_attempt!(visual)
                 intervention_memory.prior_observation = nothing
             end
-            begin_relation_attempt!(relations,retry)
+            begin_relation_attempt!(relations,retry;observation=rec.observation)
             atomic_json(store_path(rec.store,"attempts",reset["command_id"] * ".json"),(;
-                event=rec.before_ref,prior=event["before_ref"],attempt=relations.attempt,revision=retry,
+                event=rec.before_ref,prior=event["before_ref"],attempt=relations.attempt,revision=relations.restart,
                 previous_level=obs.levels_completed,level=rec.observation.levels_completed,
                 full_reset=rec.observation.full_reset,session=rec.observation.guid,rebound=fresh_binding))
             history = [0]
@@ -903,7 +908,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         end
         context = relation_tasks ? relation_context(obs) : nothing
         relation_choice = if relation_tasks
-            relation_experiment(relations,obs,decision,intervention,context;meters)
+            relation_experiment(relations,obs,decision,intervention,context;meters,
+                uncertainty=circuit_experiment_scores(responses,relations),circuit_ref=responses.scope,
+                distinguish=action->history_experiment_score(responses,relations,action,context,obs.levels_completed))
         end
         relation_policy = if relation_tasks && isnothing(relations.restart)
             relation_policy_choice(knowledge.policies,relation_policy_cursor,attempted_relation_policies,
@@ -944,7 +951,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         object_probes && (intervention = executed_intervention(intervention,click_scene,item.action))
         intervention_goal = isnothing(intervention) ? nothing : intervention.goal
         selected.source == :relation_policy || (relation_policy = nothing)
-        relation_policy_cursor = nothing
+        isnothing(policy_withdrawal) || (relation_policy_cursor = nothing)
         relation_proposal = if relation_tasks
             if !isnothing(relation_policy)
                 relation_policy.proposal
@@ -1290,14 +1297,40 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         frozen || push!(pairs,(entry,resulting))
         entry = resulting
         count += 1
+        if relation_tasks && haskey(backends,"circuit_python")
+            observe_response!(responses,relations)
+            request_response_model!(responses,backends["circuit_python"],relations,rec.before_ref,
+                config.learning["batch_confirmed_events"])
+        end
         policy_needs_review |= !isnothing(contact_feedback) || !isempty(site_transitions)
         if !frozen && isnothing(inflight)
             count_for_batch = config.learning["batch_confirmed_events"]
             prepared = nothing
-            if sequence_enabled && relation_tasks && last_job != :policy &&
-                    count-last_relation_policy_check >= count_for_batch
-                prepared = prepare_policy_learning!(knowledge,config,rec.store,repo_root,relations;
-                    entries=sequence_events,completed=submitted_policies)
+            if !isnothing(pending_synthesis) && istaskdone(pending_synthesis.task)
+                proposal = fetch(pending_synthesis.task)
+                if !isnothing(proposal)
+                    prepared = prepare_policy_learning!(knowledge,config,rec.store,repo_root,
+                        pending_synthesis.agenda;entries=pending_synthesis.entries,
+                        completed=submitted_policies,proposal,live_agenda=relations)
+                end
+                pending_synthesis = nothing
+            end
+            if isnothing(prepared) && isnothing(pending_synthesis) && sequence_enabled &&
+                    relation_tasks && last_job != :policy && count-last_relation_policy_check >= count_for_batch
+                if haskey(backends,"policy_synthesis")
+                    worker = backends["policy_synthesis"]
+                    known = Set{String}(policy.body["scope"] for policy in knowledge.policies
+                        if haskey(policy.body,"tree"))
+                    frozen_agenda = deepcopy(relations)
+                    frozen_entries = copy(sequence_events)
+                    snapshot = rec.before_ref
+                    task = Threads.@spawn policy_corpus(frozen_agenda,frozen_entries;
+                        published=known,solver=worker,snapshot)
+                    pending_synthesis = (;task,agenda=frozen_agenda,entries=frozen_entries)
+                else
+                    prepared = prepare_policy_learning!(knowledge,config,rec.store,repo_root,relations;
+                        entries=sequence_events,completed=submitted_policies)
+                end
                 last_relation_policy_check = count
             end
             if isnothing(prepared) && sequence_enabled && relation_goals && !isnothing(visual) && policy_needs_review
@@ -1333,7 +1366,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                     inflight = job
                 else
                     status = wait_worker(job.job,store_path(rec.store))
-                    collect_online_job!(knowledge,config,rec,job,status,publications,program_jobs,completed_cohorts)
+                    collect_online_job!(knowledge,config,rec,job,status,publications,program_jobs,completed_cohorts;
+                        live_agenda=relations)
                 end
             end
         end
@@ -1341,14 +1375,17 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     if !isnothing(spatial) && !rec.frozen && !isnothing(rec.card_id)
         close_scorecard!(rec)
     end
-    if !isnothing(inflight)
+    defer_tail = isnothing(rec.limit) && !frozen && rec.observation.state in ("WIN","GAME_OVER")
+    if !isnothing(inflight) && (!defer_tail || isfile(joinpath(inflight.job,"worker-status.json")))
         status = wait_worker(inflight.job,store_path(rec.store))
-        collect_online_job!(knowledge,config,rec,inflight,status,publications,program_jobs,completed_cohorts)
+        collect_online_job!(knowledge,config,rec,inflight,status,publications,program_jobs,completed_cohorts;
+            live_agenda=relations)
     end
-    final = finalize_learning!(knowledge,config,rec.store,pairs,repo_root;frozen,inflight=nothing)
+    final = defer_tail ? (;publications=String[],pending=summarize_learning!(rec.store)) :
+        finalize_learning!(knowledge,config,rec.store,pairs,repo_root;frozen,inflight=nothing)
     append!(publications,final.publications)
     sequence = nothing
-    if sequence_enabled
+    if sequence_enabled && !defer_tail
         episodes = [sequence_events]
         corpus = compile_sequence_corpus(episodes;observations=knowledge.observations,close_revisits=true)
         artifact = store_path(rec.store,"learning","sequence-corpus.json")
@@ -1363,6 +1400,14 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         atomic_json(store_path(rec.store,"learning","program-cohorts.json"),cohorts)
         sequence = merge(compiled,(search=isempty(program_jobs) ? nothing : last(program_jobs),jobs=program_jobs,
             unsubmitted_cohorts=cohorts["unsubmitted"]))
+    end
+    if defer_tail
+        # Every source is already in the receipt ledger, so recovery can
+        # rebuild the pending cohorts without extending a terminal game.
+        atomic_json(store_path(rec.store,"learning","deferred-tail.json"),(;
+            event=rec.before_ref,public_state=rec.observation.state,
+            pending_events=final.pending,sequence_sources=sequence_enabled ?
+                [item.event["event_id"] for item in sequence_events] : String[]))
     end
     after_version = frozen ? frozen_knowledge_digest(knowledge) : nothing
     after_version == frozen_version || error("Frozen evaluation changed the mechanism")
@@ -1449,5 +1494,24 @@ function recover_learning!(store, config, repo_root)
         online_learn!(knowledge,config,store,group,repo_root)
     end
     recover_program_jobs!(knowledge,config,store,repo_root,records,cutoff)
+    deferred = store_path(store,"learning","deferred-tail.json")
+    if isfile(deferred) && !session["frozen"]
+        saved = read_json(deferred)
+        refs = saved["sequence_sources"]
+        if !isempty(refs)
+            allunique(refs) && last(refs) == cutoff || error("Deferred sequence scope differs from raw receipts")
+            events = [records[ref] for ref in refs]
+            issorted([item.event["sequence"] for item in events]) ||
+                error("Deferred sequence events are out of order")
+            corpus = compile_sequence_corpus([events];observations=knowledge.observations,close_revisits=true)
+            persist_sequence_corpus([events],store_path(store,"learning","sequence-corpus.json");corpus)
+            submitted = Set{String}(keys(program_jobs_by_snapshot(store)))
+            tail = next_program_corpus(corpus,events,knowledge.observations,submitted,Set{String}())
+            if !isnothing(tail) && !isempty(tail.programs) && program_corpus_key(tail) ∉ submitted
+                train_program_corpus!(knowledge,config,store,repo_root,tail;available_after=cutoff)
+            end
+            atomic_json(store_path(store,"learning","program-cohorts.json"),program_cohort_ledger(store,corpus))
+        end
+    end
     return (;pending=summarize_learning!(store),programs=pending_program_jobs(store))
 end

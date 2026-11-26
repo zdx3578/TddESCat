@@ -118,6 +118,8 @@ def run_worker(
     expected_policy=None,
     solver_unit=None,
     test_fault=None,
+    resume_search=None,
+    pause_search_after=None,
 ):
     manifest_file = job / "manifest.json"
     manifest = json.loads(manifest_file.read_bytes())
@@ -185,8 +187,14 @@ def run_worker(
                 "--output",
                 str(output),
                 *(["--test-fault", test_fault] if test_fault is not None else []),
+                *(["--resume-search", str(resume_search)] if resume_search else []),
+                *(
+                    ["--pause-search-after", str(pause_search_after)]
+                    if pause_search_after
+                    else []
+                ),
             ],
-            read=(binary, job, launcher),
+            read=(binary, job, launcher, *((resume_search,) if resume_search else ())),
             write=(output,),
             offline=True,
         ),
@@ -287,6 +295,8 @@ def main():
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--hard-memory", type=int)
     parser.add_argument("--test-fault", choices=TEST_FAULTS, help=argparse.SUPPRESS)
+    parser.add_argument("--resume-search", type=Path)
+    parser.add_argument("--pause-search-after", type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[3]
     return run_worker(
@@ -296,6 +306,8 @@ def main():
         args.binary.resolve(),
         hard_memory=args.hard_memory,
         test_fault=args.test_fault,
+        resume_search=args.resume_search.resolve() if args.resume_search else None,
+        pause_search_after=args.pause_search_after,
     )
 
 
