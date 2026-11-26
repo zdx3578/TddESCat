@@ -36,7 +36,7 @@ class Fixture(ARCBaseGame):
         actions = {"delayed": [5, 7], "remote": [5, 6], "directions": [6],
             "restart": [6], "progress-restart": [6], "restart-choices": [6],
             "advancement-transfer": [6], "history-refinement": [1, 4],
-            "history-continuation": [1, 4], "history-matrix": [1, 4], "history-receipt": [1, 4],
+            "history-continuation": [1, 4], "history-matrix": [1, 4], "history-receipt": [1, 4], "long-history": [1, 4],
             "outcome-preparation": [5, 7], "outcome-chain": [5, 7], "role-outcome": [5, 6],
             "bridge-partition": [5], "frontier-dispatch": [1, 2], "frontier-route": [2],
             "sequence-experiment": [1, 2, 3]}
@@ -60,7 +60,7 @@ class Fixture(ARCBaseGame):
         self.previous = None
         self.probed = False
         self.hits = 0
-        if MODE in ("history-refinement", "history-continuation", "history-matrix", "history-receipt"):
+        if MODE in ("history-refinement", "history-continuation", "history-matrix", "history-receipt", "long-history"):
             self._available_actions = [1, 4]
         if MODE in ("outcome-preparation", "outcome-chain"):
             self._available_actions = [5, 7]
@@ -123,11 +123,15 @@ class Fixture(ARCBaseGame):
                 if self.level_index == 1:
                     pixels[10, 38] = 0
                 self.next_level()
-        elif MODE in ("history-matrix", "history-receipt"):
+        elif MODE in ("history-matrix", "history-receipt", "long-history"):
             if action in (1, 4):
                 self.previous = action
                 self._available_actions = [5]
             elif action == 5:
+                if MODE == "long-history" and self.hits < 3:
+                    self.hits += 1
+                    self.complete_action()
+                    return
                 if MODE == "history-receipt" and self.hits == 0:
                     self.hits += 1
                     pixels[10:13, 8:11] = self.previous
@@ -238,6 +242,7 @@ def capture(
         "frontier-route",
         "history-matrix",
         "history-receipt",
+        "long-history",
         "sequence-experiment",
     )
     public = run / "public"
@@ -283,6 +288,7 @@ def capture(
             "frontier-route": "frontier_route_public.jl",
             "history-matrix": "history_matrix_public.jl",
             "history-receipt": "history_matrix_public.jl",
+            "long-history": "history_matrix_public.jl",
             "role-outcome": "outcome_relation_public.jl",
             "sequence-experiment": "sequence_experiment_public.jl",
         }
@@ -295,6 +301,7 @@ def capture(
                 runtime,
                 public,
                 str(agent),
+                *(["long-history"] if mode == "long-history" else []),
                 str(public),
                 script=script,
                 extra_read=paths,
@@ -413,7 +420,7 @@ def verify(mode, public):
         assert service["prefix_obligation"] == record["proposal"]["obligation"]
         assert service["cursor"] == record["proposal"]["cursor"] == 1
         return [event["event_id"]]
-    if mode in ("history-matrix", "history-receipt"):
+    if mode in ("history-matrix", "history-receipt", "long-history"):
         record = read(public / "history-matrix.json")
         task = record["task"]
         trace = receipts(public)
@@ -433,6 +440,22 @@ def verify(mode, public):
             assert live_raw["frame"][0] != prior_raw["frame"][0]
             assert {live["event_id"], prior["event_id"]}.issubset(task["reads"])
             assert record["matrix"]["receipts"] and record["matrix"]["width"] == 1
+        if mode == "long-history":
+            assert not record["matrix"]["receipts"] and record["matrix"]["width"] == 5
+            assert [action[0] for action in scope["current"]] == [4, 5, 5, 5, 5]
+            assert [action[0] for action in scope["comparison"]] == [1, 5, 5, 5, 5]
+            prefixes = []
+            for initial in (event, trace[scope["source"]][0]):
+                preceding = initial["before_ref"]
+                frames = []
+                for _ in range(4):
+                    prior, raw = trace[preceding]
+                    assert prior["action"] == {"id": 5} and preceding in task["reads"]
+                    frames.append(raw["frame"])
+                    preceding = prior["before_ref"]
+                assert preceding in task["reads"]
+                prefixes.append(frames)
+            assert prefixes[0] == prefixes[1]
         for name, status in (("matrix", "unknown"), ("revised", "observed")):
             row = next(row for row in record[name]["rows"] if row["history"] == scope["current"])
             cell = next((cell for cell in row["cells"] if cell["action"][0] == 2), None)
@@ -738,6 +761,7 @@ def main(config, run):
         "frontier-route",
         "history-matrix",
         "history-receipt",
+        "long-history",
         "sequence-experiment",
     )
     with ThreadPoolExecutor(max_workers=len(modes)) as pool:
@@ -780,6 +804,7 @@ if __name__ == "__main__":
                 "frontier-route",
                 "history-matrix",
                 "history-receipt",
+                "long-history",
                 "sequence-experiment",
             )
             else 9,

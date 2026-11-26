@@ -52,6 +52,11 @@ end
     @test isnothing(search.route)
     alternative = copy(left)
     alternative[1,1] = 0x07
+    # Reproduce the entire original public prefix before contradicting the edge.
+    TC.begin_relation_attempt!(agenda,nothing)
+    current = recorded("reset-counterexample",nothing,left,0,[1])
+    observe!(right,[2,3],1)
+    observe!(left,[1],2)
     observe!(alternative,[2,3],1;state="GAME_OVER")
     initial = TC.frontier_state(agenda,TC.relation_context(recorded("bound",nothing,left,2,[1]).observation),2)
     @test TC.frontier_path(search,agenda,initial) === nothing

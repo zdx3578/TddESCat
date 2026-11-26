@@ -9,6 +9,7 @@ config = load_run_config(first(ARGS))
         agenda = TC.RelationAgenda()
         widths = config.search["history_lengths"]
         receipt_scope = maximum(widths) == 1
+        long_scope = "long-history" in ARGS
         search = TC.PublicFrontier(widths)
         @test open_scorecard!(rec)["completion"] == "confirmed"
         entry() = (event=TC.read_json(TC.store_path(store,"events",rec.before_ref * ".json")),
@@ -24,7 +25,9 @@ config = load_run_config(first(ARGS))
             @test reset!(rec,config.environment["game_id"])["completion"] == "confirmed"
             TC.begin_relation_attempt!(agenda,nothing)
             dispatch(preparation)
-            dispatch(5)
+            for _ in 1:(long_scope ? 4 : 1)
+                dispatch(5)
+            end
             tail == 0 || dispatch(tail)
         end
         obs = rec.observation
@@ -32,7 +35,8 @@ config = load_run_config(first(ARGS))
         matrix = TC.frontier_response_matrix(search,agenda,context)
         key = TC.relation_history_key(agenda,context,agenda.previous)
         live = only(filter(row->row.history == key,matrix.rows))
-        @test (matrix.width,matrix.receipts) == (receipt_scope ? (1,true) : (2,false))
+        expected_scope = long_scope ? (5,false) : receipt_scope ? (1,true) : (2,false)
+        @test (matrix.width,matrix.receipts) == expected_scope
         @test length(matrix.rows) == 2
         @test matrix.unrecorded_response == :unknown && all(cell->first(cell.action) != 2,live.cells)
         ranked = [(;action=Dict("id"=>id),reason="coverage",rank=(0,0)) for id in (7,2)]

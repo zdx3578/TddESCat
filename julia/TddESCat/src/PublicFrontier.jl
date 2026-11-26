@@ -73,6 +73,28 @@ function compatible_frontier_history(search,agenda,context,scope)
     return true
 end
 
+function extended_frontier_history(search,agenda,context,old)
+    lower = max(old.width + Int(old.receipts),last(search.allowed_widths)+1)
+    upper = maximum(i->agenda.samples[i].history_depth-1,search.visits[context];init=0)
+    lower <= upper && compatible_frontier_history(search,agenda,context,RelationHistoryScope(upper,true)) ||
+        return nothing
+    # Wider confirmed histories only refine equivalence classes. Search the
+    # observed range for the first separation without manufacturing a prefix.
+    while lower < upper
+        middle = lower + (upper-lower)÷2
+        if compatible_frontier_history(search,agenda,context,RelationHistoryScope(middle,true))
+            upper = middle
+        else
+            lower = middle+1
+        end
+    end
+    actions = RelationHistoryScope(lower,false)
+    if !old.receipts && lower > old.width && compatible_frontier_history(search,agenda,context,actions)
+        return actions
+    end
+    return RelationHistoryScope(lower,true)
+end
+
 function frontier_response_matrix(search,agenda,context)
     visits = get(search.visits,context,Int[])
     histories = unique([relation_history_key(agenda,context,agenda.samples[i].preceding) for i in visits])
@@ -137,8 +159,9 @@ function frontier_observe!(search,agenda)
         for width in search.allowed_widths if width >= old.width &&
         ((receipts == old.receipts && width > old.width) || (receipts && !old.receipts))]
     usable = findfirst(scope->compatible_frontier_history(search,agenda,context,scope),candidates)
-    scope = isnothing(usable) ? old : candidates[usable]
-    if isnothing(usable)
+    refined = isnothing(usable) ? extended_frontier_history(search,agenda,context,old) : candidates[usable]
+    scope = something(refined,old)
+    if isnothing(refined)
         push!(search.unresolved,context)
     else
         agenda.history_scopes[context] = scope
@@ -153,7 +176,7 @@ function frontier_observe!(search,agenda)
     return (;context,before_width=old.width,before_receipts=old.receipts,scope.width,scope.receipts,
         history_reads=histories,response_matrix=matrix,
         evidence=relation_ref.(agenda.samples[[contrasted,index]]),
-        status=isnothing(usable) ? "unresolved" : "refined")
+        status=isnothing(refined) ? "unresolved" : "refined")
 end
 
 function frontier_untried(search,node)

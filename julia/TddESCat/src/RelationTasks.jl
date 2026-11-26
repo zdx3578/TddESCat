@@ -7,6 +7,7 @@ struct RelationSample
     next_context::String
     receipt::String
     preceding::Int
+    history_depth::Int
     state::String
     advanced::Bool
     unchanged::Bool
@@ -238,8 +239,9 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
             :complete_preparation,:continue_outcome_relation) ?
         relation_ref(prior) : nothing
     next_context = relation_context(next)
+    depth = isnothing(prior) ? 1 : prior.history_depth+1
     sample = RelationSample(effects,prev.levels_completed,agenda.attempt,relation_context(prev),
-        next_context,relation_receipt(next,next_context),agenda.previous,next.state,advanced,nothing_visible,prev.available_actions,
+        next_context,relation_receipt(next,next_context),agenda.previous,depth,next.state,advanced,nothing_visible,prev.available_actions,
         binding,dependency,contact,site_changes)
     push!(agenda.samples,sample)
     index = length(agenda.samples)
