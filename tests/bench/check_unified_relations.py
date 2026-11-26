@@ -36,7 +36,8 @@ class Fixture(ARCBaseGame):
         actions = {"delayed": [5, 7], "remote": [5, 6], "directions": [6],
             "restart": [6], "progress-restart": [6], "restart-choices": [6],
             "advancement-transfer": [6], "history-refinement": [1, 4],
-            "history-continuation": [1, 4], "outcome-preparation": [5, 7], "outcome-chain": [5, 7],
+            "history-continuation": [1, 4], "history-matrix": [1, 4],
+            "outcome-preparation": [5, 7], "outcome-chain": [5, 7],
             "bridge-partition": [5], "frontier-dispatch": [1, 2], "frontier-route": [2]}
         levels = [Level(sprites=[Sprite(frame.copy(), name="board")])]
         if MODE == "progress-restart":
@@ -58,7 +59,7 @@ class Fixture(ARCBaseGame):
         self.previous = None
         self.probed = False
         self.hits = 0
-        if MODE in ("history-refinement", "history-continuation"):
+        if MODE in ("history-refinement", "history-continuation", "history-matrix"):
             self._available_actions = [1, 4]
         if MODE in ("outcome-preparation", "outcome-chain"):
             self._available_actions = [5, 7]
@@ -109,6 +110,17 @@ class Fixture(ARCBaseGame):
                 if self.level_index == 1:
                     pixels[10, 38] = 0
                 self.next_level()
+        elif MODE == "history-matrix":
+            if action in (1, 4):
+                self.previous = action
+                self._available_actions = [5]
+            elif action == 5:
+                pixels[10:13, 8:11] = 3
+                self._available_actions = [2, 7]
+            elif action == 2 and self.previous == 4:
+                self.next_level()
+            elif action == 7 and self.previous == 1:
+                self.lose()
         elif MODE in ("history-refinement", "history-continuation"):
             if self.probed:
                 self.hits += 1
@@ -206,11 +218,18 @@ def capture(
         "bridge-partition",
         "frontier-dispatch",
         "frontier-route",
+        "history-matrix",
     )
     public = run / "public"
     public.mkdir()
     with environment_server(
-        root, runtime, config, games, run / "private/server", run / "environment.log"
+        root,
+        runtime,
+        config,
+        games,
+        run / "private/server",
+        run / "environment.log",
+        startup_timeout=120 if extended_timeout else 20,
     ) as (url, _):
         agent = public / "agent.toml"
         online_config(
@@ -239,6 +258,7 @@ def capture(
             "history-dispatch": "history_public.jl",
             "frontier-dispatch": "frontier_dispatch.jl",
             "frontier-route": "frontier_route_public.jl",
+            "history-matrix": "history_matrix_public.jl",
         }
         if mode in direct_tests:
             name = direct_tests[mode]
@@ -320,6 +340,29 @@ def observed_steps(public):
 
 
 def verify(mode, public):
+    if mode == "history-matrix":
+        record = read(public / "history-matrix.json")
+        task = record["task"]
+        trace = receipts(public)
+        event, response = trace[record["event"]]
+        scope = task["obligation"]
+        assert scope["scope"] == "observed_history_matrix" and scope["answer"] == "unknown"
+        assert scope["current"] != scope["comparison"] and task["action"] == event["action"] == {"id": 2}
+        assert response["state"] == "WIN" and trace[scope["source"]][1]["state"] == "NOT_FINISHED"
+        assert all(trace[ref][0]["sequence"] < event["sequence"] for ref in task["reads"])
+        for name, status in (("matrix", "unknown"), ("revised", "observed")):
+            row = next(row for row in record[name]["rows"] if row["history"] == scope["current"])
+            cell = next((cell for cell in row["cells"] if cell["action"][0] == 2), None)
+            if status == "observed":
+                assert cell["status"] == status
+                assert cell["outcomes"][0][1] == response["state"]
+                assert event["event_id"] in cell["reads"]
+            else:
+                assert cell is None and record[name]["unrecorded_response"] == "unknown"
+        prediction = read(public / "predictions" / (event["command_ref"] + ".json"))
+        assert prediction["guard_truth"] == "unknown"
+        assert set(task["reads"]) <= set(prediction["event_reads"])
+        return [record["event"]]
     if mode == "frontier-route":
         route = read(public / "frontier-route.json")
         trace = receipts(public)
@@ -609,6 +652,7 @@ def main(config, run):
         "bridge-partition",
         "frontier-dispatch",
         "frontier-route",
+        "history-matrix",
     )
     with ThreadPoolExecutor(max_workers=len(modes)) as pool:
         cases = {
@@ -647,6 +691,7 @@ if __name__ == "__main__":
                 "outcome-chain",
                 "frontier-dispatch",
                 "frontier-route",
+                "history-matrix",
             )
             else 9,
             compute=bool(extra),

@@ -64,6 +64,52 @@ function compatible_frontier_history(search,agenda,context,width)
     return true
 end
 
+function frontier_response_matrix(search,agenda,context)
+    visits = get(search.visits,context,Int[])
+    histories = unique([relation_history_key(agenda,context,agenda.samples[i].preceding) for i in visits])
+    actions = PublicActionKey[]
+    rows = map(histories) do past
+        observed = search.outcomes[(context,past)]
+        row_actions = sort!(collect(keys(observed)))
+        union!(actions,row_actions)
+        cells = map(row_actions) do action
+            samples = [agenda.samples[i] for i in observed[action]]
+            outcomes = unique([frontier_outcome(row) for row in samples])
+            status = length(outcomes) == 1 ? :observed : :conflict
+            reads = unique([ref for row in samples for ref in relation_refs(row)])
+            (;action,status,outcomes,reads)
+        end
+        (;history=past,cells)
+    end
+    available_actions = isempty(visits) ? Int[] : agenda.samples[first(visits)].available
+    return (;context,width=get(agenda.history_widths,context,1),actions=sort!(actions),available_actions,
+        coordinate_domain=6 in available_actions ? 4096 : 0,unrecorded_response=:unknown,rows)
+end
+
+function frontier_history_probe(search,agenda,obs,context)
+    width = get(agenda.history_widths,context,1)
+    width > 1 || return nothing
+    live = frontier_state(agenda,context,agenda.previous)
+    tried = get(search.outcomes,live,nothing)
+    for index in get(search.visits,context,Int[])
+        row = agenda.samples[index]
+        action = action_key(row.effects.action)
+        (first(action) in obs.available_actions && (isnothing(tried) || !haskey(tried,action))) || continue
+        witnessed = frontier_state(agenda,context,row.preceding)
+        witnessed == live && continue
+        samples = search.outcomes[witnessed][action]
+        all(i->frontier_outcome(agenda.samples[i]) == frontier_outcome(row),samples) || continue
+        live_reads = relation_ref.(agenda.samples[frontier_prior(agenda,agenda.previous,width)])
+        history_reads = relation_ref.(agenda.samples[frontier_prior(agenda,row.preceding,width)])
+        reads = unique([live_reads;history_reads;relation_refs(row)])
+        obligation = (;context,current=last(live),comparison=last(witnessed),
+            action=concrete_action(action),source=relation_ref(row),answer="unknown",
+            observed_response=frontier_outcome(row),scope="observed_history_matrix")
+        return (;action=concrete_action(action),intent=:test_history_response,tests=NamedTuple[],reads,obligation)
+    end
+    return nothing
+end
+
 function frontier_observe!(search,agenda)
     index = length(agenda.samples)
     row = agenda.samples[index]
@@ -91,7 +137,8 @@ function frontier_observe!(search,agenda)
     end
     histories = [relation_ref.(agenda.samples[frontier_prior(agenda,agenda.samples[i].preceding,width)])
         for i in (contrasted,index)]
-    return (;context,before_width=old,width,history_reads=histories,
+    matrix = frontier_response_matrix(search,agenda,context)
+    return (;context,before_width=old,width,history_reads=histories,response_matrix=matrix,
         evidence=relation_ref.(agenda.samples[[contrasted,index]]),
         status=isnothing(usable) ? "unresolved" : "refined")
 end

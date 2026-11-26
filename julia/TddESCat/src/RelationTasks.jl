@@ -558,6 +558,10 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
     isnothing(progress) || return progress
     preparation = outcome_preparation(agenda,obs,decision,context)
     isnothing(preparation) || return preparation
+    if isnothing(history_model) && !isnothing(frontier)
+        contrast = frontier_history_probe(frontier,agenda,obs,context)
+        isnothing(contrast) || return contrast
+    end
     if !isnothing(prior) && (prior.unchanged || !isnothing(history_model))
         first_action = action_key(prior.effects.action)
         rows = filter(decision.ranked) do row
