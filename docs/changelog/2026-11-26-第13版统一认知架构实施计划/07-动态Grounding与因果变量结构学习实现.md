@@ -51,15 +51,19 @@ on_confirmed_event(before_snapshot, event):
     views = region_view(all frames); delta = event_delta(views)
     changes = derive_relations(delta, exact spatial facts, public fields)
     seed obligations for every observed change and every action role possibility
-    retrieve candidates from structural and temporal indices + live search frontier
-    align candidate roles jointly with typed variable joins
-    evaluate proposed effects against ALL relevant event frames / public fields
-    record supported/refuted/unknown interpretations separately
-    residual = observed facts not accounted for by a consistent interpretation
-    for obligation in residual or conflicting role/guard:
-        propose refinements, combinations, state distinctions; preserve frontier
-    update all affected task producers and conditional models transactionally
-    commit snapshot; recompute actual action candidates using that snapshot
+    verify frozen predictions against all referenced event frames / public fields
+    record supported/refuted/unknown evidence, residuals and unresolved obligations
+    revoke affected dependencies or mark their queries unavailable
+    commit the exact event snapshot under 05 §5.2
+    enqueue frozen background jobs for role alignment, candidate extensions and history checks
+    recompute actual action candidates using the committed snapshot
+
+run_frozen_relation_job(snapshot, obligations, frontier):
+    retrieve structural and temporal candidates, preserving unfinished frontier
+    align roles jointly with typed variable joins
+    validate proposals against all relevant frames, public facts and histories
+    return independently complete proposals with evidence and read ranges
+    # Publication goes through the parent, scope and late-evidence checks in 05 §5.2.
 ```
 
 “解释覆盖”用联合候选的实际输出与整个事件比对，而非将互不兼容的局部解释直接 union。当两个候选分别解释不同变化但要求同一个对象同时在两个互斥位置时，联合约束应拒绝；在并行、合并、拆分确有证据的条件下可允许多作用。对完全相同的事实及映射，使用规范定义共享计算，不合并独立事件。

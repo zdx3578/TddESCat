@@ -123,6 +123,28 @@ def capture(
 def observed_steps(public):
     trace = receipts(public)
     for event, reply in trace.values():
+        recorded = read(public / "grounding" / (event["event_id"] + ".json"))
+        assert (recorded["event"], recorded["before"]) == (
+            event["event_id"],
+            event["before_ref"],
+        )
+        before = trace.get(event["before_ref"])
+        previous = None if before is None else before[1]["frame"][-1]
+        for index, (raw, regions) in enumerate(
+            zip(reply["frame"], recorded["frames"], strict=True)
+        ):
+            shape = [len(raw), len(raw[0])]
+            assert regions["frame"] == index and regions["shape"] == shape
+            assert 1 <= regions["regions"] <= shape[0] * shape[1]
+            changed = None
+            if previous is not None and [len(previous), len(previous[0])] == shape:
+                changed = sum(
+                    left != right
+                    for left_row, right_row in zip(previous, raw, strict=True)
+                    for left, right in zip(left_row, right_row, strict=True)
+                )
+            assert regions["changed_pixels"] == changed
+            previous = raw
         if not event["action"]["id"]:
             continue
         command = event["command_ref"] + ".json"

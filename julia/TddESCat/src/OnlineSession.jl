@@ -27,10 +27,22 @@ mutable struct OnlineKnowledge
     policies::Vector{Any}
     observations::Dict{String,PublicEffects}
     projections::ProjectionMemory
+    receipt::Union{Nothing,ReceiptRegions}
 end
 
 OnlineKnowledge() = OnlineKnowledge(JointMechanism[],ActiveMechanism[],PublicTrial[],0,Dict{String,Int}(),
-    Any[],Dict(),Any[],Dict{String,PublicEffects}(),ProjectionMemory())
+    Any[],Dict(),Any[],Dict{String,PublicEffects}(),ProjectionMemory(),nothing)
+
+function publish_receipt_regions!(knowledge,store,entry;previous=nothing)
+    view = receipt_regions(entry;previous)
+    frames = [(frame=index-1,shape=size(regions.owner),regions=length(regions.groups),
+        shared_boundaries=length(regions.boundaries),changed_pixels=view.differences[index])
+        for (index,regions) in enumerate(view.frames)]
+    atomic_json(store_path(store,"grounding",view.event * ".json"),
+        (;schema_version=1,event=view.event,before=entry.event["before_ref"],frames))
+    knowledge.receipt = view
+    return view
+end
 
 function prior_trials(config)
     directory = isnothing(config.learning) ? nothing : get(config.learning,"prior_evidence",nothing)
@@ -238,9 +250,10 @@ function candidate_evaluation(active, before, groups, enclosure, action, history
         truth == disproven ? "learned_condition_false" : "learned_condition_unknown")
 end
 
-function public_action_candidates(observation, max_action_coordinates;object_probes=false)
+function public_action_candidates(observation, max_action_coordinates;object_probes=false,regions=nothing)
     frame = last(observation.frames)
-    groups = public_components(frame)
+    groups = isnothing(regions) ? public_components(frame) :
+        sort(last(regions.frames).groups; by=shape->(length(shape),anchor(shape)))
     enclosure = enclosure_pairs(groups)
     actions = Dict{String,Int}[]
     click_count = 0
@@ -298,8 +311,8 @@ end
 
 function ranked_public_actions(knowledge, observation, history, attempts, max_action_coordinates;
         composing=false, required_action=nothing, programs_pending=false, program_cursor=nothing,meters=(),
-        object_probes=false)
-    values = public_action_candidates(observation,max_action_coordinates;object_probes)
+        object_probes=false, regions=nothing)
+    values = public_action_candidates(observation,max_action_coordinates;object_probes,regions)
     transients = receipt_transient_colors(observation.frames)
     if programs_pending
         for action in program_click_actions(knowledge,program_cursor,values.groups,observation.available_actions)
@@ -672,8 +685,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     frozen_version = frozen ? frozen_knowledge_digest(knowledge) : nothing
     frozen_publication = frozen ? read_published_stitch(store_path(rec.store,"publication")) : nothing
     register_evidence_obligation!(rec.store,entry;frozen)
+    relation_tasks && publish_receipt_regions!(knowledge,rec.store,entry)
     ready_at = time_ns()
-    while rec.sent_count < rec.limit && !rec.frozen
+    while public_budget_available(rec) && !rec.frozen
         if !isnothing(inflight) && isfile(joinpath(inflight.job,"worker-status.json"))
             status = read_json(joinpath(inflight.job,"worker-status.json"))
             collect_online_job!(knowledge,config,rec,inflight,status,publications,program_jobs,completed_cohorts)
@@ -694,8 +708,10 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             reset = reset!(rec,obs.game_id)
             reset["completion"] == "confirmed" || break
             event = read_json(store_path(rec.store,"events",rec.before_ref * ".json"))
-            entry = (;event,observation=rec.observation)
-            register_evidence_obligation!(rec.store,entry;frozen)
+            reset_entry = (;event,observation=rec.observation)
+            register_evidence_obligation!(rec.store,reset_entry;frozen)
+            relation_tasks && publish_receipt_regions!(knowledge,rec.store,reset_entry;previous=entry)
+            entry = reset_entry
             sequence_enabled && push!(sequence_events,entry)
             continuation = nothing
             goal_pending = nothing
@@ -734,7 +750,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         programs_pending = !isempty(knowledge.programs)
         object_probes = !isnothing(visual) && !composing && 6 in obs.available_actions
         decision = ranked_public_actions(knowledge,obs,history,attempts,coordinates;
-            composing,programs_pending,program_cursor,meters,object_probes)
+            composing,programs_pending,program_cursor,meters,object_probes,regions=knowledge.receipt)
         click_scene = object_probes ? intervention_scene(last(obs.frames),decision.groups) : NamedTuple[]
         isempty(decision.ranked) && break
         item = first(decision.ranked)
@@ -792,7 +808,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         program_forecast = nothing
         if programs_pending
             constrained = composing || !isnothing(spatial)
-            primitive_limit = isnothing(goal_cursor) ? rec.limit-rec.sent_count :
+            remaining = isnothing(rec.limit) ? typemax(Int) : rec.limit - rec.sent_count
+            primitive_limit = isnothing(goal_cursor) ? remaining :
                 length(projected_trace(goal_cursor))
             contact_limit = if isnothing(contact_domain) || isnothing(spatial_choice) ||
                     isnothing(visual.continuation) || spatial_choice.reason != "learned_visual_contact"
@@ -825,7 +842,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 state = content_hash(JSON.json([obs.levels_completed,last(obs.frames),obs.available_actions]))
                 considered = Set{String}()
                 for program in programs_for_relations(knowledge,needs)
-                    constrained || length(program.steps) <= rec.limit-rec.sent_count || continue
+                    constrained || length(program.steps) <= remaining || continue
                     any(step->program_step_key(step) in refuted_steps,program.steps) && continue
                     if contact_limit <= 1 && !isnothing(spatial_choice) &&
                             first(program.steps)["action"]["id"] != spatial_choice.id
@@ -907,7 +924,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             choice = findfirst(row->row.action == selected.action,decision.ranked)
             if isnothing(choice)
                 decision = ranked_public_actions(knowledge,obs,history,attempts,coordinates;
-                    composing,required_action=selected.action,meters,object_probes)
+                    composing,required_action=selected.action,meters,object_probes,regions=knowledge.receipt)
                 choice = findfirst(row->row.action == selected.action,decision.ranked)
             end
             item = merge(decision.ranked[choice],(reason=selected.reason,))
@@ -1087,7 +1104,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         register_evidence_obligation!(rec.store,resulting;frozen)
         isnothing(experiment) || record_experiment_service!(experiments,rec.store,experiment,event)
         sample = motion_example(entry,resulting;history)
-        effects = observed_effects(entry,resulting;meters=measurement)
+        before_regions = knowledge.receipt
+        after_regions = relation_tasks ? publish_receipt_regions!(knowledge,rec.store,resulting;previous=entry) : nothing
+        effects = observed_effects(entry,resulting;meters=measurement,before_regions,after_regions)
         intervention_feedback = observe_intervention!(intervention_memory,intervention,entry,resulting,effects;
             learn=!frozen,ordinal=count+1)
         knowledge.observations[effects.event_id] = effects

@@ -77,7 +77,7 @@ function count_visibility(before, after, disappearing, appearing, changed)
     return sort!(unique!(witnesses))
 end
 
-function observed_public_delta(previous, current)
+function observed_public_delta(previous, current; regions=nothing)
     a, b = previous.observation, current.observation
     delta = Dict{String,Any}()
     for (name,left,right) in (("state",a.state,b.state),
@@ -89,9 +89,13 @@ function observed_public_delta(previous, current)
         earlier = last(a.frames)
         trace = []
         for (index,frame) in enumerate(b.frames)
-            change = frame_difference(earlier,frame)
-            push!(trace,Dict("response_frame"=>index-1,"changed_pixels"=>
-                change isa AbstractVector ? length(change) : nothing))
+            changed_pixels = if isnothing(regions)
+                change = frame_difference(earlier,frame)
+                change isa AbstractVector ? length(change) : nothing
+            else
+                regions.differences[index]
+            end
+            push!(trace,Dict("response_frame"=>index-1,"changed_pixels"=>changed_pixels))
             earlier = frame
         end
         delta["response_trace"] = trace
@@ -114,7 +118,7 @@ function possible_scene_transform(effects)
     return false
 end
 
-function observed_effects(previous, current; meters=MeterContext())
+function observed_effects(previous, current; meters=MeterContext(), before_regions=nothing, after_regions=nothing)
     sample = motion_example(previous, current)
     action = current.observation.action
     frame_before = length(previous.observation.frames) - 1
@@ -122,14 +126,14 @@ function observed_effects(previous, current; meters=MeterContext())
     before, after = sample.before, sample.after
     effects = LocalEffect[]
     alternatives = String[]
-    public_delta = observed_public_delta(previous,current)
+    public_delta = observed_public_delta(previous,current;regions=after_regions)
     if size(before) != size(after)
         return PublicEffects(sample.event_id, sample.before_id, action, frame_before, frame_after,
             effects, Pixel[], ["different_frame_domains"], public_delta, false, 0,MeterBinding[],String[])
     end
     changed = Set((pixel.x, pixel.y) for pixel in frame_difference(before, after))
-    before_groups = color_components(before).groups
-    after_groups = color_components(after).groups
+    before_groups = isnothing(before_regions) ? color_components(before).groups : copy(last(before_regions.frames).groups)
+    after_groups = isnothing(after_regions) ? color_components(after).groups : copy(last(after_regions.frames).groups)
     candidate_roles = length(before_groups) + length(after_groups)
     meter_context!(meters,previous.observation)
     readings = NamedTuple[]

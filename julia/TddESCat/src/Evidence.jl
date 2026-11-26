@@ -3,7 +3,7 @@ mutable struct Recorder
     client::PublicClient
     next_sequence::Int
     sent_count::Int
-    limit::Int
+    limit::Union{Nothing,Int}
     card_id::Union{Nothing,String}
     observation::Union{Nothing,PublicObservation}
     before_ref::Union{Nothing,String}
@@ -14,9 +14,13 @@ end
 
 function Recorder(store::RunStore, config::RunConfig)
     isempty(records(store, "commands")) || throw(ArgumentError("Existing run requires offline recovery"))
-    return Recorder(store, open_client(config), 1, 0, config.execution["max_public_commands"],
+    budget = config.execution["max_public_commands"]
+    limit = budget == "unlimited" ? nothing : Int(budget)
+    return Recorder(store, open_client(config), 1, 0, limit,
         nothing, nothing, nothing, false, ReentrantLock(), Dict{String,Int}())
 end
+
+public_budget_available(rec::Recorder) = isnothing(rec.limit) || rec.sent_count < rec.limit
 
 function before_session!(rec, confirmed)
     rec.next_sequence == 1 && isempty(rec.sequence_by_event) || error("Earlier evidence must precede this session")
@@ -214,7 +218,7 @@ function reset!(rec::Recorder, game_id; hook=(_...) -> nothing)
             "card_required"
         elseif !valid_id(game_id) || (!isnothing(obs) && game_id != obs.game_id)
             "invalid_game_id"
-        elseif rec.sent_count >= rec.limit
+        elseif !public_budget_available(rec)
             "action_budget"
         else
             nothing
@@ -248,7 +252,7 @@ function submit_action!(rec::Recorder, id; x=nothing, y=nothing, prediction=noth
             "action_unavailable"
         elseif id == 6 ? !(coord(x) && coord(y)) : !(isnothing(x) && isnothing(y))
             "invalid_coordinates"
-        elseif rec.sent_count >= rec.limit
+        elseif !public_budget_available(rec)
             "action_budget"
         else
             nothing

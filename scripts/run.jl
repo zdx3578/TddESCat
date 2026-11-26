@@ -70,7 +70,7 @@ end
 function explore!(rec)
     attempts = zeros(Int, 7)
     click_cursor = 0
-    while rec.sent_count < rec.limit && !rec.frozen
+    while TddESCat.public_budget_available(rec) && !rec.frozen
         obs = rec.observation
         available = obs.available_actions
         if isempty(available) || obs.state in ("WIN", "GAME_OVER")

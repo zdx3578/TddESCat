@@ -276,6 +276,26 @@ def evaluate_one(task_dir):
     return result
 
 
+def evaluate_isolated(directory, game, runtime):
+    command = private_network(
+        [
+            runtime["python"]["executable"],
+            "-m",
+            "scripts.evaluate_public24",
+            "--one",
+            str(directory),
+        ],
+        (directory,),
+    )
+    with (directory / "grade/process.log").open("wb") as log:
+        process = subprocess.run(
+            command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, check=False
+        )
+    report = directory / "public/generalization.json"
+    row = load(report) if report.is_file() else {"game_id": game, "verified": False}
+    return {**row, "worker_exit": process.returncode}
+
+
 def comparison_profile(profile):
     normalized = dict(profile)
     normalized["environment"] = {
@@ -442,29 +462,12 @@ def campaign(args):
             f"offline_bundle = {json.dumps(str(suite['offline_bundle']))}\n"
         )
 
-    def evaluate(game):
-        d = out / game
-        cmd = private_network(
-            [
-                runtime["python"]["executable"],
-                "-m",
-                "scripts.evaluate_public24",
-                "--one",
-                str(d),
-            ],
-            (d,),
-        )
-        with (d / "grade/process.log").open("wb") as log:
-            proc = subprocess.run(
-                cmd, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, check=False
-            )
-        result = d / "public/generalization.json"
-        row = load(result) if result.is_file() else {"game_id": game, "verified": False}
-        return {**row, "worker_exit": proc.returncode}
-
     finished = {}
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        jobs = {pool.submit(evaluate, game): game for game in workload}
+        jobs = {
+            pool.submit(evaluate_isolated, out / game, game, runtime): game
+            for game in workload
+        }
         for job in as_completed(jobs):
             game = jobs[job]
             try:

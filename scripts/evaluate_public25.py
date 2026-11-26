@@ -1,0 +1,159 @@
+"""Evaluate the cold controller on all 25 versioned public games until completion."""
+
+import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from hashlib import file_digest
+import json
+from pathlib import Path
+import re
+import subprocess
+import tomllib
+
+from tddesc_tools.public_run import atomic_json
+from tddesc_tools.run import read_task, runtime_paths, worktree_digest
+from tddesc_tools.stitch import build_identity
+
+from scripts.evaluate_public24 import ROOT, evaluate_isolated
+
+
+def prepare_cases(output, games, template, suite, bundle):
+    settings = template.read_text(encoding="utf-8")
+    data = tomllib.loads(settings)
+    assert data["execution"]["max_public_commands"] == "unlimited"
+    assert data["planning"]["autonomous"] is True
+    assert data["environment"]["game_selection"] == "explicit"
+    assert data["environment"]["competition_mode"] is False
+    assert "prior_evidence" not in data["learning"]
+    engine_path = (template.parent / data["learning"]["engine"]).resolve()
+    policy_path = (template.parent / data["learning"]["policy_file"]).resolve()
+
+    settings = re.sub(
+        r"(?m)^engine = .*$", f"engine = {json.dumps(str(engine_path))}", settings
+    )
+    settings = re.sub(
+        r"(?m)^policy_file = .*$",
+        f"policy_file = {json.dumps(str(policy_path))}",
+        settings,
+    )
+    for game in games:
+        case = output / game
+        for folder in ("public", "grade"):
+            (case / folder).mkdir(parents=True)
+        (case / "agent.toml").write_text(
+            re.sub(r"(?m)^game_id = .*$", f'game_id = "{game}"', settings),
+            encoding="utf-8",
+        )
+        (case / "task.toml").write_text(
+            'schema_version = 1\nkind = "autonomous_offline"\n'
+            'output_name = "v13-public25"\nagent_config = "agent.toml"\n'
+            f"environment_config = {json.dumps(str(suite['environment_config']))}\n"
+            f"offline_bundle = {json.dumps(str(bundle))}\n",
+            encoding="utf-8",
+        )
+    return engine_path, policy_path
+
+
+def game_verdict(row):
+    verified = row.get("verified") is True and row.get("worker_exit") == 0
+    if verified and row.get("state") == "WIN" and row.get("scorecard_win") is True:
+        return "WIN"
+    if verified:
+        return "NOT_WON"
+    return "UNVERIFIED" if row.get("started") else "BLOCKED"
+
+
+def campaign_report(games, finished):
+    rows = [
+        finished.get(game, {"game_id": game, "verdict": "PENDING"}) for game in games
+    ]
+    won = sum(row["verdict"] == "WIN" for row in rows)
+    return {
+        "status": "PASS"
+        if won == len(games)
+        else ("FAIL" if len(finished) == len(games) else "IN_PROGRESS"),
+        "required_wins": len(games),
+        "wins": won,
+        "finished": len(finished),
+        "peak_levels": sum(
+            row.get("peak_levels", 0) for row in rows if row.get("verified")
+        ),
+        "games": rows,
+    }
+
+
+def sha256_file(path):
+    with path.open("rb") as stream:
+        return file_digest(stream, "sha256").hexdigest()
+
+
+def campaign(args):
+    runtime = runtime_paths(ROOT)
+    catalog_config = ROOT / "config/acceptance/arc_public25.toml"
+    suite = read_task(catalog_config)
+    games = tuple(suite["game_ids"])
+    bundle = (args.bundle or suite["offline_bundle"]).resolve()
+    catalog = bundle / "offline_public_games_manifest.json"
+    if not catalog.is_file() or not (bundle / "environment_files").is_dir():
+        raise ValueError(f"Official offline bundle missing: {bundle}")
+    if not 1 <= args.workers <= len(games):
+        raise ValueError("workers must be between 1 and 25")
+
+    output = args.output.resolve()
+    template = ROOT / "config/v13_public25.toml"
+    output.mkdir(parents=True)
+    engine, policy = prepare_cases(output, games, template, suite, bundle)
+    commit = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
+    ).strip()
+    atomic_json(
+        output / "manifest.json",
+        {
+            "schema_version": 1,
+            "commit": commit,
+            "worktree_sha256": worktree_digest(ROOT),
+            "solver_source_sha256": worktree_digest(ROOT, sources_only=True),
+            "engine": build_identity(ROOT, engine),
+            "policy_sha256": sha256_file(policy),
+            "profile_sha256": sha256_file(template),
+            "catalog_sha256": sha256_file(catalog),
+            "game_ids": games,
+            "command_budget": "unlimited",
+            "workers": args.workers,
+        },
+    )
+    report_file = output / "public25.json"
+    finished = {}
+    atomic_json(report_file, campaign_report(games, finished))
+    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+        tasks = {
+            pool.submit(evaluate_isolated, output / game, game, runtime): game
+            for game in games
+        }
+        for task in as_completed(tasks):
+            game = tasks[task]
+            try:
+                row = task.result()
+            except Exception as error:
+                row = {"game_id": game, "error": str(error)}
+            row["verdict"] = game_verdict(row)
+            finished[game] = row
+            report = campaign_report(games, finished)
+            atomic_json(report_file, report)
+            print(
+                f"{game} {row['verdict']} "
+                f"({report['wins']}/{len(games)} WIN, {report['finished']} finished)",
+                flush=True,
+            )
+    return 0 if report["status"] == "PASS" else 1
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--bundle", type=Path)
+    parser.add_argument("--workers", type=int, default=25)
+    return campaign(parser.parse_args())
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

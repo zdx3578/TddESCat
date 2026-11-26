@@ -127,7 +127,7 @@ function control(cfg, run, request)
         history = [0]
         attempts = Dict{Int,Int}()
         reports = []
-        while rec.sent_count < rec.limit
+        while TC.public_budget_available(rec)
             outcome = TC.motion_step!(control, rec, entry, history, attempts)
             isnothing(outcome.next) && break
             push!(reports, outcome.result)

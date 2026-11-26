@@ -65,6 +65,7 @@ PROTOCOL_PLANS = (
     ("P06-reset", "drop_reset", [*STANDARD, RESET, action(1)]),
     ("P08-domain", "domain", [*STANDARD, action(1), action(1), action(2)]),
     ("P08-missing", "missing_domain", [*STANDARD, action(1), action(2)]),
+    ("P08-unlimited", "normal", [*STANDARD, *[action(1) for _ in range(41)], CLOSE]),
 )
 
 
@@ -204,16 +205,21 @@ def checks(results):
     )
     assert 1 not in domain.blob(domain.events[1])["available_actions"]
     verify_unknown(results["P08-missing"], "invalid_available_actions")
-    yield "P08", ["P08-domain", "P08-missing"]
+    unlimited = results["P08-unlimited"]
+    assert len(unlimited.events) == 42
+    assert len(unlimited.sent("/api/cmd/ACTION1")) == 41
+    assert all(command["completion"] == "confirmed" for command in unlimited.commands)
+    yield "P08", ["P08-domain", "P08-missing", "P08-unlimited"]
 
 
 def configure_plan(run_dir, name, url, ops, template):
     public = run_dir / "public/protocol" / name
     public.mkdir(parents=True)
     config = public / "agent.toml"
+    budget = '"unlimited"' if name == "P08-unlimited" else "40"
     config.write_text(
         template.replace("http://127.0.0.1:43191", url)
-        .replace("max_public_commands = 2", "max_public_commands = 40")
+        .replace("max_public_commands = 2", f"max_public_commands = {budget}")
         .replace("request_timeout_seconds = 5.0", "request_timeout_seconds = 1.3"),
         encoding="utf-8",
     )

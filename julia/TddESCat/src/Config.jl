@@ -78,7 +78,8 @@ function load_run_config(path::AbstractString)
     exec = require_keys(data["execution"], ("max_public_commands", "one_inflight_per_guid",
         "post_retry", "redirect", "memory_enforcement");
         optional=("solver_memory_bytes", "learning_memory_bytes", "frozen_evaluation"), at="execution")
-    check_values(exec, ("max_public_commands",), positive_integer, "execution")
+    check_values(exec, ("max_public_commands",),
+        value -> value == "unlimited" || positive_integer(value), "execution")
     exec["one_inflight_per_guid"] === true && exec["post_retry"] === false &&
         exec["redirect"] === false || throw(ArgumentError("Invalid retry or inflight policy"))
     isolation = exec["memory_enforcement"]

@@ -29,6 +29,59 @@ function color_components(frame::AbstractMatrix{UInt8}, connectivity::Int=4)
     return (groups=groups, owner=owner)
 end
 
+struct FrameRegions
+    groups::Vector{Vector{ColorCell}}
+    owner::Matrix{Int}
+    boundaries::Dict{Tuple{Int,Int},Int}
+    exterior::Vector{Int}
+end
+
+function frame_regions(frame)
+    parts = color_components(frame)
+    borders = Dict{Tuple{Int,Int},Int}()
+    exterior = zeros(Int,length(parts.groups))
+    height,width = size(frame)
+    for y in axes(frame,1), x in axes(frame,2)
+        region = parts.owner[y,x]
+        exterior[region] += (x == 1) + (x == width) + (y == 1) + (y == height)
+        for (dx,dy) in ((1,0),(0,1))
+            checkbounds(Bool,parts.owner,y+dy,x+dx) || continue
+            adjacent = parts.owner[y+dy,x+dx]
+            region == adjacent && continue
+            key = minmax(region,adjacent)
+            borders[key] = get(borders,key,0)+1
+        end
+    end
+    return FrameRegions(parts.groups,parts.owner,borders,exterior)
+end
+
+struct ReceiptRegions
+    event::String
+    frames::Vector{FrameRegions}
+    differences::Vector{Union{Nothing,Int}}
+end
+
+function receipt_regions(entry; previous=nothing)
+    entry.event["completion"] == "confirmed" || error("Only confirmed receipts can publish regions")
+    frames = entry.observation.frames
+    entry.event["frame_count"] == length(frames) || error("Region receipt lost frames")
+    regions = FrameRegions[]
+    differences = Union{Nothing,Int}[]
+    earlier = isnothing(previous) ? nothing : last(previous.observation.frames)
+    if !isnothing(previous)
+        entry.event["before_ref"] == previous.event["event_id"] || error("Region receipt predecessor mismatch")
+    end
+    for frame in frames
+        change = isnothing(earlier) || size(earlier) != size(frame) ? nothing :
+            count(pair -> first(pair) != last(pair),zip(earlier,frame))
+        push!(differences,change)
+        region = change == 0 && !isempty(regions) ? last(regions) : frame_regions(frame)
+        push!(regions,region)
+        earlier = frame
+    end
+    return ReceiptRegions(entry.event["event_id"],regions,differences)
+end
+
 function support_candidates(frame; max_support_pixels=96)
     positive_integer(max_support_pixels) || throw(ArgumentError("Invalid support limit"))
     parts = color_components(frame)
