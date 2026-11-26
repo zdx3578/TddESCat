@@ -361,9 +361,10 @@ function trajectory_reads(corpus,agenda)
         [episode.members; [outcome.index for outcome in get(episode,:public_outcomes,NamedTuple[])]]])
     return [begin
         row = agenda.samples[index]
+        scope = history_scope(agenda,row.context)
         (;event=relation_ref(row),context=row.context,action=action_key(row.effects.action),
             previous=previous_key(agenda,row.preceding),after=row.next_context,
-            state=row.state,advanced=row.advanced,history_width=get(agenda.history_widths,row.context,1),
+            state=row.state,advanced=row.advanced,history_width=scope.width,history_receipts=scope.receipts,
             history=relation_history_key(agenda,row.context,row.preceding))
     end for index in indices]
 end
@@ -373,8 +374,9 @@ function trajectory_counterexamples(reads,cutoff,agenda)
     for read in reads, index in get(agenda.visits,(read.context,read.action),Int[])
         index > cutoff || continue
         row = agenda.samples[index]
+        scope = RelationHistoryScope(get(read,:history_width,1),get(read,:history_receipts,false))
         same_history = hasproperty(read,:history) ?
-            relation_history_key(agenda,row.context,row.preceding;width=read.history_width) == read.history :
+            relation_history_key(agenda,row.context,row.preceding;scope) == read.history :
             previous_key(agenda,row.preceding) == read.previous
         same_history || continue
         (row.next_context,row.state,row.advanced) == (read.after,read.state,read.advanced) && continue

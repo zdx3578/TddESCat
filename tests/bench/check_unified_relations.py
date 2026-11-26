@@ -36,7 +36,7 @@ class Fixture(ARCBaseGame):
         actions = {"delayed": [5, 7], "remote": [5, 6], "directions": [6],
             "restart": [6], "progress-restart": [6], "restart-choices": [6],
             "advancement-transfer": [6], "history-refinement": [1, 4],
-            "history-continuation": [1, 4], "history-matrix": [1, 4],
+            "history-continuation": [1, 4], "history-matrix": [1, 4], "history-receipt": [1, 4],
             "outcome-preparation": [5, 7], "outcome-chain": [5, 7],
             "bridge-partition": [5], "frontier-dispatch": [1, 2], "frontier-route": [2],
             "sequence-experiment": [1, 2, 3]}
@@ -60,7 +60,7 @@ class Fixture(ARCBaseGame):
         self.previous = None
         self.probed = False
         self.hits = 0
-        if MODE in ("history-refinement", "history-continuation", "history-matrix"):
+        if MODE in ("history-refinement", "history-continuation", "history-matrix", "history-receipt"):
             self._available_actions = [1, 4]
         if MODE in ("outcome-preparation", "outcome-chain"):
             self._available_actions = [5, 7]
@@ -118,11 +118,15 @@ class Fixture(ARCBaseGame):
                 if self.level_index == 1:
                     pixels[10, 38] = 0
                 self.next_level()
-        elif MODE == "history-matrix":
+        elif MODE in ("history-matrix", "history-receipt"):
             if action in (1, 4):
                 self.previous = action
                 self._available_actions = [5]
             elif action == 5:
+                if MODE == "history-receipt" and self.hits == 0:
+                    self.hits += 1
+                    pixels[10:13, 8:11] = self.previous
+                    return
                 pixels[10:13, 8:11] = 3
                 self._available_actions = [2, 7]
             elif action == 2 and self.previous == 4:
@@ -227,6 +231,7 @@ def capture(
         "frontier-dispatch",
         "frontier-route",
         "history-matrix",
+        "history-receipt",
         "sequence-experiment",
     )
     public = run / "public"
@@ -262,12 +267,16 @@ def capture(
                 f'solver_python = "{root / "python/compute/.venv/bin/python"}"\n'
                 f'circuit_python = "{root / "python/compute/.venv/bin/python"}"\n'
             )
-        agent.write_text(agent.read_text() + additions)
+        settings = agent.read_text()
+        if mode == "history-receipt":
+            settings = settings.replace("history_lengths = [0, 1, 2, 4]", "history_lengths = [0, 1]")
+        agent.write_text(settings + additions)
         direct_tests = {
             "history-dispatch": "history_public.jl",
             "frontier-dispatch": "frontier_dispatch.jl",
             "frontier-route": "frontier_route_public.jl",
             "history-matrix": "history_matrix_public.jl",
+            "history-receipt": "history_matrix_public.jl",
             "sequence-experiment": "sequence_experiment_public.jl",
         }
         if mode in direct_tests:
@@ -368,7 +377,7 @@ def verify(mode, public):
         assert service["prefix_obligation"] == record["proposal"]["obligation"]
         assert service["cursor"] == record["proposal"]["cursor"] == 1
         return [event["event_id"]]
-    if mode == "history-matrix":
+    if mode in ("history-matrix", "history-receipt"):
         record = read(public / "history-matrix.json")
         task = record["task"]
         trace = receipts(public)
@@ -378,6 +387,16 @@ def verify(mode, public):
         assert scope["current"] != scope["comparison"] and task["action"] == event["action"] == {"id": 2}
         assert response["state"] == "WIN" and trace[scope["source"]][1]["state"] == "NOT_FINISHED"
         assert all(trace[ref][0]["sequence"] < event["sequence"] for ref in task["reads"])
+        if mode == "history-receipt":
+            source = trace[scope["source"]][0]
+            live, live_raw = trace[event["before_ref"]]
+            prior, prior_raw = trace[source["before_ref"]]
+            assert live["action"] == prior["action"] == {"id": 5}
+            assert live_raw["frame"][-1] == prior_raw["frame"][-1]
+            assert len(live_raw["frame"]) == len(prior_raw["frame"]) == 2
+            assert live_raw["frame"][0] != prior_raw["frame"][0]
+            assert {live["event_id"], prior["event_id"]}.issubset(task["reads"])
+            assert record["matrix"]["receipts"] and record["matrix"]["width"] == 1
         for name, status in (("matrix", "unknown"), ("revised", "observed")):
             row = next(row for row in record[name]["rows"] if row["history"] == scope["current"])
             cell = next((cell for cell in row["cells"] if cell["action"][0] == 2), None)
@@ -681,6 +700,7 @@ def main(config, run):
         "frontier-dispatch",
         "frontier-route",
         "history-matrix",
+        "history-receipt",
         "sequence-experiment",
     )
     with ThreadPoolExecutor(max_workers=len(modes)) as pool:
@@ -721,6 +741,7 @@ if __name__ == "__main__":
                 "frontier-dispatch",
                 "frontier-route",
                 "history-matrix",
+                "history-receipt",
                 "sequence-experiment",
             )
             else 9,

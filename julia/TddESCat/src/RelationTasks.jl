@@ -5,6 +5,7 @@ struct RelationSample
     attempt::Int
     context::String
     next_context::String
+    receipt::String
     preceding::Int
     state::String
     advanced::Bool
@@ -40,7 +41,7 @@ mutable struct RelationAgenda
     advancement_roles::Dict{Int,Tuple}
     preparation_roles::Dict{Int,Tuple}
     outcomes::Vector{NamedTuple}
-    history_widths::Dict{String,Int}
+    history_scopes::Dict{String,RelationHistoryScope}
     preparations::Set{Tuple{Int,String,Int}}
     attempt::Int
     start::Int
@@ -55,6 +56,11 @@ RelationAgenda() = RelationAgenda(RelationSample[],Dict(),Dict(),Dict(),Dict(),D
 relation_context(obs) = semantic_hash([obs.levels_completed,size(last(obs.frames)),
     content_hash(vec(last(obs.frames))),sort(obs.available_actions)])
 
+function relation_receipt(obs,context)
+    frames = [(size(frame),content_hash(vec(frame))) for frame in @view(obs.frames[1:end-1])]
+    return semantic_hash([context,frames])
+end
+
 relation_ref(row::RelationSample) = row.effects.event_id
 relation_refs(row::RelationSample) = [row.effects.before_id,relation_ref(row)]
 previous_key(agenda,index) = index == 0 ? (0,-1,-1) : action_key(agenda.samples[index].effects.action)
@@ -62,7 +68,7 @@ click_profile(support,point) = semantic_hash([6,shape_template(support),Tuple(re
 primitive_profile(id) = string(id)
 
 function observed_failure(agenda,context,action,previous)
-    get(agenda.history_widths,context,1) == 1 &&
+    !refined_history(history_scope(agenda,context)) &&
         return haskey(agenda.failures,(context,previous_key(agenda,previous),action))
     current = relation_history_key(agenda,context,previous)
     return any(get(agenda.visits,(context,action),Int[])) do index
@@ -193,8 +199,9 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
     dependency = !isnothing(prior) && !isnothing(proposal) &&
         proposal.intent in (:distinguish_changed_context,:test_delayed_effect,:test_history_response,:complete_preparation) ?
         relation_ref(prior) : nothing
+    next_context = relation_context(next)
     sample = RelationSample(effects,prev.levels_completed,agenda.attempt,relation_context(prev),
-        relation_context(next),agenda.previous,next.state,advanced,nothing_visible,prev.available_actions,
+        next_context,relation_receipt(next,next_context),agenda.previous,next.state,advanced,nothing_visible,prev.available_actions,
         binding,dependency,contact,site_changes)
     push!(agenda.samples,sample)
     index = length(agenda.samples)
@@ -397,7 +404,7 @@ function verified_instance(agenda,producer,context,action,previous,level)
     end
     clashes && return :counterexample
     any(exact,producer.support) && return :bound
-    get(agenda.history_widths,context,1) > 1 && return :unverified
+    refined_history(history_scope(agenda,context)) && return :unverified
     # Both local effects and disagreement remain in the same index.
     # Evidence for visual transfer excludes terminal outcomes.
     witnesses = [row.binding for index in producer.support for row in (agenda.samples[index],)
@@ -456,9 +463,9 @@ function prepare_relation_tests(agenda,context,obs,groups,action;meters=(),condi
         for condition in conditions
             append!(reads,condition.reads)
         end
-        width = get(agenda.history_widths,context,1)
-        if width > 1
-            append!(reads,relation_ref.(agenda.samples[frontier_prior(agenda,previous,width)]))
+        scope_history = history_scope(agenda,context)
+        if refined_history(scope_history)
+            append!(reads,relation_ref.(agenda.samples[frontier_prior(agenda,previous,scope_history.width)]))
         end
         push!(tests,(;key,rule,scope,expected,eval.fragments,reads=unique!(reads),conditions,relations=producer.relations))
     end
@@ -558,7 +565,7 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
     isnothing(progress) || return progress
     preparation = outcome_preparation(agenda,obs,decision,context)
     isnothing(preparation) || return preparation
-    if isnothing(history_model) && !isnothing(frontier)
+    if !isnothing(frontier) && (isnothing(history_model) || history_scope(agenda,context).receipts)
         contrast = frontier_history_probe(frontier,agenda,obs,context)
         isnothing(contrast) || return contrast
     end

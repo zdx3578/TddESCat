@@ -1,5 +1,13 @@
 const FrontierState = Tuple{String,Tuple}
 
+struct RelationHistoryScope
+    width::Int
+    receipts::Bool
+end
+
+history_scope(agenda,context) = get(agenda.history_scopes,context,RelationHistoryScope(1,false))
+refined_history(scope::RelationHistoryScope) = scope.width > 1 || scope.receipts
+
 struct FrontierRoute
     steps::Vector{Int}
     cursor::Int
@@ -28,9 +36,10 @@ function frontier_prior(agenda,index,width)
     return reverse!(collected)
 end
 
-function relation_history_key(agenda,context,index; width=get(agenda.history_widths,context,1))
-    prior = frontier_prior(agenda,index,width)
-    return Tuple(action_key(agenda.samples[i].effects.action) for i in prior)
+function relation_history_key(agenda,context,index;scope=history_scope(agenda,context))
+    prior = frontier_prior(agenda,index,scope.width)
+    return Tuple(scope.receipts ? (action_key(row.effects.action),row.receipt) : action_key(row.effects.action)
+        for i in prior for row in (agenda.samples[i],))
 end
 
 frontier_state(agenda,context,index) = (context,relation_history_key(agenda,context,index))
@@ -52,11 +61,11 @@ end
 
 frontier_outcome(row) = (row.next_context,row.state,row.advanced)
 
-function compatible_frontier_history(search,agenda,context,width)
+function compatible_frontier_history(search,agenda,context,scope)
     responses = Dict{Tuple,Tuple}()
     for index in search.visits[context]
         row = agenda.samples[index]
-        past = relation_history_key(agenda,context,row.preceding;width)
+        past = relation_history_key(agenda,context,row.preceding;scope)
         key = (past,action_key(row.effects.action))
         outcome = frontier_outcome(row)
         get!(responses,key,outcome) == outcome || return false
@@ -82,13 +91,14 @@ function frontier_response_matrix(search,agenda,context)
         (;history=past,cells)
     end
     available_actions = isempty(visits) ? Int[] : agenda.samples[first(visits)].available
-    return (;context,width=get(agenda.history_widths,context,1),actions=sort!(actions),available_actions,
+    scope = history_scope(agenda,context)
+    return (;context,scope.width,scope.receipts,actions=sort!(actions),available_actions,
         coordinate_domain=6 in available_actions ? 4096 : 0,unrecorded_response=:unknown,rows)
 end
 
 function frontier_history_probe(search,agenda,obs,context)
-    width = get(agenda.history_widths,context,1)
-    width > 1 || return nothing
+    scope = history_scope(agenda,context)
+    refined_history(scope) || return nothing
     live = frontier_state(agenda,context,agenda.previous)
     tried = get(search.outcomes,live,nothing)
     for index in get(search.visits,context,Int[])
@@ -99,8 +109,8 @@ function frontier_history_probe(search,agenda,obs,context)
         witnessed == live && continue
         samples = search.outcomes[witnessed][action]
         all(i->frontier_outcome(agenda.samples[i]) == frontier_outcome(row),samples) || continue
-        live_reads = relation_ref.(agenda.samples[frontier_prior(agenda,agenda.previous,width)])
-        history_reads = relation_ref.(agenda.samples[frontier_prior(agenda,row.preceding,width)])
+        live_reads = relation_ref.(agenda.samples[frontier_prior(agenda,agenda.previous,scope.width)])
+        history_reads = relation_ref.(agenda.samples[frontier_prior(agenda,row.preceding,scope.width)])
         reads = unique([live_reads;history_reads;relation_refs(row)])
         obligation = (;context,current=last(live),comparison=last(witnessed),
             action=concrete_action(action),source=relation_ref(row),answer="unknown",
@@ -122,23 +132,26 @@ function frontier_observe!(search,agenda)
     context in search.unresolved && return nothing
     contrasted = first(bucket)
     frontier_outcome(agenda.samples[contrasted]) == frontier_outcome(row) && return nothing
-    old = get(agenda.history_widths,context,1)
-    usable = findfirst(width->width > old &&
-        compatible_frontier_history(search,agenda,context,width),search.allowed_widths)
-    width = isnothing(usable) ? old : search.allowed_widths[usable]
+    old = history_scope(agenda,context)
+    candidates = [RelationHistoryScope(width,receipts) for receipts in (false,true)
+        for width in search.allowed_widths if width >= old.width &&
+        ((receipts == old.receipts && width > old.width) || (receipts && !old.receipts))]
+    usable = findfirst(scope->compatible_frontier_history(search,agenda,context,scope),candidates)
+    scope = isnothing(usable) ? old : candidates[usable]
     if isnothing(usable)
         push!(search.unresolved,context)
     else
-        agenda.history_widths[context] = width
+        agenda.history_scopes[context] = scope
         filter!(pair->first(first(pair)) != context,search.outcomes)
         for past in all_visits
             index_frontier_observation!(search,agenda,past)
         end
     end
-    histories = [relation_ref.(agenda.samples[frontier_prior(agenda,agenda.samples[i].preceding,width)])
+    histories = [relation_ref.(agenda.samples[frontier_prior(agenda,agenda.samples[i].preceding,scope.width)])
         for i in (contrasted,index)]
     matrix = frontier_response_matrix(search,agenda,context)
-    return (;context,before_width=old,width,history_reads=histories,response_matrix=matrix,
+    return (;context,before_width=old.width,before_receipts=old.receipts,scope.width,scope.receipts,
+        history_reads=histories,response_matrix=matrix,
         evidence=relation_ref.(agenda.samples[[contrasted,index]]),
         status=isnothing(usable) ? "unresolved" : "refined")
 end
@@ -257,7 +270,7 @@ function frontier_choice(search,agenda,obs,decision,intervention,preferred)
     context = relation_context(obs)
     node = frontier_state(agenda,context,agenda.previous)
     frontier_options!(search,context,decision.ranked,intervention)
-    live_history = frontier_prior(agenda,agenda.previous,get(agenda.history_widths,context,1))
+    live_history = frontier_prior(agenda,agenda.previous,history_scope(agenda,context).width)
     history_reads = relation_ref.(agenda.samples[live_history])
     if !isnothing(search.route)
         next = frontier_route_step(search,agenda,obs,node,search.route,preferred,history_reads)
