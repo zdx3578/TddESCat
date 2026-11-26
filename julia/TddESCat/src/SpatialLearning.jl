@@ -146,6 +146,9 @@ end
 function observe_spatial!(model, before, after, effects)
     old_obs,new_obs = before.observation,after.observation
     old_obs.levels_completed == new_obs.levels_completed || return nothing
+    action = new_obs.action["id"]
+    # Spatial roles require a non-coordinate intervention witness.
+    action == 6 && return nothing
     a,b = last(old_obs.frames),last(new_obs.frames)
     if isempty(model.role)
         candidate = spatial_role(effects,a,b)
@@ -155,8 +158,6 @@ function observe_spatial!(model, before, after, effects)
     end
     origin,landing = locate_role(a,model.role),locate_role(b,model.role)
     (isnothing(origin) || isnothing(landing)) && return nothing
-    action = new_obs.action["id"]
-    action == 6 && return nothing
     first_landing = landing
     if length(new_obs.frames) > 1
         for frame in new_obs.frames

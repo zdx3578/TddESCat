@@ -3,10 +3,31 @@ using Test
 
 const TS = TddESCat
 
-function picture_entry(ref, parent, action, frame)
+function picture_entry(ref, parent, action, frame;coordinates=Dict{String,Int}())
     observation = TS.PublicObservation("abstract-trial","test-session",[frame],"NOT_FINISHED",
-        0,2,Dict("id"=>action),[1,2,3,4],false)
+        0,2,merge(Dict("id"=>action),coordinates),[1,2,3,4,6],false)
     return (event=Dict("event_id"=>ref,"before_ref"=>parent),observation=observation)
+end
+
+@testset "Click movement does not establish a controlled spatial role" begin
+    function scene(clicked_x, mover_x)
+        frame = fill(0x00,24,24)
+        frame[11:13,clicked_x+1:clicked_x+5] .= 0x09
+        frame[4:5,mover_x+1:mover_x+2] .= 0x08
+        return frame
+    end
+    first = picture_entry("initial",nothing,0,scene(6,3))
+    clicked = picture_entry("clicked","initial",6,scene(11,3);coordinates=Dict("x"=>8,"y"=>11))
+    moved = picture_entry("moved","clicked",2,scene(11,5))
+    state = TS.SpatialLearning()
+    click_effects = TS.observed_effects(first,clicked)
+    @test any(effect->effect.family == :translation && length(effect.before) == 15,click_effects.effects)
+    @test isnothing(TS.observe_spatial!(state,first,clicked,click_effects))
+    @test isempty(state.role) && isempty(state.role_reads)
+    move = TS.observe_spatial!(state,clicked,moved,TS.observed_effects(clicked,moved))
+    @test move.after == (5,3)
+    @test state.role_reads == ["clicked","moved"]
+    @test length(state.role) == 4 && all(cell->cell[3] == 0x08,state.role)
 end
 
 @testset "Public contact evidence chooses between candidate relations" begin
