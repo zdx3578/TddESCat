@@ -141,7 +141,8 @@ function primitive_outcome(earlier,prev,next)
 end
 
 function choose_intervention(memory,scene,obs,ranked,attempts;
-                             explore,goal_learning,confirmed_count,agenda=nothing)
+                             explore,goal_learning,confirmed_count,agenda=nothing,
+                             groups=nothing,meters=(),condition_view=nothing)
     level = obs.levels_completed
     models = goal_learning ? intervention_models(memory) : NamedTuple[]
     for candidate in scene
@@ -171,10 +172,12 @@ function choose_intervention(memory,scene,obs,ranked,attempts;
         !isnothing(agenda) && !c.broad && !haskey(agenda.visits,(context,action_key(click_action(c.point))))]
     fallback = coordinate_intervention(memory,level,obs.available_actions)
     if !isempty(role) && (isnothing(fallback) || mod(confirmed_count,7) != 6)
-        followup = isnothing(agenda) ? nothing : object_effect_followup(agenda,level,role)
+        followup = isnothing(agenda) ? nothing :
+            object_effect_followup(agenda,obs,context,role;groups,meters,condition_view)
         if !isnothing(followup)
-            return (action=click_action(followup.point),probe=:representative,
-                candidate=followup,goal=nothing,fallback=nothing,reason="extend_observed_object_effect")
+            return (action=click_action(followup.candidate.point),probe=:representative,
+                candidate=followup.candidate,tests=followup.tests,goal=nothing,fallback=nothing,
+                reason="extend_observed_object_effect")
         end
         candidate = argmin(c->(c.broad,(level,c.point) in memory.points,c.features.shape_multiplicity,
             -length(c.support),c.point),role)

@@ -944,7 +944,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         intervention = if object_probes
             choose_intervention(intervention_memory,click_scene,obs,decision.ranked,attempts;
                 explore=!frozen,goal_learning=relation_goals,confirmed_count=count,
-                agenda=relation_tasks ? relations : nothing)
+                agenda=relation_tasks ? relations : nothing,groups=decision.groups,
+                meters,condition_view)
         end
         experiment = if !object_probes && !frozen && !composing && isnothing(program_cursor) && isnothing(spatial_choice)
             select_experiment!(experiments,rec.store,decision.ranked,obs.available_actions,rec.before_ref;
@@ -1022,7 +1023,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             elseif selected.source == :relation
                 relation_choice
             else
-                tests = prepare_relation_tests(relations,context,obs,decision.groups,item.action;meters,condition_view)
+                tests = isnothing(intervention) ? nothing : get(intervention,:tests,nothing)
+                isnothing(tests) && (tests = prepare_relation_tests(relations,context,obs,decision.groups,
+                    item.action;meters,condition_view))
                 isempty(tests) ? nothing : (action=item.action,intent=:apply_relation,tests,reads=String[],obligation=nothing)
             end
         end

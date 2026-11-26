@@ -30,6 +30,11 @@ class Fixture(ARCBaseGame):
             frame[10:13, 8:11] = 0
             frame[20, 14:23] = 4
             frame[40, 45] = 2
+        elif MODE == "concrete-object-followup":
+            frame[10:13, 23:26] = 4
+            frame[10:13, 38:41] = 4
+            frame[34:37, 8:11] = 2
+            frame[34:37, 38:41] = 2
         elif MODE in ("directions", "restart", "restart-choices"):
             frame[10:13, 23:26] = 4
             frame[10:13, 38:41] = 4
@@ -40,7 +45,8 @@ class Fixture(ARCBaseGame):
             "advancement-transfer": [6], "advancement-refutation": [5, 6], "history-refinement": [1, 4],
             "history-continuation": [1, 4], "history-matrix": [1, 4], "history-receipt": [1, 4], "long-history": [1, 4],
             "outcome-preparation": [5, 7], "outcome-chain": [5, 7], "role-outcome": [5, 6],
-            "bridge-partition": [5], "frontier-dispatch": [1, 2], "frontier-route": [2],
+            "bridge-partition": [5], "concrete-object-followup": [5, 6],
+            "frontier-dispatch": [1, 2], "frontier-route": [2],
             "sequence-experiment": [1, 2, 3], "circuit-role": [6, 7], "coordinate-restart": [6]}
         levels = [Level(sprites=[Sprite(frame.copy(), name="board")])]
         if MODE == "progress-restart":
@@ -128,6 +134,14 @@ class Fixture(ARCBaseGame):
                 pixels[40:42, 44:46] = 7
             elif pixels[40, 44] == 7 and pixels[self.action.data["y"], self.action.data["x"]] == 4:
                 self.next_level()
+        elif MODE == "concrete-object-followup":
+            if action == 5 and pixels[35, 39] == 7:
+                self.next_level()
+            elif action == 6:
+                x, y = (self.action.data[k] for k in ("x", "y"))
+                if 10 <= y < 13 and pixels[y, x] == 4 and pixels[35, x] == 2:
+                    left = 8 if x < 11 else 38
+                    pixels[34:37, left:left+3] = 7
         elif MODE == "advancement-refutation":
             if action == 5:
                 self.next_level()
@@ -270,6 +284,7 @@ def capture(
         "long-history",
         "coordinate-restart",
         "advancement-refutation",
+        "concrete-object-followup",
         "sequence-experiment",
     )
     public = run / "public"
@@ -311,6 +326,7 @@ def capture(
         agent.write_text(settings + additions)
         direct_tests = {
             "advancement-refutation": "advancement_refutation_public.jl",
+            "concrete-object-followup": "concrete_object_followup_public.jl",
             "history-dispatch": "history_public.jl",
             "circuit-role": "circuit_role_public.jl",
             "coordinate-restart": "coordinate_restart_public.jl",
@@ -403,6 +419,24 @@ def observed_steps(public):
 
 
 def verify(mode, public):
+    if mode == "concrete-object-followup":
+        record = read(public / "concrete-object-followup.json")
+        trace = receipts(public)
+        source, selected, won = (record[key] for key in ("source", "selected", "won"))
+        original, transfer, win = (trace[ref] for ref in (source, selected, won))
+        assert original[0]["action"] == {"id": 6, "x": 9, "y": 11}
+        assert original[1]["frame"][-1][35][9] == 7
+        assert record["nearby"] == {"id": 6, "x": 24, "y": 11}
+        assert transfer[0]["action"] == {"id": 6, "x": 39, "y": 11}
+        before = trace[transfer[0]["before_ref"]][1]["frame"][-1]
+        assert before[35][24] == 0 and before[35][39] == 2
+        assert transfer[1]["frame"][-1][35][39] == 7
+        assert transfer[1]["levels_completed"] == 0 and win[1]["state"] == "WIN"
+        assert record["task"]["contracts"][0]["scope"] == "unverified"
+        assert source in record["task"]["reads"]
+        prediction = read(public / "predictions" / (transfer[0]["command_ref"] + ".json"))
+        assert prediction["guard_truth"] == "unknown" and source in prediction["event_reads"]
+        return [source, selected, won]
     if mode == "advancement-refutation":
         record = read(public / "advancement-refutation.json")
         trace = receipts(public)
@@ -830,6 +864,7 @@ def main(config, run):
         "restart-choices",
         "advancement-transfer",
         "advancement-refutation",
+        "concrete-object-followup",
         "outcome-preparation",
         "outcome-chain",
         "role-outcome",

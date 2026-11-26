@@ -521,7 +521,8 @@ function verified_instance(agenda,producer,context,action,previous,level)
         length(unique(row.lineage for row in witnesses)) >= 2 && !contradicted ? :replicated : :unverified
 end
 
-function prepare_relation_tests(agenda,context,obs,groups,action;meters=(),condition_view=nothing)
+function prepare_relation_tests(agenda,context,obs,groups,action;meters=(),condition_view=nothing,
+                                enclosure=nothing,role_index=nothing)
     point = action_key(action)
     role = action["id"] == 6 ? point_component(groups,point[2:3]) : nothing
     action["id"] == 6 && isnothing(role) && return NamedTuple[]
@@ -529,7 +530,7 @@ function prepare_relation_tests(agenda,context,obs,groups,action;meters=(),condi
     ids = get(agenda.by_action,profile,String[])
     isempty(ids) && return NamedTuple[]
     frame = last(obs.frames)
-    enclosure = enclosure_pairs(groups)
+    isnothing(enclosure) && (enclosure = enclosure_pairs(groups))
     previous = agenda.previous
     tests = NamedTuple[]
     for key in ids
@@ -539,7 +540,7 @@ function prepare_relation_tests(agenda,context,obs,groups,action;meters=(),condi
         # Unrestricted matches of a deterministic relative footprint are still
         # experiments until there are concrete outcomes at multiple bindings.
         rule = producer.rule
-        eval = evaluate_joint_rule(rule,frame,groups,enclosure,action;meters,relative_transfer=true)
+        eval = evaluate_joint_rule(rule,frame,groups,enclosure,action;meters,relative_transfer=true,role_index)
         eval.truth == proven || continue
         expected = plan_channels(eval.fragments)
         isnothing(expected) && continue
@@ -548,7 +549,7 @@ function prepare_relation_tests(agenda,context,obs,groups,action;meters=(),condi
             models = get(condition_view.models,relation_condition_key(rule),())
             for model in models
                 known = candidate_evaluation(model,frame,groups,enclosure,action,condition_view.history;
-                    meters,transients=condition_view.transients)
+                    meters,transients=condition_view.transients,role_index)
                 known.truth == proven && plan_channels(known.fragments) == expected || continue
                 push!(conditions,(;version=active_id(model),reads=condition_view.reads(model)))
             end
@@ -726,7 +727,9 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
     end
     isnothing(intervention) && return nothing
     action = intervention.action
-    tests = prepare_relation_tests(agenda,context,obs,decision.groups,action;meters,condition_view)
+    tests = get(intervention,:tests,nothing)
+    isnothing(tests) && (tests = prepare_relation_tests(agenda,context,obs,decision.groups,action;
+        meters,condition_view))
     if hasproperty(intervention,:changed_context)
         return (;action,intent=:distinguish_changed_context,tests,reads=intervention.changed_context.reads,
             obligation=intervention.changed_context)
@@ -844,8 +847,10 @@ function changed_context_probe(agenda,obs,scene)
 end
 
 """Dispatch a rebound role only through the producer that will check the actual receipt."""
-function object_effect_followup(agenda::RelationAgenda,level,candidates)
+function object_effect_followup(agenda::RelationAgenda,obs,context,candidates;
+                                groups=nothing,meters=(),condition_view=nothing)
     options = NamedTuple[]
+    level = obs.levels_completed
     for candidate in candidates
         profile = click_profile(candidate.support,candidate.point)
         if !haskey(agenda.by_action,profile)
@@ -860,8 +865,24 @@ function object_effect_followup(agenda::RelationAgenda,level,candidates)
             push!(options,(;candidate,distance,witnesses=length(witnesses)))
         end
     end
-    return isempty(options) ? nothing : argmin(row->(haskey(agenda.lineages,row.candidate.support),
-        -row.witnesses,row.distance,row.candidate.point),options).candidate
+    isempty(options) && return nothing
+    isnothing(groups) && (groups = public_components(last(obs.frames)))
+    enclosure = enclosure_pairs(groups)
+    role_index = EffectRoleIndex()
+    sort!(options;by=row->(haskey(agenda.lineages,row.candidate.support),
+        -row.witnesses,row.distance,row.candidate.point))
+    examined = Set{Tuple{Int,Int}}()
+    for row in options
+        candidate = row.candidate
+        candidate.point in examined && continue
+        push!(examined,candidate.point)
+        tests = prepare_relation_tests(agenda,context,obs,groups,click_action(candidate.point);
+            meters,condition_view,enclosure,role_index)
+        isempty(tests) && continue
+        all(test->test.expected == first(tests).expected,tests) || continue
+        return (;candidate,tests)
+    end
+    return nothing
 end
 
 function relation_task_record(proposal)

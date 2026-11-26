@@ -154,6 +154,10 @@ end
     @test "revision-source" in only(admitted).reads
     withdrawn = merge(view,(history=[5],))
     @test isempty(TC.prepare_relation_tests(agenda,context,next.observation,groups,choice.action;condition_view=withdrawn))
+    refused = TC.choose_intervention(memory,scene,next.observation,[],Dict{String,Int}();
+        explore=true,goal_learning=true,confirmed_count=2,agenda,groups,condition_view=withdrawn)
+    @test refused.probe == :representative && refused.reason == "probe_visible_object"
+    @test !hasproperty(refused,:tests)
 end
 
 @testset "Click effects follow a witnessed object and exact relative point" begin
