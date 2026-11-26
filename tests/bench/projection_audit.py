@@ -188,6 +188,17 @@ class ProjectionAuditor:
                 )
         require(quantities == claim["quantities"], "projection_quantity_bindings")
         origin = tuple(claim["anchor"]) if claim.get("anchor") is not None else None
+        action = event["action"]
+        if origin is not None and not anchors and action["id"] == 6:
+            point = (action["x"], action["y"])
+            for binding in claim["bindings"]:
+                port = binding["port"]
+                if binding["family"] == "pigment" and point in {
+                    tuple(cell[:2]) for cell in port
+                }:
+                    anchors.append(
+                        tuple(min(cell[i] for cell in port) for i in range(2))
+                    )
         claimed_channels = claim.get("quantity_channels", [])
         if "anchor" in claim:
             require(

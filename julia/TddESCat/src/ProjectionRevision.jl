@@ -197,6 +197,8 @@ function projection_patch(choice,before)
         length(offsets) == length(moved) == length(rule.anchors) || return nothing
         allequal(offsets) || return nothing
         shift = first(moved).value
+    elseif !isnothing(rule.click) && rule.click.local_pigment
+        shift = anchor(first(choice.fragments).basis)
     end
     target = copy(before)
     touched = Set{Pixel}()
@@ -235,7 +237,8 @@ function projection_patch(choice,before)
     end
     observed = measure_joint((model=rule,fragments=choice.fragments),target)
     !isempty(observed.assessments) && all(==("supported"),values(observed.assessments)) || return nothing
-    origin = isempty(moved) ? nothing : anchor(first(moved).basis)
+    origin = !isempty(moved) ? anchor(first(moved).basis) :
+        !isnothing(rule.click) && rule.click.local_pigment ? shift : nothing
     return (;frame=target,writes=sort!(collect(touched)),binding_reads=sort!(collect(binding_reads)),
         bindings,quantities,channels,origin)
 end

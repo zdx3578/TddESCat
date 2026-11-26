@@ -1,0 +1,5 @@
+schema_version = 1
+kind = "object_interventions"
+output_name = "object-interventions"
+environment_config = "../bench_server.toml"
+timeout_seconds = 480
