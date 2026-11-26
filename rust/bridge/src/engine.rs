@@ -4,6 +4,7 @@ use crate::{
     },
     protocol::Config,
     resources::{self, Phase},
+    search_checkpoint::SaveSchedule,
 };
 use anyhow::{Context, Result, ensure};
 use egg::{Applier, EGraph, FromOp, Id, Pattern, PatternAst, Rewrite, Subst, Symbol, Var};
@@ -12,7 +13,7 @@ use egg_stitch::{
     lang::{Op, OpChildren, OpChildrenLanguage, OpDB, StitchAnalysis, TypedSearch, Weights},
     shared::SharedData,
 };
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc, time::Instant};
 
 type Operator = OpDB<Op>;
 type Language = OpChildrenLanguage<Operator>;
@@ -381,7 +382,7 @@ pub fn search(
     }
     let mut heap_pops = pops;
     let (mut arena_peak, mut frontier_peak) = resume.as_ref().map_or((0, 0), |state| state.peaks());
-    let mut last_saved = pops;
+    let mut saves = SaveSchedule::new(pops, Instant::now());
     let mut error = None;
     let result = best_first::best_first_resumable(
         data,
@@ -411,12 +412,24 @@ pub fn search(
                     .search_pop_checkpoints
                     .binary_search(&pops)
                     .is_ok();
-            if pops > last_saved && (pause || scheduled || pops % 2048 == 0) {
-                if let Err(failure) = checkpoints.save(&graph, state, pops, state.frontier_len()) {
-                    error = Some(failure);
-                    return true;
+            let sample = scheduled || pops % 2048 == 0;
+            if pause || sample {
+                let started = Instant::now();
+                if saves.due(pops, pause, sample, started) {
+                    let bytes = match checkpoints.save(&graph, state, pops, state.frontier_len()) {
+                        Ok(bytes) => bytes,
+                        Err(failure) => {
+                            error = Some(failure);
+                            return true;
+                        }
+                    };
+                    let finished = Instant::now();
+                    saves.saved(pops, started, finished);
+                    println!(
+                        "checkpoint round={round} heap_pops={pops} bytes={bytes} elapsed_ms={}",
+                        finished.duration_since(started).as_millis(),
+                    );
                 }
-                last_saved = pops;
             }
             pause
         },

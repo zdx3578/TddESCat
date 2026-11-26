@@ -162,6 +162,11 @@ end
     checkpoint = joinpath(paused,"search-state")
     frontier = joinpath(checkpoint,"round-000001")
     @test isdir(frontier)
+    pointer = TC.read_json(joinpath(frontier,"latest.json"))
+    snapshot = only(filter(name->endswith(name,".json.zst"),readdir(frontier;join=true)))
+    @test pointer["schema_version"] == 2
+    @test pointer["bytes"] == filesize(snapshot)
+    @test open(io->read(io,4),snapshot) == UInt8[0x28,0xb5,0x2f,0xfd]
     restored_output = joinpath(RUN,"restored-frontier")
     @test run(ignorestatus(`$worker --output $restored_output --resume-search $checkpoint`)).exitcode == 0
     resumed = read_stitch_rounds(resume_job,restored_output)
