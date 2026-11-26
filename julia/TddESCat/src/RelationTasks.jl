@@ -110,19 +110,20 @@ end
 
 function witnessed_outcome_relation(agenda,index)
     outcome = agenda.samples[index]
-    (outcome.preceding == 0 || isnothing(outcome.binding)) && return nothing
+    outcome.preceding == 0 && return nothing
+    action = action_key(outcome.effects.action)
+    first(action) == 6 && isnothing(outcome.binding) && return nothing
     preparation = agenda.samples[outcome.preceding]
     if preparation.state != "NOT_FINISHED" || preparation.advanced || preparation.next_context != outcome.context ||
             Set(preparation.available) != Set(outcome.available) || !preparation.effects.complete ||
             !isempty(preparation.effects.residual)
         return nothing
     end
-    action = action_key(outcome.effects.action)
     comparisons = get(agenda.visits,(preparation.context,action),Int[])
     comparison = findlast(comparisons) do compared
         row = agenda.samples[compared]
         compared < outcome.preceding && row.state == "NOT_FINISHED" && !row.advanced &&
-            !isnothing(row.binding) && row.binding.appearance == outcome.binding.appearance
+            (first(action) != 6 || !isnothing(row.binding) && row.binding.appearance == outcome.binding.appearance)
     end
     isnothing(comparison) && return nothing
     for (key,producer) in agenda.producers
@@ -396,7 +397,8 @@ end
 
 function matches_outcome_binding(row,action,groups)
     id,x,y = action_key(action)
-    id == 6 || return false
+    id == row.effects.action["id"] || return false
+    id == 6 || return true
     support = point_component(groups,(x,y))
     return !isnothing(support) && click_profile(support,(x,y)) == row.binding.appearance
 end
@@ -407,7 +409,6 @@ function rebound_outcome_action(row,decision)
 end
 
 function prepare_outcome_relation(agenda,obs,decision,context;meters,condition_view)
-    6 in obs.available_actions || return nothing
     for witness in Iterators.reverse(agenda.outcome_relations)
         source,comparison,outcome = agenda.samples[[witness.preparation,witness.comparison,witness.outcome]]
         Set(source.available) == Set(obs.available_actions) || continue
@@ -652,7 +653,7 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
             target = plan.obligation.target
             outcome = agenda.samples[plan.obligation.index]
             if !isnothing(prior) && relation_ref(prior) == plan.event && context == plan.context &&
-                    6 in obs.available_actions && matches_outcome_binding(outcome,target,decision.groups) &&
+                    target["id"] in obs.available_actions && matches_outcome_binding(outcome,target,decision.groups) &&
                     !observed_failure(agenda,context,action_key(target),previous)
                 return (;action=target,intent=:continue_outcome_relation,tests=NamedTuple[],
                     reads=plan.reads,obligation=merge(plan.obligation,(;established=plan.event)))

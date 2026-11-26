@@ -2,8 +2,9 @@ using Test, TddESCat
 
 const TC = TddESCat
 const CONFIG = load_run_config(first(ARGS))
+const MODE = length(ARGS) == 3 ? ARGS[2] : "role-outcome"
 
-@testset "A witnessed visual prerequisite controls a relocated outcome target" begin
+@testset "A witnessed visual prerequisite controls a new outcome instance" begin
     with_run(last(ARGS)) do store
         rec = Recorder(store,CONFIG)
         agenda = TC.RelationAgenda()
@@ -22,7 +23,7 @@ const CONFIG = load_run_config(first(ARGS))
             TC.finish_relation_dispatch!(agenda,proposal;feedback=result.feedback)
             return result
         end
-        target = TC.click_action((9,11))
+        target = MODE == "primitive-outcome" ? Dict("id"=>2) : TC.click_action((9,11))
         comparison = dispatch(target)
         @test rec.observation.levels_completed == 0
         preparation = dispatch(Dict("id"=>5))
@@ -33,7 +34,7 @@ const CONFIG = load_run_config(first(ARGS))
         function propose()
             obs = rec.observation
             view = TC.public_action_candidates(obs,512;object_probes=true)
-            candidates = sort(view.actions;by=action->action["id"] != 6)
+            candidates = sort(view.actions;by=action->action["id"] != target["id"])
             ranked = [(;action,rank=(i,0),reason="ordinary_public_candidate") for (i,action) in enumerate(candidates)]
             decision = (;ranked,view.groups)
             proposal = TC.relation_experiment(agenda,obs,decision,nothing,TC.relation_context(obs))
@@ -46,18 +47,19 @@ const CONFIG = load_run_config(first(ARGS))
         end
         setup = propose()
         @test setup.proposal.intent == :establish_outcome_relation
-        @test setup.proposal.action == Dict("id"=>5) && setup.baseline["id"] == 6
+        @test setup.proposal.action == Dict("id"=>5) && setup.baseline["id"] == target["id"]
         @test isnothing(agenda.preparing)
         effect = dispatch(setup.proposal.action;setup.proposal,setup.task)
         @test effect.feedback.result == :established && agenda.preparing.event == effect.event
         follow = propose()
         @test follow.proposal.intent == :continue_outcome_relation
-        @test follow.proposal.action == TC.click_action((39,11))
+        rebound = MODE == "primitive-outcome" ? target : TC.click_action((39,11))
+        @test follow.proposal.action == rebound
         win = dispatch(follow.proposal.action;follow.proposal,follow.task)
         @test win.public_outcome.dependency == effect.event
         @test rec.observation.state == "WIN" && rec.observation.levels_completed == 2
         @test close_scorecard!(rec)["completion"] == "confirmed"
-        TC.atomic_json(TC.store_path(store,"role-outcome.json"),
+        TC.atomic_json(TC.store_path(store,MODE * ".json"),
             (;comparison,preparation,progress,setup=(;setup.task,setup.baseline,effect),follow=(;follow.task,win)))
         @test last(recover_run(store)).event["event_id"] == win.event
     end
