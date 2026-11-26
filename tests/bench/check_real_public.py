@@ -115,7 +115,8 @@ def autonomous_report(root, run):
     public = run / "public"
     config = tomllib.loads((public / "agent.toml").read_text(encoding="utf-8"))
     cold = (
-        config.get("planning") == {"autonomous": True}
+        config.get("planning", {}).get("autonomous") is True
+        and "goal" not in config["planning"]
         and "prior_evidence" not in config.get("learning", {})
         and not config["execution"].get("frozen_evaluation", False)
         and not (public / "prior-events.json").exists()
@@ -283,6 +284,18 @@ def autonomous_report(root, run):
                         check["definition_refs"] and prediction["model_version"],
                         "unaccounted_action_selection",
                     )
+                    if (check.get("program") or {}).get("goal", {}).get(
+                        "contract"
+                    ) == "establishes_contact_precondition":
+                        trained = sorted(
+                            read
+                            for read in prediction["event_reads"]
+                            if receipts[read]["action_input"]["id"] != 0
+                        )
+                        require(trained, "missing_contact_producer_training")
+                        decisions.append(
+                            {"event": ref, "level": before + 1, "reads": trained}
+                        )
                 if sample := check.get("contact_feedback"):
                     audit_contact_sample(
                         sample, ref, before_receipt, receipt, receipts, parents

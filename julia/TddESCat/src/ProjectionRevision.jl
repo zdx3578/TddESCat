@@ -295,6 +295,25 @@ function replay_projection_feedback!(memory,directory,events,observations,histor
         before,after = last(prior.observation.frames),last(current.observation.frames)
         base = projection_frame_from_writes(before,claim["base_writes"],claim["base_sha256"])
         forecast = projection_frame_from_writes(before,claim["projected_writes"],claim["projected_sha256"])
+        id = claim["contract"]
+        history = collect(Int,claim["history"])
+        quantities = collect(Int,claim["quantities"])
+        scoped = projection_applicability(memory,id,before,history,quantities)
+        status = claim["status"]
+        scoped.version == claim["version"] && scoped.reads == claim["condition_reads"] ||
+            error("Projection claim used a different evidence prefix")
+        if status in ("witnessed_base","conditioned_projection")
+            scoped.status == status || error("Projection scope was unavailable at execution")
+            expected = copy(base)
+            for (x,y,old,from,to) in scoped.correction
+                before[y+1,x+1] == old && expected[y+1,x+1] == from ||
+                    error("Replayed projection correction is outside its binding")
+                expected[y+1,x+1] = UInt8(to)
+            end
+            forecast == expected || error("Projection correction differs from its learned scope")
+        elseif forecast != base
+            error("Unproved projection recorded a non-base forecast")
+        end
         check_path = joinpath(directory,"checks",command)
         feedback = isfile(check_path) ? get(read_json(check_path),"projection",nothing) : nothing
         effects = observations[ref]
@@ -309,9 +328,7 @@ function replay_projection_feedback!(memory,directory,events,observations,histor
                 for key in keys_to_check) || error("Projection feedback differs from the public replay")
             feedback["observed_sha256"] == frame_key(after) || error("Projection feedback received a different frame")
         end
-        id = claim["contract"]
-        trial = ProjectionTrial(ref,prior.event["event_id"],before,
-            collect(Int,claim["history"]),collect(Int,claim["quantities"]),observed.outcome,observed.correction)
+        trial = ProjectionTrial(ref,prior.event["event_id"],before,history,quantities,observed.outcome,observed.correction)
         observe_projection!(memory,id,trial,history_lengths)
     end
     return memory

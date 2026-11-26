@@ -8,6 +8,7 @@ use crate::shift_equal::shift_equal;
 use clap::ValueEnum;
 use egg::{Id, Language};
 use rustc_hash::FxHashMap;
+use std::borrow::Borrow;
 use std::time::{Duration, Instant};
 
 /// Which order the freeze rule ranks a pattern's metavariables in (applied by
@@ -51,6 +52,8 @@ struct VarShape<F: LanguageFamily, O: StitchOp> {
 /// Per var, its candidate expansion shapes in enode first-appearance order.
 type VarShapes<F, O> = Vec<VarShape<F, O>>;
 
+type SeenKey = (Box<[u32]>, Box<[u32]>);
+
 /// Tracks already-explored canonical patterns to dedupe successors during
 /// search. Accumulates hit count and time spent so the host loop can report
 /// stats. Wrap in `Option<…>` at the call site — `None` disables the check
@@ -62,7 +65,9 @@ type VarShapes<F, O> = Vec<VarShape<F, O>>;
 /// dominated overwrites and passes through, because it unlocks expand actions
 /// the prior one had forbidden.
 pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
-    map: FxHashMap<(Pattern<F, O>, Vec<u32>), Vec<bool>>,
+    map: FxHashMap<SeenKey, Box<[bool]>>,
+    symbols: FxHashMap<F::Discriminant<OpWithVar<O>>, u32>,
+    traversal: Vec<Id>,
     pub hits: usize,
     pub time: Duration,
 }
@@ -77,6 +82,8 @@ impl<F: LanguageFamily, O: StitchOp> Default for SeenTracker<F, O> {
     fn default() -> Self {
         Self {
             map: FxHashMap::default(),
+            symbols: FxHashMap::default(),
+            traversal: Vec::new(),
             hits: 0,
             time: Duration::ZERO,
         }
@@ -103,13 +110,28 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
         self.check_typed(pattern, frozen, Vec::new())
     }
 
-    pub fn check_typed(&mut self, pattern: Pattern<F, O>, frozen: Vec<bool>, sorts: Vec<u32>) -> bool {
+    pub fn check_typed(&mut self, pattern: impl Borrow<Pattern<F, O>>, frozen: Vec<bool>, sorts: Vec<u32>) -> bool {
         let t = Instant::now();
-        let key = (pattern, sorts);
+        let pattern = pattern.borrow();
+        // The node layout in RevExpr reflects expansion order. The sequence of
+        // exact interned discriminants and arities reconstructs the ordered
+        // tree, including variable labels, independently of that layout.
+        let mut term = Vec::with_capacity(pattern.pattern.nodes.len() * 2);
+        self.traversal.push(Id::from(0));
+        while let Some(id) = self.traversal.pop() {
+            let node = &pattern.pattern[id];
+            let next = self.symbols.len();
+            let symbol = self.symbols.entry(node.discriminant())
+                .or_insert_with(|| u32::try_from(next).expect("too many seen pattern symbols"));
+            term.push(*symbol);
+            term.push(u32::try_from(node.children().len()).expect("pattern arity overflow"));
+            self.traversal.extend(node.children().iter().rev().copied());
+        }
+        let key = (term.into_boxed_slice(), sorts.into_boxed_slice());
         let skip = match self.map.get(&key) {
             Some(existing) if frozen_subset(existing, &frozen) => true,
             _ => {
-                self.map.insert(key, frozen);
+                self.map.insert(key, frozen.into_boxed_slice());
                 false
             }
         };
@@ -1106,6 +1128,28 @@ mod tests {
     /// App enode shape (2 children); the placeholder Ids are overwritten by `expand`.
     fn app() -> LambdaCalcLanguage<OpDB<Op>> {
         <LambdaCalc as LanguageFamily>::make::<OpDB<Op>>(LambdaCalcDisc::App, vec![Id::from(0); 2])
+    }
+
+    #[test]
+    fn seen_keys_preserve_tree_equality_sorts_and_freeze_masks() {
+        let mut left = Pat::single_var();
+        left.expand(0, &app());
+        left.expand(0, &app());
+        left.expand(2, &app());
+        let mut right = Pat::single_var();
+        right.expand(0, &app());
+        right.expand(1, &app());
+        right.expand(0, &app());
+        assert_eq!(left, right);
+        assert_ne!(left.pattern.nodes, right.pattern.nodes);
+
+        let mut seen = SeenTracker::new();
+        assert!(!seen.check_typed(&left, vec![true, false, false, false], vec![0; 5]));
+        assert!(seen.check_typed(&right, vec![true; 4], vec![0; 5]));
+        assert!(!seen.check_typed(right.clone(), vec![false; 4], vec![0; 5]));
+        assert!(seen.check_typed(&left, vec![true; 4], vec![0; 5]));
+        assert!(!seen.check_typed(&right, vec![true; 4], vec![1; 5]));
+        assert_eq!(seen.len(), 2);
     }
 
     /// A single-shape var whose explosion estimate is `expand_enodes / 1`, so

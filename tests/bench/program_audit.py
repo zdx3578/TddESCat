@@ -4,7 +4,7 @@ import json
 from collections import defaultdict
 from hashlib import sha256
 
-from tests.bench.autonomous_audit import locate_role, require
+from tests.bench.autonomous_audit import decode_value, locate_role, require, signature
 from tests.bench.measurement_audit import receipts, replay_meters, verify_step
 
 
@@ -87,7 +87,12 @@ def audit_live_goal_programs(public):
         for path in (public / "learning").glob("job-*/program-publication.json")
         if (data := load(path))["available_after"] is not None
     }
-    uses, pending, errors, dispositions = [], [], [], []
+    uses, pending, errors, dispositions, relation_uses = [], [], [], [], []
+    next_event = {
+        event["before_ref"]: ref
+        for ref, (event, _) in events.items()
+        if event["before_ref"] is not None
+    }
     by_definition = defaultdict(set)
     audited = {}
     for ref, (event, response) in events.items():
@@ -133,7 +138,9 @@ def audit_live_goal_programs(public):
                 continue
             proof = program["goal"]
             require(
-                proof["contract"] == "observed_route_waypoint", "program_goal_contract"
+                proof["contract"]
+                in ("observed_route_waypoint", "establishes_contact_precondition"),
+                "program_goal_contract",
             )
             require(
                 decision["reason"] == "revalidated_learned_program",
@@ -301,6 +308,63 @@ def audit_live_goal_programs(public):
                     and len(proof["steps"]) == 1,
                     "program_did_not_establish_waypoint",
                 )
+                if proof["contract"] == "establishes_contact_precondition":
+                    regression = proof["regression"]
+                    target = regression["binding"]
+                    contact = regression["contact"]
+                    require(
+                        regression["established"] == ["admissible_contact_binding"]
+                        and contact["point"] == target["point"]
+                        and target["origin"] == proof["target"]
+                        and target["action"] in response["available_actions"]
+                        and set(regression["reads"]) <= set(check["read_events"])
+                        and decode_value(response["frame"][-1], contact["field"])
+                        == contact["context"]
+                        and decode_value(
+                            response["frame"][-1], contact["site"]["field"]
+                        )
+                        == contact["site"]["value"]
+                        and contact["conditions"]["judgment"] == "admitted"
+                        and contact["conditions"]["signature"]
+                        == signature(contact["context"], contact["site"]["value"]),
+                        "regressed_contact_witness",
+                    )
+                    following = next_event.get(ref)
+                    consumed = None
+                    if following is not None:
+                        later, _ = events[following]
+                        candidate = public / "checks" / (later["command_ref"] + ".json")
+                        if candidate.is_file():
+                            followup = load(candidate).get("contact_feedback")
+                            if (
+                                followup
+                                and followup["point"] == target["point"]
+                                and later["action"]["id"] == target["action"]
+                            ):
+                                require(
+                                    followup["outcome"] in ("entered", "progress")
+                                    and (
+                                        contact["progress"]["judgment"] != "progress"
+                                        or followup["outcome"] == "progress"
+                                    ),
+                                    "regressed_contact_feedback",
+                                )
+                                consumed = dict(
+                                    event=following, outcome=followup["outcome"]
+                                )
+                    relation_uses.append(
+                        dict(
+                            event=ref,
+                            first=pending[0]["event"],
+                            level=pending[0]["level"],
+                            binding=target,
+                            body=regression["body"],
+                            consumed=consumed,
+                            baseline_choice_changed=any(
+                                s["selected"] != s["baseline"] for s in pending
+                            ),
+                        )
+                    )
                 if len(pending) > 1 and any(step["measurements"] for step in pending):
                     uses.append({"waypoint": proof["target"], "steps": pending})
                     identities = {
@@ -325,6 +389,7 @@ def audit_live_goal_programs(public):
         "uses": uses,
         "errors": errors,
         "dispositions": dispositions,
+        "relation_uses": relation_uses,
         "ordinary_choice_changed": any(
             step["selected"] != step["ordinary"]
             for use in uses

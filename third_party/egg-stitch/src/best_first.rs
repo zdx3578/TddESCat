@@ -2,7 +2,7 @@ use clap::ValueEnum;
 use colored::Colorize;
 use serde::Serialize;
 use std::cmp::Reverse;
-use std::collections::BinaryHeap;
+use std::collections::{BinaryHeap, HashMap};
 use std::time::{Duration, Instant};
 
 use crate::cost::{CostScratch, CostSelection, SearchStateWithCostSelection, compute_cost_and_select};
@@ -156,7 +156,10 @@ pub fn best_first_with_progress<F: LanguageFamily, O: StitchOp>(
     };
     let mut scratch = CostScratch::new(&shared.egraph);
 
-    let mut nodes: Vec<Node<F, O>> = Vec::new();
+    // The heap ID is an insertion-order key. Processed nodes are needed only
+    // when footprint deduplication retains a representative by that ID.
+    let mut nodes: HashMap<usize, Node<F, O>> = HashMap::new();
+    let mut created = 0;
     // Heap key: `(priority, insertion-order)`. `priority` is itself a tuple so
     // it can order lexicographically (e.g. forced-expansion then cost);
     // insertion order breaks remaining ties to stay deterministic.
@@ -167,15 +170,16 @@ pub fn best_first_with_progress<F: LanguageFamily, O: StitchOp>(
     for initial_state in SearchState::seeds(&shared, args.freeze_rule.resolve(true)) {
         let initial_cost = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &initial_state, shared.check_slow).cost;
         let (initial_prio, initial_forced) = priority(strategy, initial_cost, 0, &initial_state, &shared, i64::MIN);
-        let id = nodes.len();
+        let id = created;
+        created += 1;
         heap.push(Reverse((initial_prio, id)));
         if let Some(s) = seen.as_mut() {
-            s.check_typed(initial_state.pattern.clone(), initial_state.pattern.frozen_mask(), initial_state.sorts(&shared.egraph));
+            s.check_typed(&initial_state.pattern, initial_state.pattern.frozen_mask(), initial_state.sorts(&shared.egraph));
         }
         if let Some(fp) = footprints.as_mut() {
-            fp.check_state(&initial_state, &shared, id, &|i| &nodes[i].state.matches[..]);
+            fp.check_state(&initial_state, &shared, id, &|i| &nodes[&i].state.matches[..]);
         }
-        nodes.push(Node {
+        nodes.insert(id, Node {
             state: initial_state,
             depth: 0,
             lower_bound: None,
@@ -183,7 +187,7 @@ pub fn best_first_with_progress<F: LanguageFamily, O: StitchOp>(
         });
     }
 
-    let mut best: Option<(usize, usize, CostSelection)> = None; // (cost, node_id, selection)
+    let mut best: Option<(usize, SearchState<F, O>, CostSelection)> = None;
     // The typed bridge accepts only strict improvements over this round's baseline.
     // Its cost bound is useful before a first winner exists, including the final round.
     let initial_bound = if shared.egraph.analysis.typed.is_some() && shared.follow.is_none() {
@@ -232,8 +236,15 @@ pub fn best_first_with_progress<F: LanguageFamily, O: StitchOp>(
         heap_pops = heap_pops.checked_add(1).expect("heap pop count overflow");
         observe(heap_pops, nodes.len(), heap.len() + 1);
 
+        let popped;
+        let parent = if footprints.is_some() {
+            &nodes[&node_id]
+        } else {
+            popped = nodes.remove(&node_id).expect("queued node is live");
+            &popped
+        };
         // Re-check the cached lower bound: best may have improved since this node was pushed.
-        if let Some(lb) = nodes[node_id].lower_bound
+        if let Some(lb) = parent.lower_bound
             && lower_bound_pruner.recheck_cached(lb, best.as_ref().map_or(initial_bound, |(c, _, _)| *c))
         {
             continue;
@@ -241,27 +252,27 @@ pub fn best_first_with_progress<F: LanguageFamily, O: StitchOp>(
 
         if args.verbose || args.verbose_forced_expansion || args.verbose_match_structure {
             let tag = format!("[expansion {}]", num_expansions);
-            let pat = nodes[node_id].state.pattern.to_string();
+            let pat = parent.state.pattern.to_string();
             if args.verbose {
                 println!("{} {} {}", tag.dimmed(), "expanding:".dimmed(), pat.clone().cyan());
             }
             if args.verbose_match_structure {
-                crate::logging::print_match_structure(&nodes[node_id].state.matches, 10);
+                crate::logging::print_match_structure(&parent.state.matches, 10);
             }
             if args.verbose_forced_expansion {
-                let forced_str = match nodes[node_id].state.forced_expansion_argmin(&shared, i64::MIN) {
-                    Some((e, root)) => format!("[forced-expansion={} @root={}]", e, nodes[node_id].state.min_term(&shared, root)),
+                let forced_str = match parent.state.forced_expansion_argmin(&shared, i64::MIN) {
+                    Some((e, root)) => format!("[forced-expansion={} @root={}]", e, parent.state.min_term(&shared, root)),
                     None => "[forced-expansion=- (no in-extraction root)]".to_string(),
                 };
                 println!("{} {} {}", tag.dimmed(), pat.cyan(), forced_str.yellow());
             }
         }
 
-        let parent_depth = nodes[node_id].depth;
+        let parent_depth = parent.depth;
         // The parent's forced-expansion is a monotone lower bound on each child's,
         // so it early-exits the children's forced scans (the hot path on DSRs).
-        let parent_forced = nodes[node_id].forced;
-        let mut successors: Vec<SearchState<F, O>> = match nodes[node_id].state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, max_arity, &mut dominance_hits, &mut useless_inline_hits) {
+        let parent_forced = parent.forced;
+        let mut successors: Vec<SearchState<F, O>> = match parent.state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, args.opt_useless_inline, max_arity, &mut dominance_hits, &mut useless_inline_hits) {
             SuccessorEnum::Dominant { child, .. } => vec![child],
             SuccessorEnum::All { actions, rank } => {
                 if let Some(typed) = &shared.egraph.analysis.typed
@@ -269,7 +280,7 @@ pub fn best_first_with_progress<F: LanguageFamily, O: StitchOp>(
                 {
                     std::panic::panic_any(crate::lang::SearchBudgetStop("state_limit"));
                 }
-                actions.into_iter().map(|(a, _)| nodes[node_id].state.apply_action(&a, &shared, true, Some(&rank))).collect()
+                actions.into_iter().map(|(a, _)| parent.state.apply_action(&a, &shared, true, Some(&rank))).collect()
             }
         };
 
@@ -294,7 +305,7 @@ pub fn best_first_with_progress<F: LanguageFamily, O: StitchOp>(
                 continue;
             }
             if let Some(s) = seen.as_mut()
-                && s.check_typed(child_state.pattern.clone(), child_state.pattern.frozen_mask(), child_state.sorts(&shared.egraph))
+                && s.check_typed(&child_state.pattern, child_state.pattern.frozen_mask(), child_state.sorts(&shared.egraph))
             {
                 continue;
             }
@@ -317,11 +328,11 @@ pub fn best_first_with_progress<F: LanguageFamily, O: StitchOp>(
                 PruneResult::Disabled => None,
             };
 
-            // Placed last as it is very expensive. `nodes.len()` is the index this
-            // child will occupy (it is pushed unconditionally below if it survives),
+            // Placed last as it is very expensive. `created` is the next insertion ID
+            // (it is pushed unconditionally below if it survives),
             // letting a deferred representative re-read its match set on a collision.
             if let Some(fp) = footprints.as_mut()
-                && fp.check_state(&child_state, &shared, nodes.len(), &|i| &nodes[i].state.matches[..])
+                && fp.check_state(&child_state, &shared, created, &|i| &nodes[&i].state.matches[..])
             {
                 continue;
             }
@@ -336,7 +347,8 @@ pub fn best_first_with_progress<F: LanguageFamily, O: StitchOp>(
             cost_calls += 1;
             let child_depth = parent_depth + 1;
             let (child_prio, child_forced) = priority(strategy, child_cost, child_depth, &child_state, &shared, parent_forced);
-            let child_id = nodes.len();
+            let child_id = created;
+            created += 1;
 
             let cost_to_beat = best.as_ref().map_or(original_size, |(c, _, _)| *c);
             let arity = child_state.pattern.vars.len();
@@ -360,7 +372,7 @@ pub fn best_first_with_progress<F: LanguageFamily, O: StitchOp>(
                     child_state.pattern.to_string().cyan(),
                     format!("(t={:.3}s)", elapsed).dimmed()
                 );
-                best = Some((child_cost, child_id, child_selection.clone()));
+                best = Some((child_cost, child_state.clone(), child_selection.clone()));
                 best_found_at = Some(num_expansions);
                 best_history.push(BestHistoryEntry {
                     expansion: num_expansions,
@@ -369,8 +381,8 @@ pub fn best_first_with_progress<F: LanguageFamily, O: StitchOp>(
                     pattern: child_state.pattern.to_string(),
                 });
                 // `--compression-limit` early stop: this best already reaches the
-                // target ratio, so no better one is needed. Break after pushing the
-                // node below (its id must be live for the winner extraction).
+                // target ratio, so no better one is needed. Queue this child
+                // before exiting to preserve the frontier accounting.
                 if args.compression_limit.is_some_and(|limit| original_size as f64 / child_cost as f64 >= limit) {
                     hit_compression_limit = true;
                 }
@@ -391,7 +403,7 @@ pub fn best_first_with_progress<F: LanguageFamily, O: StitchOp>(
             // "fix" this by guarding the overwrite on `child_cost < best.cost`.
             let exact_follow_hit = shared.follow.as_ref().is_some_and(|f| crate::follow::matches_follow_serialized(&child_state, f, &shared.egraph));
 
-            nodes.push(Node {
+            nodes.insert(child_id, Node {
                 state: child_state,
                 depth: child_depth,
                 lower_bound: child_lower_bound,
@@ -405,10 +417,10 @@ pub fn best_first_with_progress<F: LanguageFamily, O: StitchOp>(
                     "{} {} {} {}",
                     format!("[expansion {}]", num_expansions).yellow().bold(),
                     format!("follow exact match: {}", child_cost).green().bold(),
-                    nodes[child_id].state.pattern.to_string().cyan(),
+                    nodes[&child_id].state.pattern.to_string().cyan(),
                     format!("(t={:.3}s)", elapsed).dimmed()
                 );
-                best = Some((child_cost, child_id, child_selection));
+                best = Some((child_cost, nodes[&child_id].state.clone(), child_selection));
                 best_found_at = Some(num_expansions);
                 num_expansions += 1;
                 break 'search;
@@ -427,7 +439,7 @@ pub fn best_first_with_progress<F: LanguageFamily, O: StitchOp>(
     let total_elapsed = search_start.elapsed();
     println!("\n{}", "═══ STATS ═══".blue().bold());
     println!("{} {}", "expansions:".dimmed(), num_expansions.to_string().bold());
-    println!("{} {}", "nodes created:".dimmed(), nodes.len().to_string().bold());
+    println!("{} {}", "nodes created:".dimmed(), created.to_string().bold());
     println!("{} {}", "heap size at end:".dimmed(), heap.len().to_string().bold());
     let (seen_len, seen_hits, seen_secs) = seen.as_ref().map_or((0, 0, 0.0), |s| (s.len(), s.hits, s.time.as_secs_f64()));
     println!("{} {}", "seen-set size:".dimmed(), seen_len.to_string().bold());
@@ -444,8 +456,8 @@ pub fn best_first_with_progress<F: LanguageFamily, O: StitchOp>(
 
     // Canonicalize the winner's var numbering (DFS first-appearance) before it's
     // handed off for output/rewrite.
-    let best_pair = best.map(|(cost, id, selection)| {
-        let mut pair = SearchStateWithCostSelection { state: nodes[id].state.clone(), selection };
+    let best_pair = best.map(|(cost, state, selection)| {
+        let mut pair = SearchStateWithCostSelection { state, selection };
         pair.canonicalize();
         (cost, pair)
     });

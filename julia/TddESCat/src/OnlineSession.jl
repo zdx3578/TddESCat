@@ -608,6 +608,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     count = 0
     continuation = nothing
     goal_pending = nothing
+    contact_pending = nothing
     program_cursor = nothing
     program_attempts = Set{Tuple{String,String,String}}()
     refuted_steps = Set{String}()
@@ -622,6 +623,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     last_job = :program
     background = !frozen && get(config.learning,"background_search",false)
     composing = !isnothing(config.planning) && haskey(config.planning,"goal")
+    relation_goals = !isnothing(config.planning) && get(config.planning,"relation_goals",false)
     spatial = !isnothing(config.planning) && get(config.planning,"autonomous",false) ? SpatialLearning() : nothing
     visual = isnothing(spatial) ? nothing : VisualControl()
     goal = composing ? bind_observed_goal(last(rec.observation.frames),config.planning["goal"]) : nothing
@@ -653,6 +655,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             register_evidence_obligation!(rec.store,entry;frozen)
             sequence_enabled && push!(sequence_events,entry)
             program_cursor = nothing
+            contact_pending = nothing
             begin_visual_attempt!(visual)
             history = [0]
             ready_at = time_ns()
@@ -693,19 +696,48 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             planned = autonomous_visual_plan(visual,spatial,obs,decision,rec.before_ref)
             isnothing(planned) ? spatial_experiment(spatial,obs,decision) : planned
         end
+        spatial_baseline = spatial_choice
         baseline_action = isnothing(spatial_choice) ? item.action : Dict("id"=>spatial_choice.id)
+        contact_domain = if relation_goals && !isnothing(spatial) && programs_pending
+            contact_goal_domain(visual,spatial,obs)
+        end
+        if !isnothing(contact_pending)
+            verified_contact = planned_contact_step(contact_domain,contact_pending,obs,rec.before_ref)
+            if !isnothing(verified_contact)
+                spatial_choice = verified_contact
+                visual.continuation = nothing
+            end
+            contact_pending = nothing
+        end
         program_note = nothing
         program_forecast = nothing
         if programs_pending
             constrained = composing || !isnothing(spatial)
             primitive_limit = isnothing(goal_cursor) ? rec.limit-rec.sent_count :
                 length(projected_trace(goal_cursor))
+            contact_limit = if isnothing(contact_domain) || isnothing(spatial_choice) ||
+                    isnothing(visual.continuation) || spatial_choice.reason != "learned_visual_contact"
+                0
+            else
+                1 + length(visual.continuation.steps)
+            end
+            needs = relation_goals && !isnothing(goal) ?
+                goal_producer_needs(knowledge,goal,obs,history,coordinates,meters) : []
             function eligible(cursor)
                 next = current_program_step(cursor,decision)
                 isnothing(next) && return nothing
                 constrained || return (;next,forecast=nothing)
-                forecast = goal_program(knowledge,obs,history,cursor,coordinates,meters,goal,spatial,
-                    visual,spatial_choice,primitive_limit,goal_cursor)
+                forecast = if relation_goals && !isnothing(goal)
+                    program_establishes_goal(knowledge,goal,obs,history,cursor,coordinates,meters,
+                        primitive_limit,needs)
+                elseif contact_limit > 1
+                    program_prepares_contact(knowledge,contact_domain,obs,history,cursor,coordinates,meters,
+                        min(primitive_limit,contact_limit),rec.before_ref,spatial_choice.contact)
+                end
+                if isnothing(forecast)
+                    forecast = goal_program(knowledge,obs,history,cursor,coordinates,meters,goal,spatial,
+                        visual,spatial_choice,primitive_limit,goal_cursor)
+                end
                 isnothing(forecast) && return nothing
                 return (;next=first(forecast.path).item,forecast)
             end
@@ -716,7 +748,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 for program in knowledge.programs
                     constrained || length(program.steps) <= rec.limit-rec.sent_count || continue
                     any(step->program_step_key(step) in refuted_steps,program.steps) && continue
-                    if !isnothing(spatial_choice) && first(program.steps)["action"]["id"] != spatial_choice.id
+                    if contact_limit <= 1 && !isnothing(spatial_choice) &&
+                            first(program.steps)["action"]["id"] != spatial_choice.id
                         continue
                     end
                     contract = semantic_hash([program.definition,program_step_key.(program.steps),program.shared])
@@ -753,6 +786,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                     program_forecast = selected_program.forecast
                     if !isnothing(program_forecast)
                         program_note["goal"] = goal_program_record(program_forecast)
+                        if hasproperty(program_forecast,:contact_target)
+                            spatial_choice = nothing
+                        end
                         goal_cursor = nothing
                         policy_note = nothing
                     end
@@ -785,6 +821,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             append!(plan_reads,program.sources)
             isnothing(program.available_after) || push!(plan_reads,program.available_after)
             if !isnothing(program_forecast)
+                if hasproperty(program_forecast,:regression)
+                    append!(plan_reads,program_forecast.regression.reads)
+                end
                 for step in program_forecast.path
                     append!(plan_reads,recovery_reads(rec,step.item.chosen.model))
                     append!(plan_reads,step.item.projection_contract.reads)
@@ -848,6 +887,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 "attempted"=>sum(key[1] == 6 for key in keys(attempts);init=0)))
         isnothing(policy_note) || (decision_record["policy"] = policy_note)
         isnothing(spatial_choice) || (decision_record["spatial_experiment"] = spatial_choice)
+        if !isnothing(spatial_baseline) && spatial_baseline != spatial_choice
+            decision_record["spatial_baseline"] = spatial_baseline
+        end
         isnothing(item.experiment) || (decision_record["experiment"] = item.experiment)
         isnothing(experiment) || (decision_record["experiment_obligation"] = experiment)
         isnothing(visual) || (decision_record["site_surveys"] = take_site_surveys!(visual))
@@ -951,6 +993,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 end
                 program_note["withdrawn_suffix"] = response == "completed" ? Int[] :
                     collect(program_cursor.next_step+1:length(program_cursor.program.steps))
+                if response == "completed" && !isnothing(program_forecast)
+                    contact_pending = get(program_forecast,:contact_target,nothing)
+                end
                 program_cursor = nothing
             end
         elseif !isempty(assessment.assessments) && all(==("supported"),values(assessment.assessments))
@@ -973,6 +1018,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             goal_pending = feedback.next
         end
         level_changed = obs.levels_completed != resulting.observation.levels_completed
+        level_changed && (contact_pending = nothing)
         level_changed && empty!(refuted_steps)
         new_scene = !isnothing(spatial) && level_changed
         old = if frozen
