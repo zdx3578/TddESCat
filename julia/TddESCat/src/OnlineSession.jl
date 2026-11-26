@@ -774,7 +774,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 empty!(program_attempts)
                 empty!(refuted_steps)
                 empty!(blocked_policies)
-                intervention_memory = InterventionMemory(intervention_memory.samples,Dict(),Set(),Dict(),Dict(),nothing)
+                rebind_interventions!(intervention_memory)
             else
                 begin_visual_attempt!(visual)
                 intervention_memory.prior_observation = nothing

@@ -41,7 +41,7 @@ class Fixture(ARCBaseGame):
             "history-continuation": [1, 4], "history-matrix": [1, 4], "history-receipt": [1, 4], "long-history": [1, 4],
             "outcome-preparation": [5, 7], "outcome-chain": [5, 7], "role-outcome": [5, 6],
             "bridge-partition": [5], "frontier-dispatch": [1, 2], "frontier-route": [2],
-            "sequence-experiment": [1, 2, 3], "circuit-role": [6, 7]}
+            "sequence-experiment": [1, 2, 3], "circuit-role": [6, 7], "coordinate-restart": [6]}
         levels = [Level(sprites=[Sprite(frame.copy(), name="board")])]
         if MODE == "progress-restart":
             frame[10:13, 23:26] = 4
@@ -81,7 +81,12 @@ class Fixture(ARCBaseGame):
             self.complete_action()
             return
         pixels = self.current_level.get_sprites_by_name("board")[0].pixels
-        if MODE == "circuit-role":
+        if MODE == "coordinate-restart":
+            if (self.action.data["x"], self.action.data["y"]) == (0, 32):
+                self.next_level()
+            else:
+                self.lose()
+        elif MODE == "circuit-role":
             if action == 7:
                 pixels[50, 50] = 12
             elif pixels[self.action.data["y"], self.action.data["x"]] == 11:
@@ -250,6 +255,7 @@ def capture(
         "history-matrix",
         "history-receipt",
         "long-history",
+        "coordinate-restart",
         "sequence-experiment",
     )
     public = run / "public"
@@ -292,6 +298,7 @@ def capture(
         direct_tests = {
             "history-dispatch": "history_public.jl",
             "circuit-role": "circuit_role_public.jl",
+            "coordinate-restart": "coordinate_restart_public.jl",
             "frontier-dispatch": "frontier_dispatch.jl",
             "frontier-route": "frontier_route_public.jl",
             "history-matrix": "history_matrix_public.jl",
@@ -381,6 +388,18 @@ def observed_steps(public):
 
 
 def verify(mode, public):
+    if mode == "coordinate-restart":
+        record = read(public / "coordinate-restart.json")
+        trace = receipts(public)
+        first, before = trace[record["failed"]["event"]]
+        reset, rebound = trace[record["retry"]]
+        last, after = trace[record["next"]["event"]]
+        assert first["action"] == {"id": 6, "x": 0, "y": 0} and before["state"] == "GAME_OVER"
+        assert reset["action"] == {"id": 0} and reset["before_ref"] == first["event_id"]
+        assert rebound["available_actions"] == [6] and rebound["levels_completed"] == 0
+        assert last["before_ref"] == reset["event_id"]
+        assert last["action"] == {"id": 6, "x": 0, "y": 32} and after["state"] == "WIN"
+        return [first["event_id"], reset["event_id"], last["event_id"]]
     if mode == "circuit-role":
         record = read(public / "circuit-role.json")
         trace = receipts(public)
@@ -789,6 +808,7 @@ def main(config, run):
         "history-refinement",
         "history-dispatch",
         "circuit-role",
+        "coordinate-restart",
         "bridge-partition",
         "frontier-dispatch",
         "frontier-route",
@@ -840,6 +860,7 @@ if __name__ == "__main__":
                 "long-history",
                 "sequence-experiment",
                 "circuit-role",
+                "coordinate-restart",
             )
             else 9,
             compute=bool(extra),

@@ -9,6 +9,13 @@ end
 
 InterventionMemory() = InterventionMemory(NamedTuple[],Dict(),Set(),Dict(),Dict(),nothing)
 
+function rebind_interventions!(memory)
+    empty!(memory.probes)
+    empty!(memory.primitive_schedule)
+    memory.prior_observation = nothing
+    return nothing
+end
+
 function component_probe(shape)
     left,top = anchor(shape)
     right = maximum(first,shape)
