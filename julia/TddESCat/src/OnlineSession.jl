@@ -857,6 +857,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         end
         program_note = nothing
         program_forecast = nothing
+        previous_program = program_cursor
+        program_attempt = nothing
         if programs_pending
             constrained = composing || !isnothing(spatial)
             remaining = isnothing(rec.limit) ? typemax(Int) : rec.limit - rec.sent_count
@@ -909,7 +911,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                     revision = isnothing(projected) ? active_id(candidate.next.chosen.model) : projected.version
                     key = (contract,state,revision)
                     key in program_attempts && continue
-                    push!(program_attempts,key)
+                    program_attempt = key
                     program_cursor = cursor
                     selected_program = candidate
                     break
@@ -935,11 +937,6 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                         program_note["goal"] = goal_program_record(program_forecast)
                         program_note["relation_contract"] =
                             program_relation_contract(program_cursor.program,program_forecast)
-                        if hasproperty(program_forecast,:contact_target)
-                            spatial_choice = nothing
-                        end
-                        goal_cursor = nothing
-                        policy_note = nothing
                     end
                 end
             end
@@ -978,6 +975,19 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             object_probes,policy=isnothing(relation_policy) ? nothing : relation_policy.proposal,
             continuing_policy=!isnothing(relation_policy_cursor),frontier)
         selected = arbitration.choice
+        program_selected = selected.source == :program
+        if program_selected
+            if !isnothing(program_forecast)
+                hasproperty(program_forecast,:contact_target) && (spatial_choice = nothing)
+                goal_cursor = nothing
+                policy_note = nothing
+            end
+        elseif !isnothing(program_cursor)
+            program_cursor = previous_program
+            program_attempt = nothing
+            program_note = nothing
+            program_forecast = nothing
+        end
         isnothing(arbitration.frontier_task) || (relation_choice = arbitration.frontier_task)
         if selected.action != item.action || selected.source in (:spatial,:intervention,:relation,:relation_policy)
             choice = findfirst(row->row.action == selected.action,decision.ranked)
@@ -1008,7 +1018,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         relation_proposal = if relation_tasks
             if !isnothing(relation_policy)
                 relation_policy.proposal
-            elseif !isnothing(relation_choice) && selected.action == relation_choice.action
+            elseif selected.source == :relation
                 relation_choice
             else
                 tests = prepare_relation_tests(relations,context,obs,decision.groups,item.action;meters,condition_view)
@@ -1032,7 +1042,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         isnothing(intervention_goal) || append!(plan_reads,intervention_goal.reads)
         isnothing(policy_counterexample) || push!(plan_reads,policy_counterexample.event)
         isnothing(policy_note) || append!(plan_reads,get(policy_note,"event_reads",String[]))
-        if !isnothing(program_cursor)
+        if program_selected
             program = program_cursor.program
             append!(plan_reads,program.sources)
             isnothing(program.available_after) || push!(plan_reads,program.available_after)
@@ -1086,7 +1096,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             end
         end
         id = command_id(rec.next_sequence)
-        plan = composing || !isnothing(program_cursor) || isnothing(config.planning) || isnothing(item.follow) ? nothing :
+        plan = composing || program_selected || isnothing(config.planning) || isnothing(item.follow) ? nothing :
             propose_condition_plan(item,id)
         if !isnothing(plan)
             policy_note = Dict("operation"=>"freeze_projected_policy","status"=>"ready",
@@ -1144,7 +1154,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             relation_macros = [ref for p in model.condition.atoms if p isa RelationPredicate for ref in p.macro_refs]
             decision_record["definition_refs"] = unique([model.rule.references;relation_macros])
         end
-        if !isnothing(program_cursor)
+        if program_selected
             decision_record["definition_refs"] = unique([decision_record["definition_refs"];program_cursor.program.definition])
         end
         if !isnothing(policy_task)
@@ -1165,6 +1175,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         command = submit_action!(rec,item.action["id"];args...,prediction)
         elapsed = (time_ns() - start)/1e9
         command["completion"] == "confirmed" || break
+        program_selected && !isnothing(program_attempt) && push!(program_attempts,program_attempt)
         referenced_definitions = get(decision_record,"definition_refs",String[])
         decision_depth = maximum((knowledge.definition_depths[id] for id in referenced_definitions); init=0)
         consumed_depth = max(consumed_depth,decision_depth)
@@ -1259,7 +1270,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             check_projection!(knowledge.projections,projected,sample.before,sample.after,effects,
                 local_feedback,limits.history_lengths;frozen)
         end
-        if !isnothing(program_cursor)
+        if program_selected
             unproved = !isnothing(program_forecast) && !projection_feedback.matching
             response = unproved ? "goal_projection_refuted" : program_feedback!(program_cursor,item,assessment,effects)
             if response == "advance" && !isnothing(program_forecast) && length(program_forecast.path) == 1
@@ -1300,6 +1311,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         end
         level_changed = obs.levels_completed != resulting.observation.levels_completed
         level_changed && (contact_pending = nothing)
+        level_changed && (program_cursor = nothing)
         level_changed && empty!(refuted_steps)
         level_changed && empty!(blocked_policies)
         new_scene = !isnothing(spatial) && level_changed

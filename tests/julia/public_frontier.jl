@@ -176,3 +176,17 @@ end
     @test kept.choice.action == ordinary.action && kept.choice.source == :spatial
     @test isnothing(kept.frontier_task)
 end
+
+@testset "A recovery task and a program can propose the same primitive" begin
+    action = Dict("id"=>2)
+    item = (;action,reason="revalidated_learned_program")
+    recovery = (;action,intent=:recover_confirmed_progress)
+    competing = TC.task_arbitration(item,nothing,nothing,recovery,nothing;
+        program=true,continuing_contact=false,conditional=false,object_probes=false)
+    @test competing.choice.action == action
+    @test competing.choice.source == :relation
+    @test any(candidate->candidate.source == :program && candidate.action == action,competing.candidates)
+    ordinary = TC.task_arbitration(item,nothing,nothing,(;action,intent=:test_delayed_effect),nothing;
+        program=true,continuing_contact=false,conditional=false,object_probes=false)
+    @test ordinary.choice.source == :program && ordinary.choice.action == action
+end
