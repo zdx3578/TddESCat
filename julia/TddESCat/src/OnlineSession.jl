@@ -800,12 +800,14 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         object_probes = !isnothing(visual) && !composing && 6 in obs.available_actions
         relation_tasks && knowledge.receipt.event != rec.before_ref &&
             error("Decision would consume a different grounded receipt")
+        ranking_started = time_ns()
         decision = ranked_public_actions(knowledge,obs,history,attempts,coordinates;
             composing,programs_pending,program_cursor,meters,object_probes,regions=knowledge.receipt)
         condition_view = relation_tasks ? relation_condition_view(knowledge,rec,history,obs) : nothing
         decision = merge(decision,(;condition_view))
         click_scene = object_probes ? intervention_scene(last(obs.frames),decision.groups) : NamedTuple[]
         isempty(decision.ranked) && break
+        spatial_started = time_ns()
         item = first(decision.ranked)
         policy_note = nothing
         goal_cursor = nothing
@@ -857,6 +859,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             end
             contact_pending = nothing
         end
+        programs_started = time_ns()
         program_note = nothing
         program_forecast = nothing
         previous_program = program_cursor
@@ -943,6 +946,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 end
             end
         end
+        tasks_started = time_ns()
         intervention = if object_probes
             choose_intervention(intervention_memory,click_scene,obs,decision.ranked,attempts;
                 explore=!frozen,goal_learning=relation_goals,confirmed_count=count,
@@ -984,6 +988,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 get(something(policy_note,Dict()),"status",nothing) == "ready",
             object_probes,policy=isnothing(relation_policy) ? nothing : relation_policy.proposal,
             continuing_policy=!isnothing(relation_policy_cursor),policy_yield,frontier)
+        prediction_started = time_ns()
         selected = arbitration.choice
         program_selected = selected.source == :program
         if program_selected
@@ -1119,10 +1124,18 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 "goal"=>"observed_condition_then_bound_effect","first"=>item.action,
                 "next"=>plan.target.action,"dependencies"=>plan.policy.dependencies)
         end
+        finished_decision = time_ns()
+        timing_seconds = (observation=(ranking_started-decision_started)/1e9,
+            action_ranking=(spatial_started-ranking_started)/1e9,
+            goal_and_spatial_planning=(programs_started-spatial_started)/1e9,
+            program_selection=(tasks_started-programs_started)/1e9,
+            task_arbitration=(prediction_started-tasks_started)/1e9,
+            action_binding_and_prediction=(finished_decision-prediction_started)/1e9)
         decision_record = Dict("command_id"=>id,"before_ref"=>rec.before_ref,"action"=>item.action,
             "reason"=>item.reason,"tried_after_previous"=>get(attempts,action_key(item.action),0),
-            "decision_seconds"=>(time_ns() - decision_started)/1e9,
-            "confirmed_to_decision_seconds"=>(time_ns() - ready_at)/1e9,
+            "decision_seconds"=>(finished_decision-decision_started)/1e9,
+            "confirmed_to_decision_seconds"=>(finished_decision-ready_at)/1e9,
+            "timing_seconds"=>timing_seconds,
             "candidates"=>[Dict("action"=>x.action,"reason"=>x.reason,"rank"=>x.rank,
                 "relation_reads"=>x.relation_reads) for x in decision.ranked],
             "coordinate_domain"=>Dict("visible_candidates"=>decision.click_count,
