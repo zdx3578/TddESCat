@@ -12,17 +12,27 @@ function witnessed_relation_steps(agenda,entries)
         push!(get!(Vector{NamedTuple},outcomes_after,prior),outcome)
     end
     for (index,row) in enumerate(agenda.samples)
-        row.state in ("GAME_OVER","WIN") && continue
-        isempty(row.effects.residual) || continue
+        row.state == "GAME_OVER" && continue
         i = row.preceding
         i == 0 && continue
-        key = get(by_sample,index,nothing)
-        isnothing(key) && continue
         left = agenda.samples[i]
         isempty(left.effects.residual) || continue
         earlier = get(by_sample,i,nothing)
         same_stage = !left.advanced && left.attempt == row.attempt && left.level == row.level
         same_stage || continue
+        if row.advanced
+            isnothing(earlier) && continue
+            left.next_context == row.context || continue
+            row.effects.action["id"] == 6 && isnothing(row.binding) && continue
+            haskey(by_ref,relation_ref(row)) || continue
+            descriptors[index] = policy_step(row,String[])
+            descriptors[i] = policy_step(left,agenda.producers[earlier].relations)
+            neighbors[index] = (;before=i,shared=Tuple{Int,Int}[])
+            continue
+        end
+        isempty(row.effects.residual) || continue
+        key = get(by_sample,index,nothing)
+        isnothing(key) && continue
         sharing = public_role_links(left.effects,row.effects)
         inferred_history = any(pair->first(pair) == index,get(agenda.delayed,left.context,[]))
         law = get(left.effects.public_delta,"available_actions",nothing)
@@ -50,8 +60,10 @@ end
 
 function policy_step(row,relations)
     role = isnothing(row.binding) ? nothing : row.binding.appearance
-    return Dict{String,Any}("id"=>row.effects.action["id"],"role"=>role,
+    descriptor = Dict{String,Any}("id"=>row.effects.action["id"],"role"=>role,
         "relations"=>relations,"wait"=>row.unchanged)
+    row.advanced && (descriptor["public_outcome"] = "advancement")
+    return descriptor
 end
 
 policy_step_key(step) = semantic_hash(step)
@@ -366,6 +378,11 @@ function verify_relation_episode(tree,episode,agenda,entries)
         producer = get(source_producer,index,nothing)
         descriptor = policy_step(row,isnothing(producer) ? [] : producer.relations)
         canonical_bytes(next.instruction.node["layout"]) == canonical_bytes(descriptor) || return false
+        if haskey(descriptor,"public_outcome")
+            before = by_ref[row.effects.before_id]
+            after = by_ref[relation_ref(row)]
+            after.levels_completed > before.levels_completed || return false
+        end
         if !isempty(next.instruction.shared)
             isnothing(earlier) && return false
             canonical_bytes(next.instruction.shared) ==
@@ -436,7 +453,63 @@ function policy_task_options(agenda,instruction,obs,decision;meters=())
     return options
 end
 
+function bind_policy_outcome(cursor,op,obs,decision,agenda)
+    op["public_outcome"] == "advancement" || return nothing
+    op["id"] in obs.available_actions || return nothing
+    previous = agenda.previous
+    (previous == 0 || isempty(cursor.observed)) && return nothing
+    prior = agenda.samples[previous]
+    preparation = relation_ref(prior)
+    context = relation_context(obs)
+    last(cursor.observed) == preparation && prior.next_context == context || return nothing
+    training = Set(cursor.policy.training)
+    available = Set(obs.available_actions)
+    history = relation_history_key(agenda,context,previous)
+    matches(row,action) = (op["id"] != 6 || !isnothing(row.binding) && row.binding.appearance == op["role"]) &&
+        matches_outcome_binding(row,action,decision.groups)
+    for item in decision.ranked
+        action = item.action
+        action["id"] == op["id"] || continue
+        key = action_key(action)
+        visits = get(agenda.visits,(context,key),Int[])
+        exact = filter(index->relation_history_key(agenda,context,agenda.samples[index].preceding) == history,visits)
+        if !isempty(exact)
+            all(index->agenda.samples[index].advanced,exact) || continue
+            recorded = findlast(exact) do index
+                row = agenda.samples[index]
+                relation_ref(row) in training && matches(row,action)
+            end
+            isnothing(recorded) && continue
+            scope, outcome, comparison = :observed_instance, agenda.samples[exact[recorded]], nothing
+        else
+            match = findlast(agenda.outcome_relations) do witness
+                observed = agenda.samples[witness.outcome]
+                relation_ref(observed) in training && Set(observed.available) == available &&
+                    matches(observed,action) || return false
+                live = frontier_prior(agenda,previous,length(witness.steps))
+                length(live) == length(witness.steps) <= length(cursor.observed) || return false
+                relation_ref.(agenda.samples[live]) == cursor.observed[end-length(live)+1:end] || return false
+                return all(index in agenda.producers[producer].support
+                    for (index,(_,producer)) in zip(live,witness.steps))
+            end
+            isnothing(match) && continue
+            witness = agenda.outcome_relations[match]
+            scope = :hypothesis
+            outcome, comparison = agenda.samples[[witness.outcome,witness.comparison]]
+        end
+        reads = unique([cursor.policy.training;cursor.policy.available_after;cursor.observed;
+            relation_refs(outcome);isnothing(comparison) ? String[] : relation_refs(comparison)])
+        obligation = (;definition=cursor.policy.definition,wait=false,sought=String[],shared=[],
+            public_outcome=op["public_outcome"],scope,preparation,outcome=relation_ref(outcome),
+            comparison=isnothing(comparison) ? nothing : relation_ref(comparison))
+        return (;action,intent=:execute_relation_policy,tests=NamedTuple[],reads,obligation)
+    end
+    return nothing
+end
+
 function bind_relation_instruction(cursor,instruction,obs,decision,agenda;meters=())
+    op = instruction.node["layout"]
+    haskey(op,"public_outcome") && return bind_policy_outcome(cursor,op,obs,decision,agenda)
     options = policy_task_options(agenda,instruction,obs,decision;meters)
     sharing = instruction.shared
     if !isempty(sharing)
@@ -513,7 +586,9 @@ function confirm_relation_policy!(selection,agenda,feedback,after)
     row = last(agenda.samples)
     push!(cursor.observed,relation_ref(row))
     task = selection.proposal
-    success = if task.obligation.wait
+    success = if get(task.obligation,:public_outcome,nothing) == "advancement"
+        row.advanced
+    elseif task.obligation.wait
         row.unchanged
     else
         !isnothing(feedback.feedback) && feedback.feedback.result == :established

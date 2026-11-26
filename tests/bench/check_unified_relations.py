@@ -2,18 +2,30 @@
 
 import json
 from concurrent.futures import ThreadPoolExecutor
+from hashlib import sha256
 from pathlib import Path
 from types import SimpleNamespace
 import subprocess
 import sys
 import tomllib
+from unittest.mock import patch
 
+from tddesc_tools import public_run
 from tddesc_tools.isolation import environment_server
 from tddesc_tools.public_run import public_settings, supervise
 from tests.bench.check_evidence import solver_process
-from tddesc_tools.run import append_assertion, read_task, runtime_paths, write_json
+from tddesc_tools.run import (
+    append_assertion,
+    julia_command,
+    read_task,
+    runtime_paths,
+    write_json,
+)
 from tests.bench.check_online import online_config
 from tests.bench.measurement_audit import receipts
+
+
+OUTCOME_POLICY_MODES = ("outcome-policy", "outcome-policy-failure")
 
 
 FIXTURE = """
@@ -48,6 +60,7 @@ class Fixture(ARCBaseGame):
             "advancement-transfer": [6], "advancement-refutation": [5, 6], "history-refinement": [1, 4],
             "history-continuation": [1, 4], "history-matrix": [1, 4], "history-receipt": [1, 4], "long-history": [1, 4],
             "outcome-preparation": [5, 7], "outcome-chain": [5, 7], "role-outcome": [5, 6],
+            "outcome-policy": [1, 5, 6, 7], "outcome-policy-failure": [1, 5, 6, 7],
             "primitive-outcome": [2, 5], "outcome-relation-chain": [2, 5, 7],
             "bridge-partition": [5], "concrete-object-followup": [5, 6],
             "frontier-dispatch": [1, 2], "policy-yield": [1, 2],
@@ -73,6 +86,13 @@ class Fixture(ARCBaseGame):
             frame[10:13, 8:11] = 0
             frame[10:13, 38:41] = 4
             levels.append(Level(sprites=[Sprite(frame, name="board")]))
+        if MODE in ("outcome-policy", "outcome-policy-failure"):
+            levels = []
+            for left in (8, 38, 23):
+                board = frame.copy()
+                board[10:13, :] = 0
+                board[10:13, left:left+3] = 4
+                levels.append(Level(sprites=[Sprite(board, name="board")]))
         super().__init__(GAME, levels,
             camera=Camera(width=64, height=64), available_actions=actions[MODE], seed=seed)
 
@@ -156,6 +176,16 @@ class Fixture(ARCBaseGame):
                 pixels[40:42, 44:46] = 7
             elif pixels[40, 44] == 7 and pixels[self.action.data["y"], self.action.data["x"]] == 4:
                 self.next_level()
+        elif MODE in ("outcome-policy", "outcome-policy-failure"):
+            if action == 5:
+                pixels[40:42, 44:46] = 7
+            elif action == 7:
+                pixels[40:42, 44:46] = 2
+            elif action == 6 and pixels[40, 44] == 7 and pixels[self.action.data["y"], self.action.data["x"]] == 4:
+                if MODE == "outcome-policy-failure" and self.level_index == 2:
+                    self.lose()
+                else:
+                    self.next_level()
         elif MODE in ("primitive-outcome", "outcome-relation-chain"):
             if action == 5:
                 pixels[40:42, 44:46] = 7
@@ -304,6 +334,7 @@ def capture(
     )
     compute_enabled = compute or mode in ("history-dispatch", "circuit-role")
     extended_timeout = compute_enabled or mode in (
+        *OUTCOME_POLICY_MODES,
         "outcome-preparation",
         "outcome-chain",
         "role-outcome",
@@ -381,7 +412,30 @@ def capture(
             "sequence-experiment": "sequence_experiment_public.jl",
             "mixed-sequence": "sequence_experiment_public.jl",
         }
-        if mode in direct_tests:
+        if mode in OUTCOME_POLICY_MODES:
+            script = root / "tests/julia/outcome_policy_public.jl"
+            paths = public_settings(root, agent, tomllib.loads(agent.read_text()))
+            original = public_run.solver_command
+
+            def outcome_solver(base, toolchain, settings, store, allowed, **options):
+                command = julia_command(
+                    base, toolchain, script, str(settings), mode, str(store), str(base)
+                )
+                return original(
+                    base,
+                    toolchain,
+                    settings,
+                    store,
+                    (*allowed, script),
+                    command=command,
+                    **options,
+                )
+
+            with patch.object(public_run, "solver_command", outcome_solver):
+                assert supervise(root, agent, public, expected_paths=paths) == 0, (
+                    public / "solver.log"
+                ).read_text()
+        elif mode in direct_tests:
             name = direct_tests[mode]
             script = root / "tests/julia" / name
             paths = public_settings(root, agent, tomllib.loads(agent.read_text()))
@@ -462,6 +516,38 @@ def observed_steps(public):
 
 
 def verify(mode, public):
+    if mode in OUTCOME_POLICY_MODES:
+        record = read(public / "outcome-policy.json")
+        trace = receipts(public)
+        event, outcome = trace[record["event"]]
+        preparing, prepared = trace[event["before_ref"]]
+        assert event["action"] == {"id": 6, "x": 24, "y": 11}
+        assert preparing["action"] == {"id": 5}
+        assert prepared["frame"][-1][40][44] == 7 and prepared["levels_completed"] == 2
+        expected = "WIN" if mode == "outcome-policy" else "GAME_OVER"
+        assert outcome["state"] == expected
+        assert record["prediction"]["guard_truth"] == "unknown"
+        assert record["obligation"]["scope"] == "hypothesis"
+        assert record["policy"] == (
+            "stopped_at_public_advance" if expected == "WIN" else "withdrawn"
+        )
+        assert len(record["training_outcomes"]) == 2
+        for ref in record["training_outcomes"]:
+            training_event, training_after = trace[ref]
+            training_prep, training_before = trace[training_event["before_ref"]]
+            omitted, unprepared = trace[training_prep["before_ref"]]
+            assert training_event["action"] == omitted["action"]
+            assert unprepared["frame"][-1][40][44] == 2
+            assert training_before["frame"][-1][40][44] == 7
+            assert training_before["levels_completed"] == unprepared["levels_completed"]
+            assert training_after["levels_completed"] == training_before["levels_completed"] + 1
+        digest = record["publication"]
+        raw = (public / "publication" / (digest + ".json")).read_bytes()
+        assert sha256(raw).hexdigest() == digest
+        release = json.loads(raw)
+        assert release["calls"] and release["semantic_context"]["consumer"] == "policy-semantics"
+        assert record["obligation"]["comparison"] in record["prediction"]["event_reads"]
+        return [*record["training_outcomes"], preparing["event_id"], event["event_id"]]
     if mode == "context-reprobe":
         record = read(public / "context-reprobe.json")
         trace = receipts(public)
@@ -977,6 +1063,7 @@ def main(config, run):
         "role-outcome",
         "primitive-outcome",
         "outcome-relation-chain",
+        *OUTCOME_POLICY_MODES,
         "history-refinement",
         "history-dispatch",
         "circuit-role",
@@ -1022,6 +1109,7 @@ if __name__ == "__main__":
             budget="unlimited"
             if mode
             in (
+                *OUTCOME_POLICY_MODES,
                 "progress-restart",
                 "restart-choices",
                 "history-refinement",

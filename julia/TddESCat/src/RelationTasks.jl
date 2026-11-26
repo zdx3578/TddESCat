@@ -277,7 +277,9 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
         observed = sample.next_context == proposal.obligation.expected &&
             sample.advanced == proposal.obligation.advanced && sample.state == "NOT_FINISHED"
         feedback = merge(feedback,(result=observed ? :established : :refuted,))
-    elseif !isnothing(proposal) && proposal.intent in (:probe_observed_advancement,:continue_outcome_relation)
+    elseif !isnothing(proposal) && (proposal.intent in (:probe_observed_advancement,:continue_outcome_relation) ||
+            proposal.intent == :execute_relation_policy &&
+            get(proposal.obligation,:public_outcome,nothing) == "advancement")
         feedback = merge(feedback,(result=sample.advanced ? :established : :refuted,))
         if proposal.intent == :probe_observed_advancement && !sample.advanced
             transfer = proposal.obligation.transfer
@@ -420,6 +422,7 @@ function matches_outcome_binding(row,action,groups)
     id,x,y = action_key(action)
     id == row.effects.action["id"] || return false
     id == 6 || return true
+    isnothing(row.binding) && return false
     support = point_component(groups,(x,y))
     return !isnothing(support) && click_profile(support,(x,y)) == row.binding.appearance
 end
@@ -978,6 +981,12 @@ function relation_prediction(rec,item,prediction,task;role_proof=nothing,resourc
         for (channel,value) in only(task.contracts).expected
             values["relation-" * channel] = value
         end
+    end
+    if task.intent == :execute_relation_policy &&
+            get(task.obligation,:public_outcome,nothing) == "advancement" &&
+            task.obligation.scope == :observed_instance
+        values["public_advancement"] = true
+        admitted = true
     end
     if isnothing(prediction)
         return (before_ref=rec.before_ref,payload=Dict{String,Any}(

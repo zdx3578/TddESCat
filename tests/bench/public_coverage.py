@@ -92,8 +92,11 @@ class PublicCoverage:
                     counters["effect_unresolved"] += 1
             else:
                 counters["without_concrete_contract"] += 1
-        if task.get("intent") in PUBLIC_OUTCOME_TASKS:
-            obligation = task.get("obligation") or {}
+        obligation = task.get("obligation") or {}
+        if task.get("intent") in PUBLIC_OUTCOME_TASKS or (
+            task.get("intent") == "execute_relation_policy"
+            and obligation.get("public_outcome") == "advancement"
+        ):
             sources = {obligation.get("preparation")}
             sources.update(row["event"] for row in obligation.get("chain", ()))
             sources.discard(event["event_id"])
