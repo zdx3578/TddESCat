@@ -5,6 +5,7 @@ using SHA
 using Dates
 import HTTP
 import JSON
+import Preferences
 
 include("Config.jl")
 include("PublicAPI.jl")
@@ -61,6 +62,18 @@ include("PlanningAdapter.jl")
 include("QueryAbstraction.jl")
 include("ProjectedPlanning.jl")
 include("GoalRegression.jl")
+
+const PRECOMPILE_ONLINE = Preferences.@load_preference("precompile_online",false)
+
+function precompile_online_methods()
+    entry = NamedTuple{(:event,:observation),Tuple{Dict{String,Any},PublicObservation}}
+    options = NamedTuple{(:knowledge,:frozen,:backends),Tuple{OnlineKnowledge,Bool,Dict{String,ComputeWorker}}}
+    return precompile(Tuple{typeof(Core.kwcall),options,typeof(run_online!),Recorder,entry,RunConfig,String})
+end
+
+if PRECOMPILE_ONLINE && ccall(:jl_generating_output,Cint,()) == 1
+    precompile_online_methods()
+end
 
 export load_run_config, open_client, list_games, screen_click, with_run, Recorder
 export open_scorecard!, reset!, submit_action!, close_scorecard!, recover_run, replay_run!

@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+from time import monotonic
 import tomllib
 
 from tddesc_tools.public_run import absolute_compute_settings, atomic_json
@@ -155,6 +156,15 @@ def verify_compute_profile(template, runtime):
     }
 
 
+def prepare_online_runtime(runtime):
+    command = julia_command(ROOT, runtime, ROOT / "scripts/prepare_online.jl")
+    started = monotonic()
+    metadata = json.loads(
+        subprocess.check_output(command, cwd=ROOT, env=julia_environment(runtime))
+    )
+    return {**metadata, "prepare_seconds": monotonic() - started}
+
+
 def evaluate_game(case, game, runtime):
     result = evaluate_isolated(case, game, runtime)
     failure = None if result.get("verified") else unconfirmed_transport(case)
@@ -192,6 +202,11 @@ def campaign(args):
 
     output = args.output.resolve()
     template = ROOT / "config/v13_public25.toml"
+    online_runtime = (
+        prepare_online_runtime(runtime)
+        if getattr(args, "precompile_online", False)
+        else None
+    )
     compute = verify_compute_profile(template, runtime)
     output.mkdir(parents=True)
     engine, policy = prepare_cases(output, games, template, suite, bundle)
@@ -207,6 +222,7 @@ def campaign(args):
             "solver_source_sha256": worktree_digest(ROOT, sources_only=True),
             "engine": build_identity(ROOT, engine),
             "compute": compute,
+            "online_runtime": online_runtime,
             "policy_sha256": sha256_file(policy),
             "profile_sha256": sha256_file(template),
             "catalog_sha256": sha256_file(catalog),
@@ -246,6 +262,11 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--bundle", type=Path)
     parser.add_argument("--workers", type=int, default=25)
+    parser.add_argument(
+        "--precompile-online",
+        action="store_true",
+        help="prepare the Julia online control method before launching the games",
+    )
     return campaign(parser.parse_args())
 
 

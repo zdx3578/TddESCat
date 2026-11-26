@@ -33,3 +33,5 @@ __pycache__/
 .DS_Store
 /_vendor/
 /python/compute/.venv/
+/julia/TddESCat/LocalPreferences.toml
+/julia/TddESCat/JuliaLocalPreferences.toml

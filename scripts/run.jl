@@ -21,7 +21,8 @@ function capture(config, public_dir; supervised=false, collect_only=false)
         prepared = nothing
         frozen = collect_only || get(config.execution,"frozen_evaluation",false)
         if !isnothing(config.learning)
-            TddESCat.atomic_json(TddESCat.store_path(store,"learning","session.json"),Dict("frozen"=>frozen))
+            TddESCat.atomic_json(TddESCat.store_path(store,"learning","session.json"),Dict(
+                "frozen"=>frozen,"native_online_precompile"=>TddESCat.PRECOMPILE_ONLINE))
         end
         if !isempty(prior.trials)
             append!(knowledge.trials,prior.trials)

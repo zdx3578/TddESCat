@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "be4bc06d5bf19ae2cbb0707e099cb954142901a4"
+project_hash = "0c485c7bdbe8a215730e818e9658d5adee2559b9"
 
 [[deps.ACSets]]
 deps = ["AlgebraicInterfaces", "Base64", "CompTime", "DataStructures", "JSON3", "MLStyle", "PEG", "Permutations", "Pkg", "PrettyTables", "Random", "Reexport", "SHA", "StaticArrays", "StructEquality", "StructTypes", "Tables"]
@@ -992,7 +992,7 @@ uuid = "a4e569a6-e804-4fa4-b0f3-eef7a1d5b13e"
 version = "1.10.0"
 
 [[deps.TddESCat]]
-deps = ["ACSets", "AlgebraicRewriting", "Catlab", "Compose", "Dates", "GATlab", "Galley", "HTTP", "JSON", "PDDL", "SHA", "SymbolicPlanners", "TOML"]
+deps = ["ACSets", "AlgebraicRewriting", "Catlab", "Compose", "Dates", "GATlab", "Galley", "HTTP", "JSON", "PDDL", "Preferences", "SHA", "SymbolicPlanners", "TOML"]
 path = "."
 uuid = "a2579a8f-6581-4de1-88f1-71cacdeaf14e"
 version = "0.1.0"
