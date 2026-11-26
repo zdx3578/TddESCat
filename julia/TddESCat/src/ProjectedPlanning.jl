@@ -413,7 +413,12 @@ function choose_observed_goal_step(rec,knowledge,goal,history,decision,pending,m
     atomic_json(store_path(rec.store,"plans",id * ".json"),proof)
     note["status"] = result.status
     note["artifact"] = "plans/" * id * ".json"
-    isnothing(result.cursor) && return (item=nothing,cursor=nothing,note)
+    if isnothing(result.cursor)
+        experiment = choose_goal_experiment(goal,knowledge,rec.observation,history,decision,
+            max_action_coordinates,meters)
+        return isnothing(experiment) ? (item=nothing,cursor=nothing,note) :
+            (item=experiment.item,cursor=nothing,note=experiment.note)
+    end
     checked = live_goal_step(result.cursor,knowledge,decision,rec.observation)
     if isnothing(checked.item)
         note["status"] = checked.reason

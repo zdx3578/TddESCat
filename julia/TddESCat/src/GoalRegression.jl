@@ -1,15 +1,23 @@
 const GOAL_REGRESSION_BODY = ("public-relationship-policy-v1","find_unsatisfied_relation",
     "bind_verified_producer","recheck_each_transition","continue_to_observed_goal")
 
+function projection_history_width(feature)
+    kind,value = feature
+    kind == "history" && return value
+    kind == "joint" && return maximum(projection_history_width,value;init=0)
+    return 0
+end
+
 function goal_history_width(knowledge)
     width = maximum((atom isa HistorySuffix ? length(atom.actions) : atom isa RecentAction ? 1 : 0
         for model in knowledge.active for atom in model.condition.atoms);init=1)
-    return maximum((last(row.feature) for scope in values(knowledge.projections.scopes)
-        for row in scope.conditions if first(row.feature) == "history");init=width)
+    return maximum((projection_history_width(row.feature) for scope in values(knowledge.projections.scopes)
+        for row in scope.conditions);init=width)
 end
 
 function goal_producer_needs(knowledge,goal,observation,history,coordinates,meters)
     view = public_action_candidates(observation,coordinates)
+    facts = observed_goal_relations(goal,view.frame)
     needs = NamedTuple[]
     for model in knowledge.active
         isempty(model.condition.atoms) && continue
@@ -21,10 +29,14 @@ function goal_producer_needs(knowledge,goal,observation,history,coordinates,mete
             gate.truth == proven && continue
             patch = projection_patch((;model,base.fragments),view.frame)
             isnothing(patch) && continue
-            goal_truth(goal,patch.frame) == proven || continue
+            after = observed_goal_relations(goal,patch.frame)
+            establishes = [key for key in keys(facts) if getproperty(facts,key) != proven &&
+                getproperty(after,key) == proven]
+            isempty(establishes) && continue
             reads = unique([model.rule.training_event;model.condition.support;model.counterexamples])
-            push!(needs,(rule=model.rule.id,action,truth=gate.truth,
-                conditions=predicate_record.(model.condition.atoms),reads))
+            push!(needs,(rule=model.rule.id,action,truth=gate.truth,establishes,
+                conditions=predicate_record.(model.condition.atoms),
+                effect=plan_channels(base.fragments),counterexamples=copy(model.counterexamples),reads))
         end
     end
     return needs
@@ -32,14 +44,16 @@ end
 
 function program_establishes_goal(knowledge,goal,obs,history,cursor,coordinates,meters,limit,needs)
     initial = observed_goal_relations(goal,last(obs.frames))
-    missing = [key for key in keys(initial) if getproperty(initial,key) == disproven]
-    all(!=(unknown_truth),initial) || return nothing
+    missing = [key for key in keys(initial) if getproperty(initial,key) != proven]
     width = goal_history_width(knowledge)
     tail = nothing
     certificate = nothing
-    function preserves(_,_,_,frame)
+    reopened = Set{Symbol}()
+    function track_obligations(_,_,_,frame)
         facts = observed_goal_relations(goal,frame)
-        return all(key->getproperty(initial,key) != proven || getproperty(facts,key) == proven,keys(initial))
+        union!(reopened,(key for key in keys(initial) if getproperty(initial,key) == proven &&
+            getproperty(facts,key) != proven))
+        return true
     end
     function reaches(index,frame,recent)
         facts = observed_goal_relations(goal,frame)
@@ -49,7 +63,7 @@ function program_establishes_goal(knowledge,goal,obs,history,cursor,coordinates,
             cue_color=goal.cue_color,distance=goal.pixel_distance)
         if enough
             certificate = (;body=GOAL_REGRESSION_BODY,initial,missing,established=fulfilled,actual=facts,
-                binding,producer=nothing,reads=String[])
+                binding,producer=nothing,reads=String[],reopened=sort!(collect(reopened)))
             return true
         end
         producer = nothing
@@ -60,8 +74,13 @@ function program_establishes_goal(knowledge,goal,obs,history,cursor,coordinates,
                 result = candidate_evaluation(active,frame,view.groups,view.enclosure,need.action,recent;meters)
                 result.truth == proven || continue
                 projection = projected_contract(knowledge.projections,(model=active,fragments=result.fragments),frame,recent)
-                projection_allowed(projection) && goal_truth(goal,projection.frame) == proven || continue
-                producer = (rule=need.rule,action=need.action,conditions=need.conditions,reads=need.reads)
+                projection_allowed(projection) || continue
+                successors = observed_goal_relations(goal,projection.frame)
+                establishes = filter(key->getproperty(facts,key) != proven &&
+                    getproperty(successors,key) == proven,need.establishes)
+                isempty(establishes) && continue
+                producer = (rule=need.rule,action=need.action,conditions=need.conditions,
+                    establishes,reads=need.reads)
                 break
             end
         end
@@ -75,14 +94,89 @@ function program_establishes_goal(knowledge,goal,obs,history,cursor,coordinates,
         tail = trace
         reads = isnothing(producer) ? String[] : producer.reads
         certificate = (;body=GOAL_REGRESSION_BODY,initial,missing,established=fulfilled,actual=facts,
-            binding,producer,reads)
+            binding,producer,reads,reopened=sort!(collect(reopened)))
         return true
     end
     path = forecast_program(knowledge,obs,history,cursor,coordinates,meters,
-        preserves,reaches,limit)
+        track_obligations,reaches,limit)
     isnothing(path) && return nothing
     return (contract="establishes_goal_relation",target=goal.marker,role=nothing,path,
         continuation=tail,regression=certificate)
+end
+
+function choose_goal_experiment(goal,knowledge,observation,history,decision,coordinates,meters)
+    needs = goal_producer_needs(knowledge,goal,observation,history,coordinates,meters)
+    isempty(needs) && return nothing
+    for item in decision.ranked
+        item.rejected && continue
+        relevant = filter(row->row.truth == unknown_truth && row.action == item.action,needs)
+        isempty(relevant) && continue
+        prediction = item.experiment
+        if isnothing(prediction)
+            # Two plausible outcomes of an unresolved gate. A counterexample is
+            # required before spending a task action to distinguish the gate.
+            witnessed = filter(row->!isempty(row.counterexamples) && !isnothing(row.effect),relevant)
+            isempty(witnessed) && continue
+            prediction = (hypotheses=[(rule=row.rule,if_applicable=row.effect,
+                if_unproved="test_whether_relation_is_established",opposed_by=row.counterexamples)
+                for row in witnessed],)
+        end
+        reads = unique([ref for row in relevant for ref in row.reads])
+        return (item=merge(item,(reason="discriminate_goal_relation",)),
+            note=Dict("operation"=>"discriminate_goal_relation","status"=>"experimental",
+                "conditions"=>relevant,"event_reads"=>reads,"predictions"=>prediction))
+    end
+    return nothing
+end
+
+"""Record the verified contact producer and the preconditions its route is serving."""
+function advancement_task(goal,control,spatial,observation,choice)
+    (isnothing(goal) || isnothing(choice)) && return nothing
+    contact = get(choice,:contact,nothing)
+    isnothing(contact) && return nothing
+    contact.progress.model == goal.model && contact.progress.judgment == :progress ||
+        return nothing
+    contact.conditions.judgment == :admitted || return nothing
+    contact.point in goal.targets || return nothing
+    continuation = control.continuation
+    next_origin, next_action = if !isnothing(continuation)
+        last(continuation.steps).from,last(continuation.steps).action
+    elseif choice.executes_contact
+        choice.role,choice.id
+    else
+        return nothing
+    end
+    delta, delta_reads = measured_offset(spatial,next_action)
+    frame = last(observation.frames)
+    current = visual_value(frame,control.field)
+    signature = isnothing(current) ? nothing : contact_signature(current,contact.site.value)
+    admission = isnothing(signature) ? :unknown :
+        contact_judgment(fit_contact_guards(control.contact_samples),signature,goal.facts,next_action)
+    requirements = [("approach_contact",choice.role == next_origin ? :proven : :missing),
+        ("admissible_contact",admission == :admitted ? :proven : admission == :blocked ? :missing : :unknown)]
+    producer = (relation=goal.relation,action=next_action,origin=next_origin,target=contact.point,
+        displacement=delta,guard=contact.conditions.rules,advancement=contact.progress.rules,
+        read_events=unique([first(delta_reads);contact.conditions.reads;contact.progress.reads]))
+    reads = unique([goal.reads;producer.read_events;choice.reads])
+    return (goal=learned_goal_record(goal),producer,requirements,
+        intent=any(row->last(row) != :proven,requirements) ? :establish_preconditions : :apply_producer,
+        recheck=choice.executes_contact,reads)
+end
+
+function advancement_feedback(task, before, after, sample)
+    isnothing(task) && return nothing
+    crossed = after.observation.levels_completed > before.observation.levels_completed
+    bound_contact = !isnothing(sample) && sample.point == task.producer.target &&
+        sample.action == task.producer.action
+    outcome = if task.recheck && bound_contact
+        crossed ? :established : sample.outcome
+    elseif crossed || task.recheck
+        :unresolved
+    else
+        :continue
+    end
+    return (;outcome,event=after.event["event_id"],observed=(
+        advanced=crossed, won=after.observation.state == "WIN", contact=bound_contact))
 end
 
 function contact_goal_domain(control,spatial,obs)
@@ -105,7 +199,7 @@ function feasible_contact(domain,frame,previous,event;target=nothing)
     (isnothing(here) || isnothing(signal)) && return nothing
     if !isnothing(control.resource)
         reading = read_meter(frame,control.resource)
-        (isnothing(reading) || reading < max(1,control.rate)) && return nothing
+        (isnothing(reading) || reading <= 0) && return nothing
     end
     candidates = NamedTuple[]
     facts = ContactFacts(domain.facts.remaining,previous,domain.facts.domain_reads)

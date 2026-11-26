@@ -101,7 +101,7 @@ def identity(box, fill, border, source, blank, from_end):
     return sha256(json.dumps(model, separators=(",", ":")).encode()).hexdigest()
 
 
-def replay_meters(events):
+def replay_meters(events, *, before_readings=None):
     faces, bindings, result = {}, {}, {}
     for ref, (event, after) in events.items():
         before_ref = event["before_ref"]
@@ -110,12 +110,21 @@ def replay_meters(events):
             bindings.clear()
             continue
         _, before = events[before_ref]
+        start = before["frame"][-1]
+        if before_readings is not None:
+            before_readings[ref] = {
+                identity(box, fill, border, source, blank, end): reading
+                for box, (blank, end, _) in bindings.items()
+                for fill, border, source in (faces[box],)
+                if (reading := value(read_colors(start, box, border), fill, blank, end))
+                is not None
+            }
         if before["levels_completed"] != after["levels_completed"]:
             faces.clear()
             bindings.clear()
             result[ref] = {}
             continue
-        start, *tail = before["frame"][-1], *after["frame"]
+        tail = after["frame"]
         for box, fill, border in full_faces(start):
             faces.setdefault(box, (fill, border, before_ref))
         changes = {}
