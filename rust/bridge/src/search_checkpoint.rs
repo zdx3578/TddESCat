@@ -9,7 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-const SCHEMA_VERSION: u8 = 2;
+const SCHEMA_VERSION: u8 = 3;
 const MIN_SEARCH_BETWEEN_SAVES: Duration = Duration::from_secs(30);
 const SEARCH_TO_SAVE_RATIO: u32 = 12;
 

@@ -164,7 +164,7 @@ end
     @test isdir(frontier)
     pointer = TC.read_json(joinpath(frontier,"latest.json"))
     snapshot = only(filter(name->endswith(name,".json.zst"),readdir(frontier;join=true)))
-    @test pointer["schema_version"] == 2
+    @test pointer["schema_version"] == 3
     @test pointer["bytes"] == filesize(snapshot)
     @test open(io->read(io,4),snapshot) == UInt8[0x28,0xb5,0x2f,0xfd]
     restored_output = joinpath(RUN,"restored-frontier")

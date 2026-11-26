@@ -52,7 +52,19 @@ struct VarShape<F: LanguageFamily, O: StitchOp> {
 /// Per var, its candidate expansion shapes in enode first-appearance order.
 type VarShapes<F, O> = Vec<VarShape<F, O>>;
 
-type SeenKey = (Box<[u32]>, Box<[u32]>);
+type SeenKey = Box<[u8]>;
+
+fn push_seen_id(bytes: &mut Vec<u8>, mut value: u32) {
+    while value >= 128 {
+        bytes.push((value as u8 & 127) | 128);
+        value >>= 7;
+    }
+    bytes.push(value as u8);
+}
+
+fn pack_frozen(frozen: &[bool]) -> Box<[u8]> {
+    frozen.chunks(8).map(|chunk| chunk.iter().enumerate().fold(0, |packed, (index, &flag)| packed | (u8::from(flag) << index))).collect()
+}
 
 /// Tracks already-explored canonical patterns to dedupe successors during
 /// search. Accumulates hit count and time spent so the host loop can report
@@ -68,7 +80,7 @@ type SeenKey = (Box<[u32]>, Box<[u32]>);
 #[serde(bound(serialize = "F::Discriminant<OpWithVar<O>>: serde::Serialize", deserialize = "F::Discriminant<OpWithVar<O>>: serde::Deserialize<'de>"))]
 pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
     #[serde(with = "map_as_pairs")]
-    map: FxHashMap<SeenKey, Box<[bool]>>,
+    map: FxHashMap<SeenKey, Box<[u8]>>,
     #[serde(with = "map_as_pairs")]
     symbols: FxHashMap<F::Discriminant<OpWithVar<O>>, u32>,
     traversal: Vec<Id>,
@@ -76,10 +88,10 @@ pub struct SeenTracker<F: LanguageFamily, O: StitchOp> {
     pub time: Duration,
 }
 
-/// True iff every var frozen in `a` is also frozen in `b` (i.e. `a ⊆ b`, so `a`
-/// is at least as flexible). Masks for the same pattern share a length.
-fn frozen_subset(a: &[bool], b: &[bool]) -> bool {
-    a.iter().zip(b).all(|(&fa, &fb)| !fa || fb)
+/// The stored mask packs eight variables per byte with zero padding. Compare
+/// only the variable indices that occur in the supplied mask, as before.
+fn frozen_subset(a: &[u8], b: &[bool]) -> bool {
+    b.iter().enumerate().all(|(index, &flag)| flag || a.get(index / 8).is_none_or(|byte| byte & (1 << (index % 8)) == 0))
 }
 
 impl<F: LanguageFamily, O: StitchOp> Default for SeenTracker<F, O> {
@@ -120,21 +132,26 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
         // The node layout in RevExpr reflects expansion order. The sequence of
         // exact interned discriminants and arities reconstructs the ordered
         // tree, including variable labels, independently of that layout.
-        let mut term = Vec::with_capacity(pattern.pattern.nodes.len() * 2);
+        let mut key = Vec::with_capacity(pattern.pattern.nodes.len() * 2 + sorts.len());
         self.traversal.push(Id::from(0));
         while let Some(id) = self.traversal.pop() {
             let node = &pattern.pattern[id];
             let next = self.symbols.len();
             let symbol = self.symbols.entry(node.discriminant()).or_insert_with(|| u32::try_from(next).expect("too many seen pattern symbols"));
-            term.push(*symbol);
-            term.push(u32::try_from(node.children().len()).expect("pattern arity overflow"));
+            push_seen_id(&mut key, *symbol);
+            push_seen_id(&mut key, u32::try_from(node.children().len()).expect("pattern arity overflow"));
             self.traversal.extend(node.children().iter().rev().copied());
         }
-        let key = (term.into_boxed_slice(), sorts.into_boxed_slice());
+        // An ordered preorder tree ends when its declared child arities are
+        // consumed. The remaining self-delimiting integers are the sort list.
+        for sort in sorts {
+            push_seen_id(&mut key, sort);
+        }
+        let key = key.into_boxed_slice();
         let skip = match self.map.get(&key) {
             Some(existing) if frozen_subset(existing, &frozen) => true,
             _ => {
-                self.map.insert(key, frozen.into_boxed_slice());
+                self.map.insert(key, pack_frozen(&frozen));
                 false
             }
         };
@@ -1203,8 +1220,9 @@ mod tests {
 
 mod map_as_pairs {
     use rustc_hash::FxHashMap;
+    use serde::de::{Error, SeqAccess, Visitor};
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
-    use std::hash::Hash;
+    use std::{fmt, hash::Hash, marker::PhantomData};
 
     pub fn serialize<K: Serialize, V: Serialize, S: Serializer>(value: &FxHashMap<K, V>, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.collect_seq(value)
@@ -1216,12 +1234,55 @@ mod map_as_pairs {
         V: Deserialize<'de>,
         D: Deserializer<'de>,
     {
-        let pairs = Vec::<(K, V)>::deserialize(deserializer)?;
-        let count = pairs.len();
-        let map = pairs.into_iter().collect::<FxHashMap<_, _>>();
-        if map.len() != count {
-            return Err(serde::de::Error::custom("duplicate checkpoint keys"));
+        struct Entries<K, V>(PhantomData<(K, V)>);
+
+        impl<'de, K, V> Visitor<'de> for Entries<K, V>
+        where
+            K: Deserialize<'de> + Eq + Hash,
+            V: Deserialize<'de>,
+        {
+            type Value = FxHashMap<K, V>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("a sequence of distinct checkpoint key-value pairs")
+            }
+
+            fn visit_seq<A: SeqAccess<'de>>(self, mut entries: A) -> Result<Self::Value, A::Error> {
+                let mut map = FxHashMap::default();
+                while let Some((key, value)) = entries.next_element()? {
+                    if map.insert(key, value).is_some() {
+                        return Err(A::Error::custom("duplicate checkpoint keys"));
+                    }
+                }
+                Ok(map)
+            }
         }
-        Ok(map)
+
+        deserializer.deserialize_seq(Entries(PhantomData))
+    }
+}
+
+#[cfg(test)]
+mod seen_storage_tests {
+    use super::{frozen_subset, pack_frozen, push_seen_id};
+
+    #[test]
+    fn packed_frozen_sets_preserve_the_exact_dominance_test() {
+        let first = (0..67).map(|index| index % 3 == 0).collect::<Vec<_>>();
+        let second = (0..67).map(|index| index % 2 != 0).collect::<Vec<_>>();
+        for left in [&first[..0], &first[..7], &first[..8], &first[..9], &first[..], &second[..]] {
+            for right in [&second[..0], &second[..8], &second[..9], &second[..], &first[..]] {
+                assert_eq!(frozen_subset(&pack_frozen(left), right), left.iter().zip(right).all(|(&a, &b)| !a || b));
+            }
+        }
+    }
+
+    #[test]
+    fn packed_ids_are_unambiguous_at_the_byte_boundaries() {
+        let mut bytes = Vec::new();
+        for id in [0, 127, 128, 16_384, u32::MAX] {
+            push_seen_id(&mut bytes, id);
+        }
+        assert_eq!(bytes, [0, 127, 128, 1, 128, 128, 1, 255, 255, 255, 255, 15]);
     }
 }
