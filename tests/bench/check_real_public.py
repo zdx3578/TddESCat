@@ -25,6 +25,7 @@ from tddesc_tools.run import (
 )
 
 from tests.bench.autonomous_audit import (
+    OBSERVED_CONTACT_DOMAIN,
     SiteDomain,
     audit_contact_plan,
     audit_contact_sample,
@@ -150,6 +151,7 @@ def autonomous_report(root, run):
     contact_samples = {}
     contact_control = []
     audited_actions = []
+    relation_tasks = []
     bootstrap_actions = []
     audit_errors = []
     parents = {}
@@ -171,6 +173,8 @@ def autonomous_report(root, run):
                 decision = json.loads(
                     (public / "decisions" / f"{command}.json").read_bytes()
                 )
+                if not audited_actions and "site_transitions" in check:
+                    site_domain = SiteDomain(OBSERVED_CONTACT_DOMAIN)
                 site_domain.observe(
                     decision["site_surveys"], receipts, before, frame_cache=survey_cache
                 )
@@ -249,6 +253,7 @@ def autonomous_report(root, run):
                             action=decision["action"]["id"],
                             domain=domain,
                             domain_reads=domain_reads,
+                            domain_version=site_domain.version,
                         )
                         if executing:
                             reported = check.get("contact_feedback")
@@ -309,6 +314,51 @@ def autonomous_report(root, run):
                     )
                     contact_samples[ref] = sample
                     site_domain.entered(sample)
+                if task := decision.get("relation_task"):
+                    goal, producer, feedback = (
+                        task["goal"],
+                        task["producer"],
+                        check["task_feedback"],
+                    )
+                    plan = experiment["contact"]
+                    require(
+                        goal["before"] == parents[ref]
+                        and goal["scope"] == site_domain.version
+                        and goal["model"] == plan["progress"]["model"]
+                        and goal["rules"] == plan["progress"]["rules"]
+                        and plan["progress"]["judgment"] == "progress"
+                        and producer["target"] == plan["point"]
+                        and producer["guard"] == plan["conditions"]["rules"]
+                        and producer["advancement"] == goal["rules"]
+                        and set(goal["examples"]) <= receipts.keys()
+                        and (set(goal["reads"]) | set(producer["read_events"]))
+                        <= set(task["reads"])
+                        <= reads
+                        and feedback["event"] == ref
+                        and feedback["observed"]["advanced"] == (position > before)
+                        and task["recheck"] == experiment["executes_contact"],
+                        "unproved_relation_task",
+                    )
+                    if feedback["outcome"] == "established":
+                        require(
+                            task["recheck"]
+                            and sample
+                            and sample["action"] == producer["action"]
+                            and sample["outcome"] == "progress"
+                            and position > before,
+                            "unproved_task_goal",
+                        )
+                    relation_tasks.append(
+                        dict(
+                            event=ref,
+                            level=before + 1,
+                            model=goal["model"],
+                            relation=goal["relation"],
+                            producer=producer,
+                            requirements=task["requirements"],
+                            outcome=feedback["outcome"],
+                        )
+                    )
                 if (
                     check["definition_refs"]
                     and check["assessments"]
@@ -320,6 +370,10 @@ def autonomous_report(root, run):
                 audited_actions.append(ref)
                 if position != before:
                     site_domain.reset_level()
+                elif site_domain.version == OBSERVED_CONTACT_DOMAIN:
+                    site_domain.verify_site_transitions(
+                        ref, receipt, check["site_transitions"]
+                    )
                 site_domain.observe(
                     check["site_surveys"],
                     {**receipts, ref: receipt},
@@ -412,6 +466,7 @@ def autonomous_report(root, run):
         "learned_decisions": decisions,
         "audited_actions": len(audited_actions),
         "bootstrap_actions": bootstrap_actions,
+        "relation_tasks": relation_tasks,
         "audit_errors": audit_errors,
         "contact_samples": list(contact_samples.values()),
         "contact_control": contact_control,
