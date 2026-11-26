@@ -44,10 +44,13 @@ class Fixture(ARCBaseGame):
             "restart": [6], "progress-restart": [6], "restart-choices": [6],
             "advancement-transfer": [6], "advancement-refutation": [5, 6], "history-refinement": [1, 4],
             "history-continuation": [1, 4], "history-matrix": [1, 4], "history-receipt": [1, 4], "long-history": [1, 4],
-            "outcome-preparation": [5, 7], "outcome-chain": [5, 7], "role-outcome": [5, 6], "primitive-outcome": [2, 5],
+            "outcome-preparation": [5, 7], "outcome-chain": [5, 7], "role-outcome": [5, 6],
+            "primitive-outcome": [2, 5], "outcome-relation-chain": [2, 5, 7],
             "bridge-partition": [5], "concrete-object-followup": [5, 6],
             "frontier-dispatch": [1, 2], "frontier-route": [2], "frontier-remote-coordinate": [2],
             "sequence-experiment": [1, 2, 3], "circuit-role": [6, 7], "coordinate-restart": [6]}
+        if MODE == "outcome-relation-chain":
+            frame[50:52, 48:50] = 3
         levels = [Level(sprites=[Sprite(frame.copy(), name="board")])]
         if MODE == "progress-restart":
             frame[10:13, 23:26] = 4
@@ -61,7 +64,7 @@ class Fixture(ARCBaseGame):
             frame[10:13, 8:11] = 0
             frame[10:13, 38:41] = 4
             levels.append(Level(sprites=[Sprite(frame, name="board")]))
-        if MODE in ("outcome-preparation", "outcome-chain", "role-outcome", "primitive-outcome"):
+        if MODE in ("outcome-preparation", "outcome-chain", "role-outcome", "primitive-outcome", "outcome-relation-chain"):
             frame[10:13, 8:11] = 0
             frame[10:13, 38:41] = 4
             levels.append(Level(sprites=[Sprite(frame, name="board")]))
@@ -142,10 +145,14 @@ class Fixture(ARCBaseGame):
                 pixels[40:42, 44:46] = 7
             elif pixels[40, 44] == 7 and pixels[self.action.data["y"], self.action.data["x"]] == 4:
                 self.next_level()
-        elif MODE == "primitive-outcome":
+        elif MODE in ("primitive-outcome", "outcome-relation-chain"):
             if action == 5:
                 pixels[40:42, 44:46] = 7
-            elif action == 2 and pixels[40, 44] == 7:
+            elif action == 7:
+                pixels[50:52, 48:50] = 8
+            elif action == 2 and pixels[40, 44] == 7 and (
+                MODE == "primitive-outcome" or pixels[50, 48] == 8
+            ):
                 self.next_level()
         elif MODE == "concrete-object-followup":
             if action == 5 and pixels[35, 39] == 7:
@@ -290,6 +297,7 @@ def capture(
         "outcome-chain",
         "role-outcome",
         "primitive-outcome",
+        "outcome-relation-chain",
         "bridge-partition",
         "frontier-dispatch",
         "frontier-route",
@@ -353,6 +361,7 @@ def capture(
             "long-history": "history_matrix_public.jl",
             "role-outcome": "outcome_relation_public.jl",
             "primitive-outcome": "outcome_relation_public.jl",
+            "outcome-relation-chain": "outcome_relation_public.jl",
             "sequence-experiment": "sequence_experiment_public.jl",
         }
         if mode in direct_tests:
@@ -364,7 +373,7 @@ def capture(
                 runtime,
                 public,
                 str(agent),
-                *([mode] if mode in ("long-history", "primitive-outcome") else []),
+                *([mode] if mode in ("long-history", "primitive-outcome", "outcome-relation-chain") else []),
                 str(public),
                 script=script,
                 extra_read=paths,
@@ -517,7 +526,7 @@ def verify(mode, public):
         assert trained.isdisjoint(artifact["calibration"]["events"])
         assert all(trace[source][0]["sequence"] < event["sequence"] for source in trained)
         return [ref, event["event_id"]]
-    if mode in ("role-outcome", "primitive-outcome"):
+    if mode in ("role-outcome", "primitive-outcome", "outcome-relation-chain"):
         record = read(public / f"{mode}.json")
         trace = receipts(public)
         comparison, preparation, original = (record[key]["event"] for key in ("comparison", "preparation", "progress"))
@@ -531,26 +540,40 @@ def verify(mode, public):
         assert before[0] == before[1] and trace[comparison][1]["levels_completed"] == 0
         assert setup["task"]["obligation"]["producer"] == proof["producer"]
         assert setup["task"]["obligation"]["outcome"] == original
-        target = 2 if mode == "primitive-outcome" else 6
+        target = 6 if mode == "role-outcome" else 2
         assert setup["baseline"]["id"] == target and trace[effect][0]["action"] == {"id": 5}
         start = trace[trace[effect][0]["before_ref"]][1]
         changed = trace[effect][1]
-        assert start["available_actions"] == changed["available_actions"] == sorted([5, target])
+        available = [2, 5, 7] if mode == "outcome-relation-chain" else sorted([5, target])
+        assert start["available_actions"] == changed["available_actions"] == available
         assert start["frame"][-1][40][44] == 2 and changed["frame"][-1][40][44] == 7
         assert setup["effect"]["feedback"]["result"] == "established"
-        assert follow["task"]["obligation"]["established"] == effect
-        if mode == "primitive-outcome":
+        required = [effect]
+        uses = [(effect, setup["task"])]
+        if mode == "outcome-relation-chain":
+            additional = record["additional"]
+            second = additional["effect"]["event"]
+            assert [step["event"] for step in proof["chain"]] == [preparation, record["second_source"]["event"]]
+            assert trace[second][0]["before_ref"] == effect and trace[second][0]["action"] == {"id": 7}
+            assert (changed["frame"][-1][50][48], trace[second][1]["frame"][-1][50][48]) == (3, 8)
+            assert trace[second][1]["frame"][-1][40][44] == 7
+            assert additional["task"]["obligation"]["confirmed"] == [effect]
+            required.append(second)
+            uses.append((second, additional["task"]))
+        assert follow["task"]["obligation"]["established"] == required[-1]
+        assert follow["task"]["obligation"]["confirmed"] == required
+        if mode != "role-outcome":
             assert trace[win][0]["action"] == trace[original][0]["action"] == {"id": 2}
             assert before[0] != start["frame"][-1]
         else:
             assert trace[win][0]["action"]["x"] != trace[original][0]["action"]["x"]
         assert trace[win][1]["levels_completed"] == 2 and trace[win][1]["state"] == "WIN"
-        for ref, task in ((effect,setup["task"]),(win,follow["task"])):
+        for ref, task in [*uses, (win, follow["task"])]:
             command = trace[ref][0]
             prediction = read(public / "predictions" / (command["command_ref"] + ".json"))
             assert set(task["reads"]) <= set(prediction["event_reads"])
             assert all(trace[source][0]["sequence"] < command["sequence"] for source in task["reads"])
-        return [comparison, preparation, original, effect, win]
+        return [comparison, preparation, original, *required, win]
     if mode == "sequence-experiment":
         record = read(public / "sequence-experiment.json")
         trace = receipts(public)
@@ -906,6 +929,7 @@ def main(config, run):
         "outcome-chain",
         "role-outcome",
         "primitive-outcome",
+        "outcome-relation-chain",
         "history-refinement",
         "history-dispatch",
         "circuit-role",

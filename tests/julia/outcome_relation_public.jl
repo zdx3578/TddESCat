@@ -23,10 +23,11 @@ const MODE = length(ARGS) == 3 ? ARGS[2] : "role-outcome"
             TC.finish_relation_dispatch!(agenda,proposal;feedback=result.feedback)
             return result
         end
-        target = MODE == "primitive-outcome" ? Dict("id"=>2) : TC.click_action((9,11))
+        target = MODE == "role-outcome" ? TC.click_action((9,11)) : Dict("id"=>2)
         comparison = dispatch(target)
         @test rec.observation.levels_completed == 0
         preparation = dispatch(Dict("id"=>5))
+        second_source = MODE == "outcome-relation-chain" ? dispatch(Dict("id"=>7)) : nothing
         progress = dispatch(target)
         @test rec.observation.levels_completed == 1
         @test progress.public_outcome.relationship.comparison == comparison.event
@@ -51,16 +52,29 @@ const MODE = length(ARGS) == 3 ? ARGS[2] : "role-outcome"
         @test isnothing(agenda.preparing)
         effect = dispatch(setup.proposal.action;setup.proposal,setup.task)
         @test effect.feedback.result == :established && agenda.preparing.event == effect.event
+        additional = nothing
+        last_effect = effect
+        if !isnothing(second_source)
+            @test getproperty.(progress.public_outcome.relationship.chain,:event) ==
+                [preparation.event,second_source.event]
+            step = propose()
+            @test step.proposal.intent == :continue_outcome_preparation
+            @test step.proposal.action == Dict("id"=>7) && step.proposal.obligation.confirmed == [effect.event]
+            last_effect = dispatch(step.proposal.action;step.proposal,step.task)
+            @test last_effect.feedback.result == :established
+            additional = (;step.task,effect=last_effect)
+        end
         follow = propose()
         @test follow.proposal.intent == :continue_outcome_relation
-        rebound = MODE == "primitive-outcome" ? target : TC.click_action((39,11))
+        rebound = MODE == "role-outcome" ? TC.click_action((39,11)) : target
         @test follow.proposal.action == rebound
         win = dispatch(follow.proposal.action;follow.proposal,follow.task)
-        @test win.public_outcome.dependency == effect.event
+        @test win.public_outcome.dependency == last_effect.event
         @test rec.observation.state == "WIN" && rec.observation.levels_completed == 2
         @test close_scorecard!(rec)["completion"] == "confirmed"
         TC.atomic_json(TC.store_path(store,MODE * ".json"),
-            (;comparison,preparation,progress,setup=(;setup.task,setup.baseline,effect),follow=(;follow.task,win)))
+            (;comparison,preparation,second_source,progress,setup=(;setup.task,setup.baseline,effect),
+                additional,follow=(;follow.task,win)))
         @test last(recover_run(store)).event["event_id"] == win.event
     end
 end
