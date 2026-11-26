@@ -959,16 +959,6 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 frontier=exploration_frontier)
             isnothing(proposed) ? partition_experiment(relations,click_scene,obs,context,knowledge.receipt) : proposed
         end
-        if relation_tasks && !isnothing(exploration_frontier)
-            preferred = !isnothing(relation_choice) ? relation_choice.action :
-                isnothing(intervention) ? item.action : intervention.action
-            if isnothing(relation_choice) || relation_choice.intent in (:test_concrete_effect,:test_delayed_effect)
-                alternate = frontier_choice(exploration_frontier,relations,obs,decision,intervention,preferred)
-                isnothing(alternate) || (relation_choice = alternate)
-            else
-                frontier_options!(exploration_frontier,context,decision.ranked,intervention)
-            end
-        end
         relation_policy = if relation_tasks && isnothing(relations.restart)
             relation_policy_choice(knowledge.policies,relation_policy_cursor,attempted_relation_policies,
                 relations,obs,decision;meters)
@@ -977,13 +967,17 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             prior = relation_policy_cursor
             (;definition=prior.policy.definition,last_observed=last(prior.observed),reason="unbound_next_task")
         end
+        frontier = if relation_tasks && !isnothing(exploration_frontier)
+            (;search=exploration_frontier,agenda=relations,observation=obs,decision,context)
+        end
         arbitration = task_arbitration(item,spatial_choice,intervention,relation_choice,experiment;
             program=!isnothing(program_cursor),continuing_contact,
             conditional=!isnothing(goal_cursor) || !isnothing(item.follow) ||
                 get(something(policy_note,Dict()),"status",nothing) == "ready",
             object_probes,policy=isnothing(relation_policy) ? nothing : relation_policy.proposal,
-            continuing_policy=!isnothing(relation_policy_cursor))
+            continuing_policy=!isnothing(relation_policy_cursor),frontier)
         selected = arbitration.choice
+        isnothing(arbitration.frontier_task) || (relation_choice = arbitration.frontier_task)
         if selected.action != item.action || selected.source in (:spatial,:intervention,:relation,:relation_policy)
             choice = findfirst(row->row.action == selected.action,decision.ranked)
             if isnothing(choice)
@@ -1112,7 +1106,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         if relation_tasks
             decision_record["grounding_read"] = (event=knowledge.receipt.event,
                 response_blob=entry.event["response_blob"])
-            decision_record["task_arbitration"] = arbitration
+            decision_record["task_arbitration"] = (;arbitration.choice,arbitration.baseline,arbitration.candidates)
             isnothing(relation_task) || (decision_record["public_relation_task"] = relation_task)
             isnothing(role_proof) || (decision_record["factor_role_proof"] = role_proof)
             isnothing(resource_proof) || (decision_record["resource_constraint_proof"] = resource_proof)

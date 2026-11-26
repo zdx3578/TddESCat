@@ -140,3 +140,33 @@ end
     @test proposal.obligation.source == "untried_public_configuration"
     @test "click-2" in proposal.reads
 end
+
+@testset "Frontier checks the action selected by arbitration" begin
+    agenda, search = TC.RelationAgenda(), TC.PublicFrontier()
+    board = zeros(UInt8,4,4)
+    available = [1,2]
+    before = recorded("reset",nothing,board,0,available)
+    for i in 1:2
+        after = recorded("repeat-$i",before.event["event_id"],board,2,available)
+        TC.observe_relations!(agenda,before,after,TC.observed_effects(before,after),nothing,NamedTuple[],nothing)
+        TC.frontier_observe!(search,agenda)
+        before = after
+    end
+    obs = before.observation
+    context = TC.relation_context(obs)
+    item = (action=Dict("id"=>1),reason="uncovered")
+    ordinary = (action=Dict("id"=>2),)
+    decision = (ranked=[item,ordinary],)
+    frontier = (;search,agenda,observation=obs,decision,context)
+    @test isnothing(TC.frontier_choice(search,agenda,obs,decision,nothing,item.action))
+    decided = TC.task_arbitration(item,nothing,nothing,nothing,ordinary;
+        program=false,continuing_contact=false,conditional=false,object_probes=false,frontier)
+    @test decided.baseline.action == ordinary.action && decided.baseline.source == :experiment
+    @test decided.choice.action == item.action && decided.choice.source == :relation
+    @test decided.frontier_task.obligation.baseline == ordinary.action
+    @test decided.frontier_task.reads == ["repeat-2","repeat-1"]
+    kept = TC.task_arbitration(item,(id=2,reason="continue_contact"),nothing,nothing,ordinary;
+        program=false,continuing_contact=true,conditional=false,object_probes=false,frontier)
+    @test kept.choice.action == ordinary.action && kept.choice.source == :spatial
+    @test isnothing(kept.frontier_task)
+end

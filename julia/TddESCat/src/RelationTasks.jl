@@ -613,14 +613,15 @@ end
 """Compare legal dispatches once. A grounded continuation survives speculative exploration."""
 function task_arbitration(item,spatial,intervention,relation,experiment;
                           program,continuing_contact,conditional,object_probes,policy=nothing,
-                          continuing_policy=false)
+                          continuing_policy=false,frontier=nothing)
     candidates = NamedTuple[]
     add(source,action,reason,priority) = push!(candidates,(;source,action,reason,priority))
     add(program ? :program : :base,item.action,item.reason,program ? 0 : conditional ? 1 : 8)
+    contact_ready = false
     if !isnothing(spatial)
         contact = get(spatial,:contact,nothing)
-        grounded = continuing_contact || !isnothing(contact) && contact.conditions.judgment == :admitted ||
-            get(spatial,:effect_gain,0) > 0
+        contact_ready = continuing_contact || !isnothing(contact) && contact.conditions.judgment == :admitted
+        grounded = contact_ready || get(spatial,:effect_gain,0) > 0
         add(:spatial,Dict("id"=>spatial.id),spatial.reason,grounded ? 1 : object_probes ? 7 : 4)
     end
     if !isnothing(intervention)
@@ -640,7 +641,31 @@ function task_arbitration(item,spatial,intervention,relation,experiment;
     isnothing(experiment) || add(:experiment,experiment.action,"distinguish_public_experiment",7)
     baseline = argmin(row->row.priority,candidates)
     isnothing(policy) || add(:relation_policy,policy.action,"execute_relation_policy",continuing_policy ? 0 : 1)
-    return (choice=argmin(row->row.priority,candidates),baseline,candidates)
+    choice = argmin(row->row.priority,candidates)
+    frontier_task = nothing
+    if !isnothing(frontier)
+        protected = if choice.source == :spatial
+            contact_ready
+        elseif choice.source == :relation_policy
+            continuing_policy
+        elseif choice.source == :relation
+            choice.priority <= 2 || relation.intent in
+                (:establish_preparation,:probe_observed_advancement,:prepare_public_outcome)
+        else
+            choice.priority <= 2
+        end
+        if protected
+            frontier_options!(frontier.search,frontier.context,frontier.decision.ranked,intervention)
+        else
+            frontier_task = frontier_choice(frontier.search,frontier.agenda,frontier.observation,
+                frontier.decision,intervention,choice.action)
+            if !isnothing(frontier_task)
+                add(:relation,frontier_task.action,string(frontier_task.intent),choice.priority-1)
+                choice = last(candidates)
+            end
+        end
+    end
+    return (;choice,baseline,candidates,frontier_task)
 end
 
 function changed_context_probe(agenda,obs,scene)

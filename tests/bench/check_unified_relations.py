@@ -37,7 +37,7 @@ class Fixture(ARCBaseGame):
             "restart": [6], "progress-restart": [6], "restart-choices": [6],
             "advancement-transfer": [6], "history-refinement": [1, 4],
             "history-continuation": [1, 4], "outcome-preparation": [5, 7],
-            "bridge-partition": [5]}
+            "bridge-partition": [5], "frontier-dispatch": [1, 2]}
         levels = [Level(sprites=[Sprite(frame.copy(), name="board")])]
         if MODE == "progress-restart":
             frame[10:13, 23:26] = 4
@@ -75,7 +75,14 @@ class Fixture(ARCBaseGame):
             self.complete_action()
             return
         pixels = self.current_level.get_sprites_by_name("board")[0].pixels
-        if MODE == "bridge-partition":
+        if MODE == "frontier-dispatch":
+            if action == 2:
+                self.hits += 1
+            elif self.hits >= 2:
+                self.next_level()
+            else:
+                self.lose()
+        elif MODE == "bridge-partition":
             if action == 5:
                 pixels[20, 18] = 0
                 self._available_actions = [6]
@@ -185,6 +192,7 @@ def capture(
     extended_timeout = compute_enabled or mode in (
         "outcome-preparation",
         "bridge-partition",
+        "frontier-dispatch",
     )
     public = run / "public"
     public.mkdir()
@@ -214,8 +222,9 @@ def capture(
                 f'circuit_python = "{root / "python/compute/.venv/bin/python"}"\n'
             )
         agent.write_text(agent.read_text() + additions)
-        if mode == "history-dispatch":
-            script = root / "tests/julia/history_public.jl"
+        if mode in ("history-dispatch", "frontier-dispatch"):
+            name = "history_public.jl" if mode == "history-dispatch" else "frontier_dispatch.jl"
+            script = root / "tests/julia" / name
             paths = public_settings(root, agent, tomllib.loads(agent.read_text()))
             result = solver_process(
                 root,
@@ -293,6 +302,23 @@ def observed_steps(public):
 
 
 def verify(mode, public):
+    if mode == "frontier-dispatch":
+        record = read(public / "frontier-experiment.json")
+        trace = receipts(public)
+        event, reply = trace[record["event"]]
+        task = record["task"]
+        prior = [trace[ref] for ref in task["reads"]]
+        assert len(prior) == 2 and all(row["action"] == {"id": 2} for row, _ in prior)
+        assert all(row["sequence"] < event["sequence"] for row, _ in prior)
+        assert prior[0][1]["frame"] == prior[1][1]["frame"]
+        assert task["intent"] == "distinguish_public_frontier"
+        assert task["obligation"]["baseline"] == {"id": 2}
+        assert event["action"] == task["action"] == {"id": 1}
+        assert reply["state"] == "WIN" and reply["levels_completed"] == reply["win_levels"]
+        prediction = read(public / "predictions" / (event["command_ref"] + ".json"))
+        assert prediction["guard_truth"] == "unknown"
+        assert set(task["reads"]) <= set(prediction["event_reads"])
+        return [record["event"]]
     if mode == "history-dispatch":
         record = read(public / "history-experiment.json")
         task = record["task"]
@@ -522,6 +548,7 @@ def main(config, run):
         "history-refinement",
         "history-dispatch",
         "bridge-partition",
+        "frontier-dispatch",
     )
     with ThreadPoolExecutor(max_workers=len(modes)) as pool:
         cases = {
@@ -557,6 +584,7 @@ if __name__ == "__main__":
                 "history-refinement",
                 "history-continuation",
                 "outcome-preparation",
+                "frontier-dispatch",
             )
             else 9,
             compute=bool(extra),
