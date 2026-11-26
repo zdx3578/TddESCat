@@ -708,6 +708,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     policy_counterexample = nothing
     relation_policy_cursor = nothing
     attempted_relation_policies = Set{Tuple{String,String}}()
+    policy_experiment_after = nothing
     last_relation_policy_check = 0
     pending_synthesis = nothing
     last_sequence_check = 0
@@ -765,6 +766,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             pending_policy = nothing
             policy_counterexample = nothing
             relation_policy_cursor = nothing
+            policy_experiment_after = nothing
             fresh_binding = failed || rec.observation.levels_completed != obs.levels_completed
             if fresh_binding
                 begin_visual_level!(visual,spatial)
@@ -974,12 +976,14 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         frontier = if relation_tasks && !isnothing(exploration_frontier)
             (;search=exploration_frontier,agenda=relations,observation=obs,decision,context)
         end
+        policy_yield = !isnothing(policy_experiment_after) && !isnothing(relation_policy) &&
+            isnothing(relation_policy_cursor)
         arbitration = task_arbitration(item,spatial_choice,intervention,relation_choice,experiment;
             program=!isnothing(program_cursor),continuing_contact,
             conditional=!isnothing(goal_cursor) || !isnothing(item.follow) ||
                 get(something(policy_note,Dict()),"status",nothing) == "ready",
             object_probes,policy=isnothing(relation_policy) ? nothing : relation_policy.proposal,
-            continuing_policy=!isnothing(relation_policy_cursor),frontier)
+            continuing_policy=!isnothing(relation_policy_cursor),policy_yield,frontier)
         selected = arbitration.choice
         program_selected = selected.source == :program
         if program_selected
@@ -1053,6 +1057,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         end
         isnothing(policy_counterexample) || push!(plan_reads,policy_counterexample.event)
         isnothing(policy_note) || append!(plan_reads,get(policy_note,"event_reads",String[]))
+        policy_yield && push!(plan_reads,policy_experiment_after)
         if program_selected
             program = program_cursor.program
             append!(plan_reads,program.sources)
@@ -1133,10 +1138,10 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             isnothing(role_proof) || (decision_record["factor_role_proof"] = role_proof)
             isnothing(resource_proof) || (decision_record["resource_constraint_proof"] = resource_proof)
             isnothing(policy_withdrawal) || (decision_record["relation_policy_withdrawal"] = policy_withdrawal)
+            policy_yield && (decision_record["exploration_after_policy"] = policy_experiment_after)
         end
         if !isnothing(relation_policy)
             policy = relation_policy.cursor.policy
-            push!(attempted_relation_policies,(policy.body["scope"],relation_policy.context))
             decision_record["relation_policy"] = (;definition=policy.definition,
                 definitions=policy.body["definitions"],policy.publication,policy.available_after,
                 policy.training,structure=policy.body["structure"],branches=relation_policy.branches,
@@ -1187,6 +1192,10 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         elapsed = (time_ns() - start)/1e9
         command["completion"] == "confirmed" || break
         program_selected && !isnothing(program_attempt) && push!(program_attempts,program_attempt)
+        if !isnothing(relation_policy)
+            scope = relation_policy.cursor.policy.body["scope"]
+            push!(attempted_relation_policies,(scope,relation_policy.context))
+        end
         referenced_definitions = get(decision_record,"definition_refs",String[])
         decision_depth = maximum((knowledge.definition_depths[id] for id in referenced_definitions); init=0)
         consumed_depth = max(consumed_depth,decision_depth)
@@ -1272,10 +1281,12 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             request_history_model!(responses,worker,relations,rec.before_ref,batch;priority=!isnothing(refinement))
             request_response_model!(responses,worker,relations,rec.before_ref,batch)
         end
+        policy_experiment_after = nothing
         relation_policy_feedback = if !isnothing(relation_policy)
             feedback = confirm_relation_policy!(relation_policy,relations,relation_feedback,resulting)
             relation_policy_cursor = feedback.cursor
-            (;event=sample.event_id,feedback.result,feedback.branches,
+            policy_experiment_after = feedback.experiment_after
+            (;event=sample.event_id,feedback.result,feedback.branches,feedback.experiment_after,
                 definition=relation_policy.cursor.policy.definition)
         end
         projection_feedback = if !isnothing(projected)

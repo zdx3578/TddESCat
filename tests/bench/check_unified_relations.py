@@ -47,7 +47,8 @@ class Fixture(ARCBaseGame):
             "outcome-preparation": [5, 7], "outcome-chain": [5, 7], "role-outcome": [5, 6],
             "primitive-outcome": [2, 5], "outcome-relation-chain": [2, 5, 7],
             "bridge-partition": [5], "concrete-object-followup": [5, 6],
-            "frontier-dispatch": [1, 2], "frontier-route": [2], "frontier-remote-coordinate": [2],
+            "frontier-dispatch": [1, 2], "policy-yield": [1, 2],
+            "frontier-route": [2], "frontier-remote-coordinate": [2],
             "sequence-experiment": [1, 2, 3], "mixed-sequence": [1, 2, 3, 6],
             "circuit-role": [6, 7], "coordinate-restart": [6]}
         if MODE == "outcome-relation-chain":
@@ -127,7 +128,7 @@ class Fixture(ARCBaseGame):
                 self.next_level()
             else:
                 self.lose()
-        elif MODE == "frontier-dispatch":
+        elif MODE in ("frontier-dispatch", "policy-yield"):
             if action == 2:
                 self.hits += 1
             elif self.hits >= 2:
@@ -301,6 +302,7 @@ def capture(
         "outcome-relation-chain",
         "bridge-partition",
         "frontier-dispatch",
+        "policy-yield",
         "frontier-route",
         "frontier-remote-coordinate",
         "history-matrix",
@@ -356,6 +358,7 @@ def capture(
             "circuit-role": "circuit_role_public.jl",
             "coordinate-restart": "coordinate_restart_public.jl",
             "frontier-dispatch": "frontier_dispatch.jl",
+            "policy-yield": "policy_yield_public.jl",
             "frontier-route": "frontier_route_public.jl",
             "frontier-remote-coordinate": "frontier_remote_coordinate_public.jl",
             "history-matrix": "history_matrix_public.jl",
@@ -448,6 +451,16 @@ def observed_steps(public):
 
 
 def verify(mode, public):
+    if mode == "policy-yield":
+        record = read(public / "policy-yield.json")
+        trace = receipts(public)
+        closed, won = record["closed"], record["won"]
+        assert closed == record["yield_source"] and record["baseline"] == {"id": 2}
+        assert trace[closed][0]["action"] == {"id": 2}
+        assert trace[closed][1]["state"] == "NOT_FINISHED" and trace[closed][1]["levels_completed"] == 0
+        assert trace[won][0]["before_ref"] == closed and trace[won][0]["action"] == {"id": 1}
+        assert trace[won][1]["state"] == "WIN"
+        return [closed, won]
     if mode == "frontier-remote-coordinate":
         record = read(public / "frontier-remote-coordinate.json")
         trace = receipts(public)
@@ -943,6 +956,7 @@ def main(config, run):
         "coordinate-restart",
         "bridge-partition",
         "frontier-dispatch",
+        "policy-yield",
         "frontier-route",
         "frontier-remote-coordinate",
         "history-matrix",

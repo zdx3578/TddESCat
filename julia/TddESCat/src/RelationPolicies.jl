@@ -498,10 +498,11 @@ function confirm_relation_policy!(selection,agenda,feedback,after)
     else
         !isnothing(feedback.feedback) && feedback.feedback.result == :established
     end
+    experiment_after = row.state == "NOT_FINISHED" && !row.advanced ? relation_ref(row) : nothing
     if !success || row.state == "GAME_OVER"
-        return (;cursor=nothing,result=:withdrawn,branches=NamedTuple[])
+        return (;cursor=nothing,result=:withdrawn,branches=NamedTuple[],experiment_after)
     end
-    row.advanced && return (;cursor=nothing,result=:stopped_at_public_advance,branches=NamedTuple[])
+    row.advanced && return (;cursor=nothing,result=:stopped_at_public_advance,branches=NamedTuple[],experiment_after)
     cursor.outputs = if isempty(task.tests)
         []
     else
@@ -511,7 +512,7 @@ function confirm_relation_policy!(selection,agenda,feedback,after)
     next = next_relation_instruction!(cursor,after.observation)
     if next.status == :task
         push!(cursor.pending,next.instruction)
-        return (;cursor,result=:continue,branches=next.branches)
+        return (;cursor,result=:continue,branches=next.branches,experiment_after=nothing)
     end
-    return (;cursor=nothing,result=next.status,branches=next.branches)
+    return (;cursor=nothing,result=next.status,branches=next.branches,experiment_after)
 end

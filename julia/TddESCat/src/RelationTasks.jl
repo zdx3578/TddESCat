@@ -804,7 +804,7 @@ end
 """Compare legal dispatches once. A grounded continuation survives speculative exploration."""
 function task_arbitration(item,spatial,intervention,relation,experiment;
                           program,continuing_contact,conditional,object_probes,policy=nothing,
-                          continuing_policy=false,frontier=nothing)
+                          continuing_policy=false,policy_yield=false,frontier=nothing)
     candidates = NamedTuple[]
     add(source,action,reason,priority) = push!(candidates,(;source,action,reason,priority))
     add(program ? :program : :base,item.action,item.reason,program ? 0 : conditional ? 1 : 8)
@@ -835,7 +835,10 @@ function task_arbitration(item,spatial,intervention,relation,experiment;
         add(:experiment,experiment.action,"distinguish_public_experiment",priority)
     end
     baseline = argmin(row->row.priority,candidates)
-    isnothing(policy) || add(:relation_policy,policy.action,"execute_relation_policy",continuing_policy ? 0 : 1)
+    if !isnothing(policy)
+        priority = continuing_policy ? 0 : policy_yield ? baseline.priority+1 : 1
+        add(:relation_policy,policy.action,"execute_relation_policy",priority)
+    end
     choice = argmin(row->row.priority,candidates)
     frontier_task = nothing
     if !isnothing(frontier)
