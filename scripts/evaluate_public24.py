@@ -127,7 +127,6 @@ def evaluate_one(task_dir):
     learned_tasks, learned_policies, outcomes = 0, 0, []
     established_tasks, policy_stops = 0, 0
     clicks, object_probes, coordinate_probes = 0, 0, 0
-    object_effect_followups = 0
     intervention_goals, intervention_confirmed, intervention_refuted = 0, 0, 0
     relation_results = Counter()
     policy_results = Counter()
@@ -156,7 +155,7 @@ def evaluate_one(task_dir):
         assert check["action"] == decision["action"] == event["action"]
         parent = trace[event["before_ref"]][1]
         assert event["action"]["id"] in parent["available_actions"]
-        coverage.confirm(trace[event["before_ref"]],event,response,decision,check)
+        coverage.confirm(trace[event["before_ref"]], event, response, decision, check)
         peak = max(peak, response["levels_completed"])
         checked += 1
         clicks += event["action"]["id"] == 6
@@ -249,7 +248,6 @@ def evaluate_one(task_dir):
                     trace[ref][0]["sequence"] < event["sequence"]
                     for ref in hypothesis["reads"]
                 )
-                object_effect_followups += 1
             if goal := source["goal"]:
                 predicted = load(public / "predictions" / command)
                 assert predicted["predicted_values"]["public_advancement"] is True
@@ -290,7 +288,7 @@ def evaluate_one(task_dir):
         clicks=clicks,
         object_probes=object_probes,
         coordinate_probes=coordinate_probes,
-        object_effect_followups=object_effect_followups,
+        object_effect_followups=coverage.object_followups["dispatched"],
         intervention_goals=intervention_goals,
         intervention_confirmed=intervention_confirmed,
         intervention_refuted=intervention_refuted,

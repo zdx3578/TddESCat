@@ -1,6 +1,15 @@
 from collections import Counter, defaultdict
 
 
+OBJECT_EFFECT_FOLLOWUP = "extend_observed_object_effect"
+PUBLIC_OUTCOME_TASKS = {
+    "prepare_public_outcome",
+    "establish_outcome_relation",
+    "continue_outcome_preparation",
+    "continue_outcome_relation",
+}
+
+
 def parameter_key(action):
     action_id = action["id"]
     data = action.get("data", action)
@@ -22,6 +31,8 @@ class PublicCoverage:
         self.models = defaultdict(Counter)
         self.control = defaultdict(Counter)
         self.scenes = {}
+        self.object_followups = Counter()
+        self.followup_events = set()
 
     def context(self, receipt, response):
         key = receipt["event_id"]
@@ -37,6 +48,61 @@ class PublicCoverage:
                 parameter_key(response["action_input"]),
             )
         return self.scenes[key]
+
+    def record_object_followup(self, event, response, decision, relation, advanced):
+        arbitration = decision.get("task_arbitration") or {}
+        choice = arbitration.get("choice") or {}
+        task = decision.get("public_relation_task") or {}
+        feedback = relation.get("feedback") or {}
+        source = decision.get("intervention") or {}
+        counters = self.object_followups
+        candidates = {
+            parameter_key(candidate["action"])
+            for candidate in arbitration.get("candidates", ())
+            if candidate["reason"] == OBJECT_EFFECT_FOLLOWUP
+        }
+        counters["proposed"] += len(candidates)
+        dispatched = choice.get("reason") == OBJECT_EFFECT_FOLLOWUP
+        legacy = not arbitration and bool(source.get("hypothesis"))
+        if dispatched or legacy:
+            assert source["probe"] == "representative"
+            assert parameter_key(source["action"]) == parameter_key(event["action"])
+            if dispatched:
+                assert parameter_key(choice["action"]) == parameter_key(event["action"])
+            counters["dispatched"] += 1
+            counters["advancements"] += advanced
+            counters["game_over"] += response["state"] == "GAME_OVER"
+            self.followup_events.add(event["event_id"])
+            contracts = {row["producer"] for row in task.get("contracts", ())}
+            if contracts:
+                assert parameter_key(task["action"]) == parameter_key(event["action"])
+                counters["with_concrete_contract"] += 1
+                judgments = {
+                    row["producer"]: row["status"]
+                    for row in feedback.get("tests", ())
+                    if row["producer"] in contracts
+                }
+                if "refuted" in judgments.values():
+                    counters["effect_refuted"] += 1
+                elif contracts == judgments.keys() and set(judgments.values()) == {
+                    "established"
+                }:
+                    counters["effect_supported"] += 1
+                else:
+                    counters["effect_unresolved"] += 1
+            else:
+                counters["without_concrete_contract"] += 1
+        if task.get("intent") in PUBLIC_OUTCOME_TASKS:
+            obligation = task.get("obligation") or {}
+            sources = {obligation.get("preparation")}
+            sources.update(row["event"] for row in obligation.get("chain", ()))
+            sources.discard(event["event_id"])
+            if not sources.isdisjoint(self.followup_events):
+                counters["consumed_by_outcome_task"] += 1
+                counters["outcome_task_established"] += (
+                    feedback.get("result") == "established"
+                )
+                counters["outcome_task_advanced"] += advanced
 
     def observe(self, receipt, response):
         if response["state"] in ("GAME_OVER", "WIN"):
@@ -55,13 +121,12 @@ class PublicCoverage:
         model = self.models[action_id]
         control = self.control[action_id]
         relation = check.get("public_relation_feedback") or {}
+        advanced = response["levels_completed"] > before["levels_completed"]
         if binding := relation.get("binding"):
             self.roles[action_id].add(binding["lineage"])
         observed["confirmed"] += 1
         observed["game_over"] += response["state"] == "GAME_OVER"
-        observed["advancement"] += (
-            response["levels_completed"] > before["levels_completed"]
-        )
+        observed["advancement"] += advanced
         observed["wins"] += response["state"] == "WIN"
         model["unexplained_changes"] += bool(check["evidence"]["residual"])
         model["unresolved_transition"] += bool(relation.get("unresolved"))
@@ -83,6 +148,7 @@ class PublicCoverage:
             control["established_witnessed_task"] += (
                 relation.get("feedback") or {}
             ).get("result") == "established"
+        self.record_object_followup(event, response, decision, relation, advanced)
 
     def report(self):
         available = sorted(set(self.domains) | set(self.tested))
@@ -111,4 +177,5 @@ class PublicCoverage:
         return {
             "context_scope": "level_last_frame_available_actions_previous_action",
             "actions": records,
+            "object_effect_followups": dict(self.object_followups),
         }
