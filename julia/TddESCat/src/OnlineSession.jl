@@ -1,9 +1,17 @@
+struct JointTrialAssessment
+    verdict::Truth
+    binding::Union{Nothing,MotionBinding}
+    meter_scope::Union{Nothing,Tuple}
+end
+
 struct PublicTrial
     sample::MotionExample
     action::Dict{String,Int}
     effects::Union{Nothing,PublicEffects}
+    assessments::IdDict{JointMechanism,Union{Nothing,JointTrialAssessment}}
 end
 
+PublicTrial(sample,action,effects) = PublicTrial(sample,action,effects,IdDict())
 PublicTrial(sample,action) = PublicTrial(sample,action,nothing)
 
 struct ActiveMechanism
@@ -86,15 +94,24 @@ public_components(frame) = sort!(color_components(frame).groups; by=shape->(leng
 
 function evaluate_joint_trial(rule, trial)
     trial.action["id"] == rule.action_id || return nothing
-    row = trial.sample
-    groups = public_components(row.before)
-    meters = isnothing(trial.effects) ? MeterBinding[] : trial_meters(trial.effects)
-    evaluation = evaluate_joint_rule(rule,row.before,groups,enclosure_pairs(groups),trial.action;meters)
-    evaluation.truth == proven || return nothing
-    assessed = measure_joint((model=rule,fragments=evaluation.fragments),row.after)
-    verdict = "refuted" in values(assessed.assessments) ? disproven :
-        all(==("supported"),values(assessed.assessments)) ? proven : unknown_truth
-    return (;row,evaluation.fragments,verdict)
+    # The confirmed frames and the rule's effect contract stay fixed while
+    # additional trials can change the learned conditions.
+    return get!(trial.assessments,rule) do
+        row = trial.sample
+        groups = public_components(row.before)
+        meters = isnothing(trial.effects) ? MeterBinding[] : trial_meters(trial.effects)
+        evaluation = evaluate_joint_rule(rule,row.before,groups,enclosure_pairs(groups),trial.action;meters)
+        evaluation.truth == proven || return nothing
+        assessed = measure_joint((model=rule,fragments=evaluation.fragments),row.after)
+        verdict = "refuted" in values(assessed.assessments) ? disproven :
+            all(==("supported"),values(assessed.assessments)) ? proven : unknown_truth
+        move = findfirst(effect->effect.family == :translation,rule.effects)
+        binding = if !isnothing(move)
+            part = evaluation.fragments[move]
+            MotionBinding(part.basis,part.value)
+        end
+        return JointTrialAssessment(verdict,binding,measured_scope(evaluation.fragments))
+    end
 end
 
 function trial_meters(effects)
@@ -112,19 +129,21 @@ function measured_scope(fragments)
 end
 
 function fit_joint_condition(rule, trials, limits)
-    chosen = []
+    chosen = JointTrialAssessment[]
+    rows = MotionExample[]
     for trial in trials
         evaluated = evaluate_joint_trial(rule,trial)
-        isnothing(evaluated) || push!(chosen,evaluated)
+        isnothing(evaluated) && continue
+        push!(chosen,evaluated)
+        push!(rows,trial.sample)
     end
-    rows = [item.row for item in chosen]
     ids = [row.event_id for row in rows]
     support = findall(item -> item.verdict == proven, chosen)
     broken = findall(item -> item.verdict == disproven, chosen)
     unknowns = ids[findall(item -> item.verdict == unknown_truth, chosen)]
     scopes = Set{Tuple}()
     for i in support
-        scope = measured_scope(chosen[i].fragments)
+        scope = chosen[i].meter_scope
         isnothing(scope) || push!(scopes,scope)
     end
     if isempty(broken)
@@ -133,12 +152,11 @@ function fit_joint_condition(rule, trials, limits)
     end
     move_index = findfirst(effect -> effect.family == :translation, rule.effects)
     effect = isnothing(move_index) ? first(rule.effects) : rule.effects[move_index]
-    bindings = [isnothing(move_index) ? nothing : MotionBinding(r.fragments[move_index].basis,
-        r.fragments[move_index].value) for r in chosen]
+    bindings = [item.binding for item in chosen]
     delta = isnothing(move_index) ? (0,0) : Tuple(effect.values)
     if get(limits,:association,false) && !isnothing(move_index)
-        examples = [AssociationExample(item.row,binding,item.verdict)
-            for (item,binding) in zip(chosen,bindings) if item.verdict != unknown_truth]
+        examples = [AssociationExample(row,item.binding,item.verdict)
+            for (row,item) in zip(rows,chosen) if item.verdict != unknown_truth]
         query = construct_relation(examples)
         if !isnothing(query)
             condition = GuardSearch(MotionPredicate[query],ids[support],ids[broken],String[],true,true,
@@ -170,7 +188,7 @@ function update_joint_condition(current, rule, trial, trials, limits)
         elseif evaluated.verdict == proven
             support = [current.condition.support;ref]
             condition = GuardSearch(MotionPredicate[],support,String[],String[],true,true,1)
-            scope = measured_scope(evaluated.fragments)
+            scope = evaluated.meter_scope
             scopes = isnothing(scope) ? current.meter_scopes : union(current.meter_scopes,[scope])
             return ActiveMechanism(rule,condition,String[],current.unknown,scopes)
         end
