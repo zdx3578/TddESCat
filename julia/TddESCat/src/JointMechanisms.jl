@@ -283,7 +283,29 @@ function result_model(model, before, groups, enclosure, action; meters=(),clicke
     return (family=:selection, basis=only(targets), expected=anchor(only(targets)), value=anchor(only(enclosure).target))
 end
 
-function evaluate_joint_rule(rule, before, groups, enclosure, action; meters=(), relative_transfer=false)
+function role_at_click(groups,point,regions=nothing,bindings=nothing)
+    x,y = point
+    support = if isnothing(regions)
+        point_component(groups,point)
+    elseif checkbounds(Bool,regions.owner,y+1,x+1)
+        regions.groups[regions.owner[y+1,x+1]]
+    end
+    isnothing(support) && return (;support=nothing)
+    binding = isnothing(bindings) ? click_support_signature(support) :
+        get!(() -> click_support_signature(support),bindings,support)
+    return click_role_signature(binding,point)
+end
+
+function click_support_signature(support)
+    grid = support_grid(support)
+    return (;support,geometry=[(x,y) for (x,y,_) in grid.canonical],origin=anchor(support),
+        unit=grid.unit,template=shape_template(support))
+end
+
+click_role_signature(binding,point) = merge(binding,(;click=relative_click(point,binding.origin,binding.unit)))
+
+function evaluate_joint_rule(rule, before, groups, enclosure, action; meters=(), relative_transfer=false,
+                             observed_click=nothing, trained_click=nothing)
     clicked = nothing
     support = nothing
     relative = false
@@ -292,15 +314,19 @@ function evaluate_joint_rule(rule, before, groups, enclosure, action; meters=(),
         scope = rule.click
         if !isnothing(scope)
             point = (action["x"],action["y"])
-            support = point_component(groups,point)
-            relative = relative_effect_roles(scope)
-            matches = !isnothing(support) && geometry(support) == geometry(scope.support) &&
-                relative_click(point,support) == relative_click(scope.point,scope.support) &&
-                (scope.local_pigment || anchor(support) == anchor(scope.support) ||
-                    relative && relative_transfer) &&
-                (!relative || scope.local_pigment || shape_template(support) == shape_template(scope.support))
-            matches && scope.local_pigment && (clicked = support)
-            matches && relative && (shift = anchor(support) .- anchor(scope.support))
+            actual = isnothing(observed_click) ? role_at_click(groups,point) : observed_click
+            support = actual.support
+            matches = false
+            if !isnothing(support)
+                expected = isnothing(trained_click) ?
+                    click_role_signature(click_support_signature(scope.support),scope.point) : trained_click
+                relative = relative_effect_roles(scope)
+                matches = actual.geometry == expected.geometry && actual.click == expected.click &&
+                    (scope.local_pigment || actual.origin == expected.origin || relative && relative_transfer) &&
+                    (!relative || scope.local_pigment || actual.template == expected.template)
+                matches && scope.local_pigment && (clicked = support)
+                matches && relative && (shift = actual.origin .- expected.origin)
+            end
         else
             matches = false
         end

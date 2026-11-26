@@ -36,8 +36,8 @@ function response_history_task(agenda,level)
     active = (last(agenda.samples).attempt,level)
     haskey(origins,active) || return nothing
     scope = origins[active]
-    episodes = [ (;origin=scope,steps=starts[key]) for key in sort!(collect(keys(starts)))
-        if key[2] == active.level && origins[key] == scope ]
+    episodes = [(;origin=scope,steps=starts[key]) for key in sort!(collect(keys(starts)))
+        if origins[key] == scope]
     length(episodes) >= 2 || return nothing
     return (;episodes)
 end

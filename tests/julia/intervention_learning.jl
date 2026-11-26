@@ -115,6 +115,17 @@ end
     @test TC.anchor(only(matches.fragments).basis) == (31,31)
     @test TC.evaluate_joint_rule(rule,before,groups,[],TC.click_action((31,31))).truth == TC.unknown_truth
     @test TC.evaluate_joint_rule(rule,before,groups,[],TC.click_action((50,50))).truth == TC.unknown_truth
+    regions = TC.frame_regions(before)
+    signatures = IdDict{Vector{TC.ColorCell},NamedTuple}()
+    trained = TC.click_role_signature(TC.click_support_signature(source),scope.point)
+    for point in ((11,11),(32,32),(31,31),(50,50),(51,51),(-1,11))
+        action = TC.click_action(point)
+        role = TC.role_at_click(groups,point,regions,signatures)
+        @test role == TC.role_at_click(groups,point)
+        @test TC.evaluate_joint_rule(rule,before,groups,[],action;observed_click=role,trained_click=trained) ==
+            TC.evaluate_joint_rule(rule,before,groups,[],action)
+    end
+    @test length(signatures) == 3
     guard = TC.GuardSearch(TC.MotionPredicate[],["training-feedback"],String[],String[],true,true,1)
     active = TC.ActiveMechanism(rule,guard,String[],String[])
     projection = TC.projected_contract(TC.ProjectionMemory(),(model=active,fragments=matches.fragments),before,[0])

@@ -90,9 +90,10 @@ function add_sequence_slot!(slots,positions,sort,phase,offset,port=0)
     return Slot(index)
 end
 
-function relative_click(xy,shape)
-    offset = Tuple(xy) .- anchor(shape)
-    unit = support_grid(shape).unit
+relative_click(xy,shape) = relative_click(xy,anchor(shape),support_grid(shape).unit)
+
+function relative_click(xy,origin,unit)
+    offset = Tuple(xy) .- origin
     divisor = gcd(unit,offset...)
     return (;offset=div.(offset,divisor),denominator=div(unit,divisor))
 end

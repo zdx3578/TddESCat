@@ -337,6 +337,10 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
             action = row.effects.action
             bound = context == row.context && row.level == obs.levels_completed &&
                 action["id"] in obs.available_actions
+            if bound && !isnothing(frontier)
+                bound = frontier_state(frontier,agenda,context,previous) ==
+                    frontier_state(frontier,agenda,row.context,row.preceding)
+            end
             if bound
                 obligation = (;failure=failure.event,source=relation_ref(row),
                     expected=row.next_context,advanced=row.advanced,step=failure.cursor)
@@ -348,13 +352,13 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
         end
         # The original first action is excluded only in its own public context.
         altered(row) = failure.initial != context || action_key(row.action) != failure.first
-        rows = [row for row in decision.ranked if altered(row)]
+        rows = [(action=row.action,rank=row.rank) for row in decision.ranked if altered(row)]
         if !isnothing(intervention) && altered(intervention) &&
                 all(row->row.action != intervention.action,rows)
             push!(rows,(action=intervention.action,rank=(0,0)))
         end
         if !isnothing(frontier)
-            node = (context,previous_key(agenda,previous))
+            node = frontier_state(frontier,agenda,context,previous)
             tried = get(frontier.outcomes,node,nothing)
             if !isnothing(tried)
                 filter!(row->!haskey(tried,action_key(row.action)),rows)
@@ -597,7 +601,7 @@ function failure_retry!(agenda;frontier=nothing)
         scope in agenda.reopened && return nothing
         length(first_sample.available) > 1 || 6 in first_sample.available || return nothing
     else
-        origin = (first_sample.context,previous_key(agenda,first_sample.preceding))
+        origin = frontier_state(frontier,agenda,first_sample.context,first_sample.preceding)
         if isempty(frontier_untried(frontier,origin))
             reachable = frontier_path(frontier,agenda,origin)
             if !isnothing(reachable)

@@ -29,7 +29,7 @@ class Fixture(ARCBaseGame):
             frame[40:42, 44:46] = 2
         actions = {"delayed": [5, 7], "remote": [5, 6], "directions": [6],
             "restart": [6], "progress-restart": [6], "restart-choices": [6],
-            "advancement-transfer": [6]}
+            "advancement-transfer": [6], "history-refinement": [1, 4]}
         levels = [Level(sprites=[Sprite(frame.copy(), name="board")])]
         if MODE == "progress-restart":
             frame[10:13, 23:26] = 4
@@ -46,6 +46,8 @@ class Fixture(ARCBaseGame):
         self.previous = None
         self.probed = False
         self.hits = 0
+        if MODE == "history-refinement":
+            self._available_actions = [1, 4]
 
     def handle_reset(self):
         if MODE == "progress-restart" and self._state.name == "GAME_OVER":
@@ -59,7 +61,19 @@ class Fixture(ARCBaseGame):
             self.complete_action()
             return
         pixels = self.current_level.get_sprites_by_name("board")[0].pixels
-        if MODE == "delayed":
+        if MODE == "history-refinement":
+            if action in (1, 4):
+                self.previous = action
+                self._available_actions = [5]
+            elif action == 5:
+                pixels[10:13, 8:11] = 3
+                self._available_actions = [7]
+            elif action == 7:
+                if self.previous == 1:
+                    self.lose()
+                else:
+                    self.next_level()
+        elif MODE == "delayed":
             if self.previous is not None and self.previous != action:
                 pixels[40:42, 44:46] = 7
             self.previous = action
@@ -214,6 +228,24 @@ def observed_steps(public):
 
 def verify(mode, public):
     rows = list(observed_steps(public))
+    if mode == "history-refinement":
+        failed = next(row for row in rows if row[2]["state"] == "GAME_OVER")
+        won = next(row for row in rows if row[2]["state"] == "WIN")
+        assert failed[1]["frame"] == won[1]["frame"]
+        assert failed[0]["action"] == won[0]["action"] == {"id": 7}
+        refinement = won[4]["history_refinement"]
+        assert (
+            refinement["status"],
+            refinement["before_width"],
+            refinement["width"],
+        ) == ("refined", 1, 2)
+        assert refinement["evidence"] == [failed[0]["event_id"], won[0]["event_id"]]
+        actions = {row[0]["event_id"]: row[0]["action"]["id"] for row in rows}
+        assert [[actions[r] for r in path] for path in refinement["history_reads"]] == [
+            [1, 5],
+            [4, 5],
+        ]
+        return refinement["evidence"]
     if mode == "advancement-transfer":
         first, second = rows
         assert first[2]["levels_completed"] == 1
@@ -328,6 +360,7 @@ def main(config, run):
         "progress-restart",
         "restart-choices",
         "advancement-transfer",
+        "history-refinement",
     )
     with ThreadPoolExecutor(max_workers=len(modes)) as pool:
         cases = {
@@ -356,12 +389,16 @@ if __name__ == "__main__":
             mode,
             int(number),
             budget="unlimited"
-            if mode in ("progress-restart", "restart-choices")
+            if mode in ("progress-restart", "restart-choices", "history-refinement")
             else 9,
             compute=bool(extra),
         )
         if extra:
             verify(mode, public)
+        if extra and mode == "history-refinement":
+            backends = read(public / "learning/backends.json")
+            assert backends["circuit_python"]["aalpy"]["version"] == "2.0.0"
+        elif extra:
             proofs = [
                 row["factor_role_proof"]
                 for path in (public / "decisions").glob("*.json")

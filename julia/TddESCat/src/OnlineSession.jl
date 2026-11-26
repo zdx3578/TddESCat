@@ -233,9 +233,10 @@ function mechanism_key(rule; composing=false)
     return content_hash(JSON.json(meaning))
 end
 
-function candidate_evaluation(active, before, groups, enclosure, action, history; transients=nothing,meters=())
+function candidate_evaluation(active, before, groups, enclosure, action, history; transients=nothing,meters=(),
+                              observed_click=nothing,trained_click=nothing)
     rule = active.rule
-    result = evaluate_joint_rule(rule,before,groups,enclosure,action;meters)
+    result = evaluate_joint_rule(rule,before,groups,enclosure,action;meters,observed_click,trained_click)
     result.truth == proven || return result
     scope = measured_scope(result.fragments)
     if !isnothing(scope) && scope ∉ active.meter_scopes
@@ -326,6 +327,16 @@ function ranked_public_actions(knowledge, observation, history, attempts, max_ac
         push!(values.actions,required_action)
     end
     judged = []
+    models_by_action = Dict{Int,Vector{ActiveMechanism}}()
+    for model in knowledge.active
+        push!(get!(Vector{ActiveMechanism},models_by_action,model.rule.action_id),model)
+    end
+    versions = Dict{String,String}()
+    version(model) = get!(() -> active_id(model),versions,model.rule.id)
+    click_roles = Dict{String,NamedTuple}()
+    click_bindings = IdDict{Vector{ColorCell},NamedTuple}()
+    frame_regions = isnothing(regions) ? nothing : last(regions.frames)
+    no_models = ActiveMechanism[]
     for action in values.actions
         supports = []
         reasons = String[]
@@ -333,14 +344,20 @@ function ranked_public_actions(knowledge, observation, history, attempts, max_ac
         blocked_resources = Set{Tuple}()
         rejected = false
         relation_reads = []
-        for model in knowledge.active
-            model.rule.action_id == action["id"] || continue
-            selected = candidate_evaluation(model,values.frame,values.groups,values.enclosure,action,history;transients,meters)
+        models = get(models_by_action,action["id"],no_models)
+        observed_click = action["id"] == 6 && any(model->!isnothing(model.rule.click),models) ?
+            role_at_click(values.groups,(action["x"],action["y"]),frame_regions,click_bindings) : nothing
+        for model in models
+            scope = model.rule.click
+            trained_click = isnothing(scope) ? nothing : get!(
+                () -> click_role_signature(click_support_signature(scope.support),scope.point),click_roles,model.rule.id)
+            selected = candidate_evaluation(model,values.frame,values.groups,values.enclosure,action,history;
+                transients,meters,observed_click,trained_click)
             for atom in model.condition.atoms
                 atom isa RelationPredicate || continue
                 selected.reason in ("published_joint_effects","learned_condition_false","learned_condition_unknown") || continue
                 push!(relation_reads,merge(predicate_record(atom),Dict("truth"=>string(selected.truth),
-                    "model"=>active_id(model))))
+                    "model"=>version(model))))
             end
             push!(reasons,selected.reason)
             rejected |= selected.truth == disproven
@@ -363,7 +380,7 @@ function ranked_public_actions(knowledge, observation, history, attempts, max_ac
             end
             push!(reasons,"shared_resource_binding_unproved")
         end
-        sort!(supports;by=choice->(-length(choice.expected),active_id(choice.model)))
+        sort!(supports;by=choice->(-length(choice.expected),version(choice.model)))
         agreed = !isempty(supports) && all(other->all(get(first(supports).expected,key,value) == value
             for (key,value) in other.expected),supports)
         reason = isempty(supports) ? (isempty(reasons) ? "uncovered" : join(sort!(unique(reasons)),",")) :
@@ -400,7 +417,7 @@ function ranked_public_actions(knowledge, observation, history, attempts, max_ac
         if isnothing(chosen) && length(supports) > 1
             split = distinguish_predictions([choice.expected for choice in supports])
             if split.separated > 0
-                experiment = Dict("mechanism_versions"=>[active_id(choice.model) for choice in supports],
+                experiment = Dict("mechanism_versions"=>[version(choice.model) for choice in supports],
                     "witnesses"=>split.witnesses,"complete"=>split.complete,"work"=>split.work)
                 trial_count == 0 && (priority = 2)
                 reason = "discriminates_competing_predictions"
@@ -650,7 +667,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     experiments = ExperimentSchedule()
     intervention_memory = InterventionMemory()
     relations = RelationAgenda()
-    exploration_frontier = isnothing(rec.limit) ? PublicFrontier() : nothing
+    history_widths = get(something(config.search,Dict()),"history_lengths",[1,2,4])
+    exploration_frontier = isnothing(rec.limit) ? PublicFrontier(history_widths) : nothing
     responses = ResponseLearning()
     publications = String[]
     count = 0
@@ -926,8 +944,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 alternate = frontier_choice(exploration_frontier,relations,obs,decision,intervention,preferred)
                 isnothing(alternate) || (relation_choice = alternate)
             else
-                frontier_options!(exploration_frontier,context,previous_key(relations,relations.previous),
-                    decision.ranked,intervention)
+                frontier_options!(exploration_frontier,context,decision.ranked,intervention)
             end
         end
         relation_policy = if relation_tasks && isnothing(relations.restart)
@@ -1196,7 +1213,10 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             observation = observe_relations!(relations,entry,resulting,effects,contact_feedback,site_transitions,
                 relation_proposal;groups=decision.groups)
             finish_relation_dispatch!(relations,relation_proposal)
-            isnothing(exploration_frontier) || frontier_observe!(exploration_frontier,relations)
+            if !isnothing(exploration_frontier)
+                refined = frontier_observe!(exploration_frontier,relations)
+                isnothing(refined) || (observation = merge(observation,(history_refinement=refined,)))
+            end
             observation
         end
         relation_policy_feedback = if !isnothing(relation_policy)
