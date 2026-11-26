@@ -119,7 +119,7 @@ function frontier_successor(search,agenda,indices)
 end
 
 function frontier_path(search,agenda,start)
-    queue = [start]
+    queue = FrontierState[start]
     parents = Dict{FrontierState,Union{Nothing,Tuple{FrontierState,Int}}}(start=>nothing)
     for node in queue
         if node != start

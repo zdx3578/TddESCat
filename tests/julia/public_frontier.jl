@@ -27,6 +27,10 @@ end
     end
     observe!(right,[2,3],1)
     observe!(left,[1],2)
+    left_context = first(agenda.samples).context
+    initial = TC.frontier_path(search,agenda,(left_context,()))
+    @test initial.route == [1]
+    @test length(last(initial.target)) == 1
     observe!(right,[2,3],1)
     observe!(left,[1],2)
     decision = (ranked=[(action=Dict("id"=>1),)],)

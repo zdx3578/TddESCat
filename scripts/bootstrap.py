@@ -25,6 +25,28 @@ def check_version(tool: Path, expected: str, name: str) -> None:
     print(f"{actual} — {tool}", flush=True)
 
 
+def sync_python(uv: Path, version: str, project: str, extras=()) -> Path:
+    environment = ROOT / (".venv" if project == "python" else f"{project}/.venv")
+    env = dict(os.environ, UV_PROJECT_ENVIRONMENT=str(environment))
+    env.pop("VIRTUAL_ENV", None)
+    command = [uv, "sync", "--project", project, "--python", version, "--locked"]
+    for extra in extras:
+        command.extend(["--extra", extra])
+    subprocess.run(command, cwd=ROOT, env=env, check=True)
+    python = environment / "bin" / "python"
+    check_version(python, version, "Python")
+    return python
+
+
+def prepare_compute(uv: Path, version: str) -> None:
+    python = sync_python(uv, version, "python/compute", ("circuit", "history"))
+    subprocess.run(
+        [python, "-m", "unittest", "discover", "-s", "python/compute/tests"],
+        cwd=ROOT,
+        check=True,
+    )
+
+
 def main() -> None:
     if sys.version_info < (3, 11):
         uv = resolve_tool("uv")
@@ -49,10 +71,16 @@ def main() -> None:
     parser.add_argument(
         "--julia", type=Path, help="Path to the pinned Julia executable"
     )
-    parser.add_argument(
+    profile = parser.add_mutually_exclusive_group()
+    profile.add_argument(
         "--v13",
         action="store_true",
         help="Install and build the Public25 computation backends",
+    )
+    profile.add_argument(
+        "--compute-only",
+        action="store_true",
+        help="Install and check the locked Python computation backends",
     )
     args = parser.parse_args()
     with args.config.open("rb") as source:
@@ -62,6 +90,13 @@ def main() -> None:
     julia_version = config["julia"]["version"]
     rust_version = config["rust"]["version"]
     uv = resolve_tool("uv")
+    if args.compute_only:
+        prepare_compute(uv, python_version)
+        return
+
+    python = sync_python(uv, python_version, "python")
+    if args.v13:
+        prepare_compute(uv, python_version)
     candidate = ROOT / ".runtime" / f"julia-{julia_version}" / "bin" / "julia"
     julia = resolve_tool(
         "julia", args.julia or (candidate if candidate.is_file() else None)
@@ -79,45 +114,7 @@ def main() -> None:
     check_version(cargo, rust_version, "cargo")
     check_version(rustc, rust_version, "rustc")
 
-    python = ROOT / ".venv" / "bin" / "python"
-    uv_env = dict(os.environ, UV_PROJECT_ENVIRONMENT=str(python.parent.parent))
-    uv_env.pop("VIRTUAL_ENV", None)
-    subprocess.run(
-        [
-            uv,
-            "sync",
-            "--project",
-            "python",
-            "--python",
-            python_version,
-            "--locked",
-        ],
-        cwd=ROOT,
-        env=uv_env,
-        check=True,
-    )
-    check_version(python, python_version, "Python")
     if args.v13:
-        compute_env = dict(uv_env)
-        compute_env.pop("UV_PROJECT_ENVIRONMENT")
-        subprocess.run(
-            [
-                uv,
-                "sync",
-                "--project",
-                "python/compute",
-                "--python",
-                python_version,
-                "--locked",
-                "--extra",
-                "circuit",
-                "--extra",
-                "history",
-            ],
-            cwd=ROOT,
-            env=compute_env,
-            check=True,
-        )
         subprocess.run(
             [
                 cargo,

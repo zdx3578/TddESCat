@@ -99,6 +99,15 @@ function explore!(rec)
 end
 
 function main(args)
+    if length(args) == 2 && first(args) == "--check-compute"
+        config = load_run_config(last(args))
+        capabilities = TddESCat.with_compute(config) do backends
+            Dict(name=>Dict(key=>value for (key,value) in worker.capabilities if key != "session")
+                for (name,worker) in backends)
+        end
+        println(JSON.json(capabilities))
+        return 0
+    end
     if length(args) == 3 && first(args) == "--compile-sequences"
         println(JSON.json(TddESCat.compile_evidence_sequences(args[2],args[3])))
         return 0

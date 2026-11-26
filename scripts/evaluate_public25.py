@@ -12,7 +12,13 @@ import subprocess
 import tomllib
 
 from tddesc_tools.public_run import absolute_compute_settings, atomic_json
-from tddesc_tools.run import read_task, runtime_paths, worktree_digest
+from tddesc_tools.run import (
+    julia_command,
+    julia_environment,
+    read_task,
+    runtime_paths,
+    worktree_digest,
+)
 from tddesc_tools.stitch import build_identity
 
 from scripts.evaluate_public24 import ROOT, evaluate_isolated, unconfirmed_transport
@@ -82,7 +88,11 @@ def backend_receipts(public):
         counts["circuit_calibrated"] += (
             artifact["applicable"] and artifact["calibration"]["accepted"]
         )
-        counts["history_candidates"] += artifact["history"] is not None
+        counts["history_candidates"] += artifact.get("history") is not None
+    for path in (public / "learning/histories").glob("*.json"):
+        artifact = json.loads(path.read_bytes())
+        counts["history_candidates"] += artifact["model"] is not None
+        counts["history_published"] += artifact["applicable"] is True
     for path in (public / "decisions").glob("*.json"):
         decision = json.loads(path.read_bytes())
         if proof := decision.get("factor_role_proof"):
@@ -95,6 +105,9 @@ def backend_receipts(public):
         counts["statistical_dispatch_changes"] += (
             isinstance(obligation, dict) and obligation.get("circuit") is not None
         )
+        if isinstance(obligation, dict) and (history := obligation.get("history")):
+            counts["history_dispatches"] += 1
+            counts["history_dispatch_changes"] += history["changed_action"]
     return dict(counts)
 
 
@@ -124,6 +137,22 @@ def campaign_report(games, finished):
 def sha256_file(path):
     with path.open("rb") as stream:
         return file_digest(stream, "sha256").hexdigest()
+
+
+def verify_compute_profile(template, runtime):
+    command = julia_command(
+        ROOT, runtime, ROOT / "scripts/run.jl", "--check-compute", str(template)
+    )
+    capabilities = json.loads(
+        subprocess.check_output(command, cwd=ROOT, env=julia_environment(runtime))
+    )
+    settings = tomllib.loads(template.read_text(encoding="utf-8"))
+    factor = (template.parent / settings["compute"]["factor_kernel"]).resolve()
+    return {
+        "capabilities": capabilities,
+        "factor_kernel_sha256": sha256_file(factor),
+        "compute_lock_sha256": sha256_file(ROOT / "python/compute/uv.lock"),
+    }
 
 
 def evaluate_game(case, game, runtime):
@@ -163,6 +192,7 @@ def campaign(args):
 
     output = args.output.resolve()
     template = ROOT / "config/v13_public25.toml"
+    compute = verify_compute_profile(template, runtime)
     output.mkdir(parents=True)
     engine, policy = prepare_cases(output, games, template, suite, bundle)
     commit = subprocess.check_output(
@@ -176,6 +206,7 @@ def campaign(args):
             "worktree_sha256": worktree_digest(ROOT),
             "solver_source_sha256": worktree_digest(ROOT, sources_only=True),
             "engine": build_identity(ROOT, engine),
+            "compute": compute,
             "policy_sha256": sha256_file(policy),
             "profile_sha256": sha256_file(template),
             "catalog_sha256": sha256_file(catalog),

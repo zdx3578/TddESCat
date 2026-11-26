@@ -475,6 +475,19 @@ function recovery_reads(rec, model)
     return sort!(unique([rec.before_ref; own_sources; tail]))
 end
 
+relation_condition_key(rule) = semantic_hash([mechanism_key(rule;composing=true),
+    isnothing(rule.click) ? nothing : rule.click.offsets])
+
+function relation_condition_view(knowledge,rec,history,obs)
+    models = Dict{String,Vector{ActiveMechanism}}()
+    for model in knowledge.active
+        push!(get!(Vector{ActiveMechanism},models,relation_condition_key(model.rule)),model)
+    end
+    receipts = Dict{String,Vector{String}}()
+    reads(model) = get!(() -> recovery_reads(rec,model),receipts,model.rule.id)
+    return (;models,history,reads,transients=receipt_transient_colors(obs.frames))
+end
+
 function predict_public(rec, item; plan_reads=String[],intervention_goal=nothing)
     choice = item.chosen
     if isnothing(choice)
@@ -718,7 +731,10 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 live_agenda=relations)
             inflight = nothing
         end
-        relation_tasks && collect_response_model!(responses,rec.store,relations)
+        if relation_tasks
+            collect_response_model!(responses,rec.store,relations)
+            collect_history_model!(responses,rec.store,relations)
+        end
         decision_started = time_ns()
         obs = rec.observation
         meter_context!(measurement,obs)
@@ -780,6 +796,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             error("Decision would consume a different grounded receipt")
         decision = ranked_public_actions(knowledge,obs,history,attempts,coordinates;
             composing,programs_pending,program_cursor,meters,object_probes,regions=knowledge.receipt)
+        condition_view = relation_tasks ? relation_condition_view(knowledge,rec,history,obs) : nothing
+        decision = merge(decision,(;condition_view))
         click_scene = object_probes ? intervention_scene(last(obs.frames),decision.groups) : NamedTuple[]
         isempty(decision.ranked) && break
         item = first(decision.ranked)
@@ -934,7 +952,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         relation_choice = if relation_tasks
             relation_experiment(relations,obs,decision,intervention,context;meters,
                 uncertainty=circuit_experiment_scores(responses,relations),circuit_ref=responses.scope,
-                distinguish=action->history_experiment_score(responses,relations,action,context,obs.levels_completed),
+                history_model=history_experiment(responses,relations,context,obs.levels_completed),
                 frontier=exploration_frontier)
         end
         if relation_tasks && !isnothing(exploration_frontier)
@@ -967,6 +985,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             if isnothing(choice)
                 decision = ranked_public_actions(knowledge,obs,history,attempts,coordinates;
                     composing,required_action=selected.action,meters,object_probes,regions=knowledge.receipt)
+                decision = merge(decision,(;condition_view))
                 choice = findfirst(row->row.action == selected.action,decision.ranked)
             end
             item = merge(decision.ranked[choice],(reason=selected.reason,))
@@ -993,7 +1012,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             elseif !isnothing(relation_choice) && selected.action == relation_choice.action
                 relation_choice
             else
-                tests = prepare_relation_tests(relations,context,obs,decision.groups,item.action;meters)
+                tests = prepare_relation_tests(relations,context,obs,decision.groups,item.action;meters,condition_view)
                 isempty(tests) ? nothing : (action=item.action,intent=:apply_relation,tests,reads=String[],obligation=nothing)
             end
         end
@@ -1219,6 +1238,14 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             end
             observation
         end
+        if relation_tasks && haskey(backends,"circuit_python")
+            refinement = get(relation_feedback,:history_refinement,nothing)
+            batch = config.learning["batch_confirmed_events"]
+            worker = backends["circuit_python"]
+            observe_response!(responses,relations;refinement)
+            request_history_model!(responses,worker,relations,rec.before_ref,batch;priority=!isnothing(refinement))
+            request_response_model!(responses,worker,relations,rec.before_ref,batch)
+        end
         relation_policy_feedback = if !isnothing(relation_policy)
             feedback = confirm_relation_policy!(relation_policy,relations,relation_feedback,resulting)
             relation_policy_cursor = feedback.cursor
@@ -1339,11 +1366,6 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         frozen || push!(pairs,(entry,resulting))
         entry = resulting
         count += 1
-        if relation_tasks && haskey(backends,"circuit_python")
-            observe_response!(responses,relations)
-            request_response_model!(responses,backends["circuit_python"],relations,rec.before_ref,
-                config.learning["batch_confirmed_events"])
-        end
         policy_needs_review |= !isnothing(contact_feedback) || !isempty(site_transitions)
         if !frozen && isnothing(inflight)
             count_for_batch = config.learning["batch_confirmed_events"]

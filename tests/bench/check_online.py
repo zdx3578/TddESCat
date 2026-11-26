@@ -32,6 +32,8 @@ def online_config(
     background_search=False,
     policy_file=None,
     learning_memory_bytes=None,
+    connect_timeout=2.0,
+    request_timeout=5.0,
 ):
     prior_setting = "" if prior is None else f'prior_evidence = "{prior}"'
     execution = (
@@ -67,8 +69,8 @@ base_url = "{url}"
 competition_mode = false
 game_selection = "explicit"
 game_id = "{scene.public_id}"
-connect_timeout_seconds = 2.0
-request_timeout_seconds = 5.0
+connect_timeout_seconds = {connect_timeout}
+request_timeout_seconds = {request_timeout}
 [learning]
 engine = "{root / "target/release/tddesc-stitch"}"
 policy_file = "{policy_file}"

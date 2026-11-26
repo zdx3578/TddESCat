@@ -4,6 +4,13 @@ function witnessed_relation_steps(agenda,entries)
     by_sample = Dict(index=>key for (key,producer) in agenda.producers for index in producer.support)
     descriptors = Dict{Int,Any}()
     neighbors = Dict{Int,NamedTuple}()
+    outcomes_after = Dict{Int,Vector{NamedTuple}}()
+    for outcome in agenda.outcomes
+        haskey(by_ref,outcome.event) || continue
+        prior = agenda.samples[outcome.index].preceding
+        prior == 0 && continue
+        push!(get!(Vector{NamedTuple},outcomes_after,prior),outcome)
+    end
     for (index,row) in enumerate(agenda.samples)
         row.state in ("GAME_OVER","WIN") && continue
         isempty(row.effects.residual) || continue
@@ -32,7 +39,7 @@ function witnessed_relation_steps(agenda,entries)
         descriptors[i] = policy_step(left,isnothing(earlier) ? [] : agenda.producers[earlier].relations)
         neighbors[index] = (;before=i,shared=sharing)
     end
-    return (;descriptors,neighbors,by_ref)
+    return (;descriptors,neighbors,by_ref,outcomes_after)
 end
 
 function public_role_links(previous,current)
@@ -129,7 +136,9 @@ function policy_episodes(agenda,entries;solver=nothing,snapshot="trajectory")
     distinguish(a,b) = isnothing(solver) ? separating_feature(a,b) : typed_policy_guard(solver,a,b,snapshot)
     function emit(body,members,structure)
         rows = agenda.samples[members]
-        push!(episodes,(;body,members,structure,events=unique([ref for row in rows for ref in relation_refs(row)])))
+        outcomes = get(trace.outcomes_after,last(members),NamedTuple[])
+        events = unique([reduce(vcat,relation_refs.(rows));[outcome.event for outcome in outcomes]])
+        push!(episodes,(;body,members,structure,events,public_outcomes=outcomes))
     end
     ordered = sort!(collect(families);by=first)
     for (_,members) in ordered
@@ -321,6 +330,13 @@ end
 function verify_relation_episode(tree,episode,agenda,entries)
     cursor = RelationPolicyCursor(LearnedPolicy("","",0,"",Dict("tree"=>tree),String[],""))
     by_ref = Dict(entry.event["event_id"]=>entry.observation for entry in entries)
+    for outcome in get(episode,:public_outcomes,NamedTuple[])
+        sample = agenda.samples[outcome.index]
+        after = get(by_ref,outcome.event,nothing)
+        isnothing(after) && return false
+        sample.preceding == last(episode.members) && relation_ref(sample) == outcome.event || return false
+        after.state == sample.state && outcome in agenda.outcomes || return false
+    end
     source_producer = Dict(index=>producer for producer in values(agenda.producers) for index in producer.support)
     earlier = nothing
     for index in episode.members
@@ -341,7 +357,8 @@ function verify_relation_episode(tree,episode,agenda,entries)
 end
 
 function trajectory_reads(corpus,agenda)
-    indices = unique(vcat([episode.members for episode in corpus.episodes]...))
+    indices = unique([index for episode in corpus.episodes for index in
+        [episode.members; [outcome.index for outcome in get(episode,:public_outcomes,NamedTuple[])]]])
     return [begin
         row = agenda.samples[index]
         (;event=relation_ref(row),context=row.context,action=action_key(row.effects.action),
@@ -368,6 +385,7 @@ function policy_task_options(agenda,instruction,obs,decision;meters=())
     id in obs.available_actions || return NamedTuple[]
     actions = [row.action for row in decision.ranked if row.action["id"] == id]
     context = relation_context(obs)
+    condition_view = get(decision,:condition_view,nothing)
     options = NamedTuple[]
     for action in actions
         prior = previous_key(agenda,agenda.previous)
@@ -383,7 +401,7 @@ function policy_task_options(agenda,instruction,obs,decision;meters=())
         else
             sought = op["relations"]
             allowed = reduce(intersect,(Set(get(agenda.by_relation,relation,String[])) for relation in sought))
-            observed = prepare_relation_tests(agenda,context,obs,decision.groups,action;meters)
+            observed = prepare_relation_tests(agenda,context,obs,decision.groups,action;meters,condition_view)
             [test for test in observed if test.key in allowed && test.relations == sought &&
                 test.scope in (:bound,:replicated) && all(other->other.expected == test.expected,observed)]
         end

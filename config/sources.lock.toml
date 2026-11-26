@@ -214,6 +214,20 @@ archive_sha256 = "74329f2da8fb012b5667a02a3f2bffad95eafc7066747f4e9f7e80a75588c4
 wheel_sha256 = "74329f2da8fb012b5667a02a3f2bffad95eafc7066747f4e9f7e80a75588c421"
 license = "GPL-3.0"
 license_path = "LICENSE"
+
+[[source]]
+kind = "compute-wheel"
+name = "torch"
+version = "2.15.0+cpu"
+repository = "https://github.com/pytorch/pytorch"
+index = "https://download.pytorch.org/whl/cpu"
+lock_path = "python/compute/uv.lock"
+archive = "torch-2.15.0+cpu-cp312-cp312-manylinux_2_28_x86_64.whl"
+archive_sha256 = "0955c7e3446326293f48af18fad67872fa31dee5a36a87690eb9e5be8b465be3"
+wheel_sha256 = "0955c7e3446326293f48af18fad67872fa31dee5a36a87690eb9e5be8b465be3"
+license = "BSD-3-Clause"
+license_path = "LICENSE"
+
 [[source]]
 kind = "julia-vendored"
 name = "SymbolicPlanners"

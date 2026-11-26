@@ -24,6 +24,8 @@
 
 ## 2. 从公共事件形成可计算的作用证据（M1）
 
+**R2公共结果责任：**所有已确认公开回执的晋级/WIN/GAME_OVER/可用动作变化独立形成结果关系，不以已有producer、局部效果complete或residual为空为前置。转场不当局部平移；局部效果、公开结果和未解释残差分开保存。M1.3复用已有ActiveMechanism.condition及用途任务；一般目标依赖在M2.3扩展。具体当前源码缺口与顺序见13。
+
 ### 2.1 EventEffectView 与作用角色分离
 
 `explain_event(snapshot_before, event_view, region_views, deltas) -> EffectEvidence`。
@@ -130,7 +132,9 @@ expand_support(frontier, snapshot):
 
 按 08 将局部任务、正式目标、待区分实验和恢复任务交给同一个仲裁器。不要在 `InterventionLearning` 里另建动作执行路径。
 
-## 5. 关系闭包与布尔因子候选：复用同一关系核心（M2）
+## 5. 关系闭包与布尔因子候选：复用同一关系核心（M1内核、M2语义扩展）
+
+**R2依赖澄清：**已知完整有限关系的唯一精确闭包/矩形内核在M1.2b交付，供06关系压缩使用；本节M2.1b扩展部分背景、动态词汇和候选意义验证。M1.3a同样先具备由真实残差/反例触发的最小对象拆分/组合，M2.1a扩展六类持续触发及共享学习，两个阶段使用同一入口。
 
 Boolean Matrix Factorization（布尔矩阵因子分解，BMF）和 Formal Concept Analysis（形式概念分析，FCA）在这里提供可验证的共同属性、闭包和矩形覆盖能力。它们不是两个必须部署的独立学习系统。本项目复用 `RelationQueries.jl`、06 的成员/属性索引以及 `ConceptConstruction.jl` 的概念构造入口，完成以下候选算法；PyBMF、Caspailleur 只保留为离线研究对照，不进入生产依赖，也不以等待安装它们延后语义候选的实现。
 

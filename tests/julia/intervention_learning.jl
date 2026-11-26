@@ -92,6 +92,19 @@ end
         next.observation,TC.public_components(image),choice.action)
     @test Set(only(tests).reads) == Set(["first","confirmed-1","confirmed-2"])
     @test only(tests).scope == :replicated && only(only(tests).rule.effects).family == :pigment
+    condition = TC.GuardSearch(TC.MotionPredicate[TC.RecentAction(7)],["confirmed-2"],
+        ["confirmed-1"],String[],true,true,1)
+    rule = only(tests).rule
+    active = TC.ActiveMechanism(rule,condition,["confirmed-1"],String[])
+    view = (models=Dict(TC.relation_condition_key(rule)=>[active]),history=[7],
+        transients=nothing,reads=(_ -> ["revision-source"]))
+    context = TC.relation_context(next.observation)
+    groups = TC.public_components(image)
+    admitted = TC.prepare_relation_tests(agenda,context,next.observation,groups,choice.action;condition_view=view)
+    @test only(only(admitted).conditions).version == TC.active_id(active)
+    @test "revision-source" in only(admitted).reads
+    withdrawn = merge(view,(history=[5],))
+    @test isempty(TC.prepare_relation_tests(agenda,context,next.observation,groups,choice.action;condition_view=withdrawn))
 end
 
 @testset "Click effects follow a witnessed object and exact relative point" begin

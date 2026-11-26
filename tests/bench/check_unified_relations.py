@@ -6,9 +6,11 @@ from pathlib import Path
 from types import SimpleNamespace
 import subprocess
 import sys
+import tomllib
 
 from tddesc_tools.isolation import environment_server
-from tddesc_tools.public_run import supervise
+from tddesc_tools.public_run import public_settings, supervise
+from tests.bench.check_evidence import solver_process
 from tddesc_tools.run import append_assertion, read_task, runtime_paths, write_json
 from tests.bench.check_online import online_config
 from tests.bench.measurement_audit import receipts
@@ -29,7 +31,8 @@ class Fixture(ARCBaseGame):
             frame[40:42, 44:46] = 2
         actions = {"delayed": [5, 7], "remote": [5, 6], "directions": [6],
             "restart": [6], "progress-restart": [6], "restart-choices": [6],
-            "advancement-transfer": [6], "history-refinement": [1, 4]}
+            "advancement-transfer": [6], "history-refinement": [1, 4],
+            "history-continuation": [1, 4], "outcome-preparation": [5, 7]}
         levels = [Level(sprites=[Sprite(frame.copy(), name="board")])]
         if MODE == "progress-restart":
             frame[10:13, 23:26] = 4
@@ -39,6 +42,10 @@ class Fixture(ARCBaseGame):
             frame[10:13, 8:11] = 3
             frame[10:13, 38:41] = 4
             levels.append(Level(sprites=[Sprite(frame, name="board")]))
+        if MODE == "outcome-preparation":
+            frame[10:13, 8:11] = 0
+            frame[10:13, 38:41] = 4
+            levels.append(Level(sprites=[Sprite(frame, name="board")]))
         super().__init__(GAME, levels,
             camera=Camera(width=64, height=64), available_actions=actions[MODE], seed=seed)
 
@@ -46,8 +53,10 @@ class Fixture(ARCBaseGame):
         self.previous = None
         self.probed = False
         self.hits = 0
-        if MODE == "history-refinement":
+        if MODE in ("history-refinement", "history-continuation"):
             self._available_actions = [1, 4]
+        if MODE == "outcome-preparation":
+            self._available_actions = [5, 7]
 
     def handle_reset(self):
         if MODE == "progress-restart" and self._state.name == "GAME_OVER":
@@ -61,8 +70,21 @@ class Fixture(ARCBaseGame):
             self.complete_action()
             return
         pixels = self.current_level.get_sprites_by_name("board")[0].pixels
-        if MODE == "history-refinement":
-            if action in (1, 4):
+        if MODE == "outcome-preparation":
+            if action == 5:
+                self._available_actions = [6]
+            elif action == 7:
+                self.lose()
+            elif pixels[self.action.data["y"], self.action.data["x"]] == 4:
+                if self.level_index == 1:
+                    pixels[10, 38] = 0
+                self.next_level()
+        elif MODE in ("history-refinement", "history-continuation"):
+            if self.probed:
+                self.hits += 1
+                if action == 2 and self.hits >= 12:
+                    self.next_level()
+            elif action in (1, 4):
                 self.previous = action
                 self._available_actions = [5]
             elif action == 5:
@@ -71,6 +93,10 @@ class Fixture(ARCBaseGame):
             elif action == 7:
                 if self.previous == 1:
                     self.lose()
+                elif MODE == "history-continuation":
+                    self.probed = True
+                    pixels[10:13, 8:11] = 10
+                    self._available_actions = [2, 7]
                 else:
                     self.next_level()
         elif MODE == "delayed":
@@ -139,7 +165,12 @@ def capture(
     folder = games / game
     folder.mkdir(parents=True)
     write_json(folder / "metadata.json", dict(game_id=game, class_name="Fixture"))
-    (folder / "fixture.py").write_text(f"MODE = {mode!r}\nGAME = {game!r}\n{fixture}")
+    fixture_mode = "history-continuation" if mode == "history-dispatch" else mode
+    (folder / "fixture.py").write_text(
+        f"MODE = {fixture_mode!r}\nGAME = {game!r}\n{fixture}"
+    )
+    compute_enabled = compute or mode == "history-dispatch"
+    extended_timeout = compute_enabled or mode == "outcome-preparation"
     public = run / "public"
     public.mkdir()
     with environment_server(
@@ -156,9 +187,11 @@ def capture(
             sequences=True,
             batch=8,
             background_search=background_search,
+            connect_timeout=15.0 if extended_timeout else 2.0,
+            request_timeout=60.0 if extended_timeout else 5.0,
         )
         additions = "autonomous = true\nrelation_goals = true\n"
-        if compute:
+        if compute_enabled:
             additions += (
                 "\n[compute]\n"
                 f'factor_kernel = "{root / "target/release/factor-kernel"}"\n'
@@ -166,7 +199,25 @@ def capture(
                 f'circuit_python = "{root / "python/compute/.venv/bin/python"}"\n'
             )
         agent.write_text(agent.read_text() + additions)
-        assert supervise(root, agent, public) == 0, (public / "solver.log").read_text()
+        if mode == "history-dispatch":
+            script = root / "tests/julia/history_public.jl"
+            paths = public_settings(root, agent, tomllib.loads(agent.read_text()))
+            result = solver_process(
+                root,
+                runtime,
+                public,
+                str(agent),
+                str(public),
+                script=script,
+                extra_read=paths,
+                timeout=1200,
+            )
+            (public / "solver.log").write_text(result.stdout + result.stderr)
+            assert result.returncode == 0, result.stdout + result.stderr
+        else:
+            assert supervise(root, agent, public) == 0, (
+                public / "solver.log"
+            ).read_text()
     return public
 
 
@@ -227,24 +278,84 @@ def observed_steps(public):
 
 
 def verify(mode, public):
+    if mode == "history-dispatch":
+        record = read(public / "history-experiment.json")
+        task = record["task"]
+        trace = receipts(public)
+        event, reply = trace[record["event"]]
+        choice = task["obligation"]["history"]
+        horizon = choice["scope"]
+        artifact = read(public / "learning/histories" / (horizon + ".json"))
+        prediction = read(public / "predictions" / (event["command_ref"] + ".json"))
+        assert artifact["applicable"] and choice["changed_action"]
+        assert task["obligation"]["baseline"] == {"id": 7}
+        assert event["action"] == task["action"] == {"id": 2}
+        assert reply["action_input"]["id"] == 2
+        assert choice["answer"] == prediction["guard_truth"] == "unknown"
+        assert (
+            horizon in prediction["event_reads"]
+            and "2:-1:-1" not in artifact["model"]["edges"][str(choice["state"])]
+        )
+        assert all(
+            trace[source][0]["sequence"] < event["sequence"]
+            for source in artifact["model"]["read_events"]
+        )
+        return [record["event"]]
     rows = list(observed_steps(public))
-    if mode == "history-refinement":
+    if mode in ("history-refinement", "history-continuation"):
         failed = next(row for row in rows if row[2]["state"] == "GAME_OVER")
-        won = next(row for row in rows if row[2]["state"] == "WIN")
-        assert failed[1]["frame"] == won[1]["frame"]
-        assert failed[0]["action"] == won[0]["action"] == {"id": 7}
-        refinement = won[4]["history_refinement"]
+        resolved = next(row for row in rows if "history_refinement" in row[4])
+        assert failed[1]["frame"] == resolved[1]["frame"]
+        assert failed[0]["action"] == resolved[0]["action"] == {"id": 7}
+        refinement = resolved[4]["history_refinement"]
         assert (
             refinement["status"],
             refinement["before_width"],
             refinement["width"],
         ) == ("refined", 1, 2)
-        assert refinement["evidence"] == [failed[0]["event_id"], won[0]["event_id"]]
+        assert refinement["evidence"] == [
+            failed[0]["event_id"],
+            resolved[0]["event_id"],
+        ]
         actions = {row[0]["event_id"]: row[0]["action"]["id"] for row in rows}
         assert [[actions[r] for r in path] for path in refinement["history_reads"]] == [
             [1, 5],
             [4, 5],
         ]
+        assert rows[-1][2]["state"] == "WIN"
+        if mode == "history-continuation":
+            sequences = {event["event_id"]: event["sequence"] for event, *_ in rows}
+            history_checks = []
+            for event, _, _, task, _ in rows:
+                if not task or task["intent"] not in (
+                    "test_delayed_effect",
+                    "test_history_response",
+                ):
+                    continue
+                history = task["obligation"]["history"]
+                if history is None:
+                    continue
+                scope = history["scope"]
+                artifact = read(public / "learning/histories" / (scope + ".json"))
+                assert artifact["applicable"] and scope in task["reads"]
+                assert set(refinement["evidence"]) <= set(
+                    artifact["model"]["read_events"]
+                )
+                assert all(
+                    sequences[source] < event["sequence"]
+                    for source in artifact["model"]["read_events"]
+                )
+                assert history["answer"] == "unknown"
+                key = ":".join(
+                    str(event["action"].get(k, -1)) for k in ("id", "x", "y")
+                )
+                assert key not in artifact["model"]["edges"][str(history["state"])]
+                history_checks.append(event["event_id"])
+            artifacts = [
+                read(path) for path in (public / "learning/histories").glob("*.json")
+            ]
+            assert any(item["applicable"] for item in artifacts)
+            return refinement["evidence"] + history_checks
         return refinement["evidence"]
     if mode == "advancement-transfer":
         first, second = rows
@@ -255,6 +366,23 @@ def verify(mode, public):
         assert second[0]["action"]["x"] != first[0]["action"]["x"]
         assert second[4]["feedback"]["result"] == "established"
         assert second[2]["state"] == "WIN"
+        return [row[0]["event_id"] for row in rows]
+    if mode == "outcome-preparation":
+        initial, advanced, prepared, won = rows
+        assert initial[0]["action"] == prepared[0]["action"] == {"id": 5}
+        assert initial[1]["frame"] == initial[2]["frame"]
+        source = advanced[4]["public_outcome"]
+        assert source["result"] == "advancement"
+        assert source["preparation"]["event"] == initial[0]["event_id"]
+        assert prepared[3]["intent"] == "prepare_public_outcome"
+        assert prepared[3]["obligation"]["outcome"] == advanced[0]["event_id"]
+        assert prepared[3]["obligation"]["scope"] == "new_instance"
+        assert prepared[4]["feedback"]["result"] == "established"
+        assert advanced[0]["action"]["x"] != won[0]["action"]["x"]
+        assert won[2]["state"] == "WIN"
+        result = won[4]["public_outcome"]
+        assert result["result"] == "win" and not result["local_effects_complete"]
+        assert result["preparation"]["event"] == prepared[0]["event_id"]
         return [row[0]["event_id"] for row in rows]
     if mode == "restart-choices":
         assert [row[2]["state"] for row in rows] == ["GAME_OVER", "GAME_OVER", "WIN"]
@@ -360,7 +488,9 @@ def main(config, run):
         "progress-restart",
         "restart-choices",
         "advancement-transfer",
+        "outcome-preparation",
         "history-refinement",
+        "history-dispatch",
     )
     with ThreadPoolExecutor(max_workers=len(modes)) as pool:
         cases = {
@@ -389,13 +519,20 @@ if __name__ == "__main__":
             mode,
             int(number),
             budget="unlimited"
-            if mode in ("progress-restart", "restart-choices", "history-refinement")
+            if mode
+            in (
+                "progress-restart",
+                "restart-choices",
+                "history-refinement",
+                "history-continuation",
+                "outcome-preparation",
+            )
             else 9,
             compute=bool(extra),
         )
         if extra:
             verify(mode, public)
-        if extra and mode == "history-refinement":
+        if extra and mode in ("history-refinement", "history-continuation"):
             backends = read(public / "learning/backends.json")
             assert backends["circuit_python"]["aalpy"]["version"] == "2.0.0"
         elif extra:

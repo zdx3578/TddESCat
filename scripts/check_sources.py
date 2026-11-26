@@ -5,6 +5,7 @@ import hashlib
 import re
 import tomllib
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -47,16 +48,59 @@ def rust_build_digest(path: Path) -> str:
     return build_digest(path, "Cargo.toml", "LICENSE")
 
 
+def check_python_source(source, locks):
+    name, version, kind = (source[key] for key in ("name", "version", "kind"))
+    lock_name = source.get(
+        "lock_path", "python/uv.lock" if kind == "pypi" else "python/compute/uv.lock"
+    )
+    if lock_name not in locks:
+        locks[lock_name] = load(ROOT / lock_name)["package"]
+    packages = [
+        package
+        for package in locks[lock_name]
+        if package["name"] == name and package["version"] == version
+    ]
+    if "index" in source:
+        packages = [
+            package
+            for package in packages
+            if package["source"].get("registry") == source["index"]
+        ]
+    require(len(packages) == 1, f"Python lock drift: {name}")
+    package = packages[0]
+    archive = package.get("sdist")
+    if archive is not None:
+        require(kind != "compute-wheel", f"Expected a wheel-only release: {name}")
+        require(
+            archive["hash"] == f"sha256:{source['archive_sha256']}",
+            f"PyPI source digest mismatch: {name}",
+        )
+    else:
+        require(
+            source["archive_sha256"] == source["wheel_sha256"],
+            f"Wheel source digest mismatch: {name}",
+        )
+    matching = [
+        wheel
+        for wheel in package["wheels"]
+        if wheel["hash"] == f"sha256:{source['wheel_sha256']}"
+    ]
+    require(bool(matching), f"Python wheel digest mismatch: {name}")
+    if kind == "compute-wheel":
+        require(
+            any(
+                Path(unquote(urlsplit(wheel["url"]).path)).name == source["archive"]
+                for wheel in matching
+            ),
+            f"Python wheel distribution mismatch: {name}",
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
     args = parser.parse_args()
-    python = {item["name"]: item for item in load(ROOT / "python/uv.lock")["package"]}
-    compute = {
-        item["name"]: item
-        for item in load(ROOT / "python/compute/uv.lock")["package"]
-        if item["name"] in ("cvc5", "aalpy", "libcirkit")
-    }
+    python_locks = {}
     julia = load(ROOT / "julia/TddESCat/Manifest.toml")["deps"]
     cargo = load(ROOT / "Cargo.lock")
     cargo_packages = {
@@ -86,27 +130,8 @@ def main() -> None:
             bool(re.fullmatch(r"[0-9a-f]{64}", source["archive_sha256"])),
             f"Missing archive digest: {name}",
         )
-        if kind in ("pypi", "compute-pypi"):
-            package = (python if kind == "pypi" else compute)[name]
-            require(package["version"] == version, f"Python lock drift: {name}")
-            archive = package.get("sdist")
-            if archive is not None:
-                require(
-                    archive["hash"] == f"sha256:{source['archive_sha256']}",
-                    f"PyPI source digest mismatch: {name}",
-                )
-            else:
-                require(
-                    source["archive_sha256"] == source["wheel_sha256"],
-                    f"Expected a wheel-only release: {name}",
-                )
-            require(
-                any(
-                    wheel["hash"] == f"sha256:{source['wheel_sha256']}"
-                    for wheel in package["wheels"]
-                ),
-                f"PyPI wheel digest mismatch: {name}",
-            )
+        if kind in ("pypi", "compute-pypi", "compute-wheel"):
+            check_python_source(source, python_locks)
         elif kind == "julia":
             package = julia[name][0]
             require(
