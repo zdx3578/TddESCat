@@ -61,6 +61,7 @@ KIND_IDS = {
     "learned_policy": ("published_policy_withheld_instances",),
     "object_interventions": ("object_intervention_advancement",),
     "unified_relations": ("public_relation_feedback_loop",),
+    "relation_policies": ("public_trajectory_policy",),
 }
 MODULES = {
     "protocol": "tests.protocol.test_faults",
@@ -101,6 +102,7 @@ MODULES = {
     "learned_policy": "tests.bench.check_learned_policy",
     "object_interventions": "tests.bench.check_object_interventions",
     "unified_relations": "tests.bench.check_unified_relations",
+    "relation_policies": "tests.bench.check_relation_policies",
     "stitch_growth": "tests.bench.check_kernel",
 }
 
@@ -336,6 +338,7 @@ def run_task(root, config_path, task, run_dir, runtime):
         "learned_policy",
         "object_interventions",
         "unified_relations",
+        "relation_policies",
     )
     offline_arc = kind in ("arc_offline", "autonomous_offline", "arc_public25")
     isolated = (
@@ -515,6 +518,7 @@ def run_task(root, config_path, task, run_dir, runtime):
         "projection_revision",
         "relation_goal",
         "unified_relations",
+        "relation_policies",
         "stitch_growth",
     ):
         write_artifact_index(run_dir)

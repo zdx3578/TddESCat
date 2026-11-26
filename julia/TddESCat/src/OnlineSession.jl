@@ -23,13 +23,14 @@ mutable struct OnlineKnowledge
     learning_jobs::Int
     definition_depths::Dict{String,Int}
     programs::Vector{Any}
+    program_producers::Dict{String,Vector{Any}}
     policies::Vector{Any}
     observations::Dict{String,PublicEffects}
     projections::ProjectionMemory
 end
 
 OnlineKnowledge() = OnlineKnowledge(JointMechanism[],ActiveMechanism[],PublicTrial[],0,Dict{String,Int}(),
-    Any[],Any[],Dict{String,PublicEffects}(),ProjectionMemory())
+    Any[],Dict(),Any[],Dict{String,PublicEffects}(),ProjectionMemory())
 
 function prior_trials(config)
     directory = isnothing(config.learning) ? nothing : get(config.learning,"prior_evidence",nothing)
@@ -653,6 +654,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     blocked_policies = Set{String}()
     pending_policy = nothing
     policy_counterexample = nothing
+    relation_policy_cursor = nothing
+    attempted_relation_policies = Set{Tuple{String,String}}()
+    last_relation_policy_check = 0
     last_sequence_check = 0
     last_job = :program
     background = !frozen && get(config.learning,"background_search",false)
@@ -699,6 +703,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             contact_pending = nothing
             pending_policy = nothing
             policy_counterexample = nothing
+            relation_policy_cursor = nothing
             fresh_binding = failed || rec.observation.levels_completed != obs.levels_completed
             if fresh_binding
                 begin_visual_level!(visual,spatial)
@@ -819,7 +824,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             if isnothing(program_cursor)
                 state = content_hash(JSON.json([obs.levels_completed,last(obs.frames),obs.available_actions]))
                 considered = Set{String}()
-                for program in knowledge.programs
+                for program in programs_for_relations(knowledge,needs)
                     constrained || length(program.steps) <= rec.limit-rec.sent_count || continue
                     any(step->program_step_key(step) in refuted_steps,program.steps) && continue
                     if contact_limit <= 1 && !isnothing(spatial_choice) &&
@@ -883,13 +888,22 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         relation_choice = if relation_tasks
             relation_experiment(relations,obs,decision,intervention,context;meters)
         end
+        relation_policy = if relation_tasks && isnothing(relations.restart)
+            relation_policy_choice(knowledge.policies,relation_policy_cursor,attempted_relation_policies,
+                relations,obs,decision;meters)
+        end
+        policy_withdrawal = if !isnothing(relation_policy_cursor) && isnothing(relation_policy)
+            prior = relation_policy_cursor
+            (;definition=prior.policy.definition,last_observed=last(prior.observed),reason="unbound_next_task")
+        end
         arbitration = task_arbitration(item,spatial_choice,intervention,relation_choice,experiment;
             program=!isnothing(program_cursor),continuing_contact,
             conditional=!isnothing(goal_cursor) || !isnothing(item.follow) ||
                 get(something(policy_note,Dict()),"status",nothing) == "ready",
-            object_probes)
+            object_probes,policy=isnothing(relation_policy) ? nothing : relation_policy.proposal,
+            continuing_policy=!isnothing(relation_policy_cursor))
         selected = arbitration.choice
-        if selected.action != item.action || selected.source in (:spatial,:intervention,:relation)
+        if selected.action != item.action || selected.source in (:spatial,:intervention,:relation,:relation_policy)
             choice = findfirst(row->row.action == selected.action,decision.ranked)
             if isnothing(choice)
                 decision = ranked_public_actions(knowledge,obs,history,attempts,coordinates;
@@ -912,8 +926,12 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         !isnothing(intervention) && selected.action == intervention.action || (intervention = nothing)
         object_probes && (intervention = executed_intervention(intervention,click_scene,item.action))
         intervention_goal = isnothing(intervention) ? nothing : intervention.goal
+        selected.source == :relation_policy || (relation_policy = nothing)
+        relation_policy_cursor = nothing
         relation_proposal = if relation_tasks
-            if !isnothing(relation_choice) && selected.action == relation_choice.action
+            if !isnothing(relation_policy)
+                relation_policy.proposal
+            elseif !isnothing(relation_choice) && selected.action == relation_choice.action
                 relation_choice
             else
                 tests = prepare_relation_tests(relations,context,obs,decision.groups,item.action;meters)
@@ -1006,6 +1024,15 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         if relation_tasks
             decision_record["task_arbitration"] = arbitration
             isnothing(relation_task) || (decision_record["public_relation_task"] = relation_task)
+            isnothing(policy_withdrawal) || (decision_record["relation_policy_withdrawal"] = policy_withdrawal)
+        end
+        if !isnothing(relation_policy)
+            policy = relation_policy.cursor.policy
+            push!(attempted_relation_policies,(policy.body["scope"],relation_policy.context))
+            decision_record["relation_policy"] = (;definition=policy.definition,
+                definitions=policy.body["definitions"],policy.publication,policy.available_after,
+                policy.training,structure=policy.body["structure"],branches=relation_policy.branches,
+                baseline_action=arbitration.baseline.action,changed_action=item.action != arbitration.baseline.action)
         end
         isnothing(policy_task) || (decision_record["learned_policy"] = policy_task)
         isnothing(intervention) || (decision_record["intervention"] = intervention_record(intervention,rec.before_ref))
@@ -1036,6 +1063,10 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         if !isnothing(policy_task)
             decision_record["definition_refs"] = unique([get(decision_record,"definition_refs",String[]);
                 policy_task.definition])
+        end
+        if !isnothing(relation_policy)
+            decision_record["definition_refs"] = unique([get(decision_record,"definition_refs",String[]);
+                relation_policy.cursor.policy.body["definitions"]])
         end
         if !isnothing(policy_counterexample)
             decision_record["policy_counterexample"] = policy_counterexample
@@ -1112,6 +1143,12 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 relation_proposal;groups=decision.groups)
             finish_relation_dispatch!(relations,relation_proposal)
             observation
+        end
+        relation_policy_feedback = if !isnothing(relation_policy)
+            feedback = confirm_relation_policy!(relation_policy,relations,relation_feedback,resulting)
+            relation_policy_cursor = feedback.cursor
+            (;event=sample.event_id,feedback.result,feedback.branches,
+                definition=relation_policy.cursor.policy.definition)
         end
         projection_feedback = if !isnothing(projected)
             local_feedback = projection_choice === item.chosen ? assessment :
@@ -1214,6 +1251,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 "task_feedback"=>advancement_feedback(task,entry,resulting,contact_feedback),
                 "intervention_feedback"=>intervention_feedback,
                 "public_relation_feedback"=>relation_feedback,
+                "relation_policy_feedback"=>relation_policy_feedback,
                 "learned_policy_feedback"=>policy_result,
                 "spatial_feedback"=>spatial_feedback,
                 "visual_feedback"=>visual_feedback,"contact_feedback"=>contact_feedback,
@@ -1229,14 +1267,20 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         if !frozen && isnothing(inflight)
             count_for_batch = config.learning["batch_confirmed_events"]
             prepared = nothing
-            if sequence_enabled && relation_goals && !isnothing(visual) && policy_needs_review
+            if sequence_enabled && relation_tasks && last_job != :policy &&
+                    count-last_relation_policy_check >= count_for_batch
+                prepared = prepare_policy_learning!(knowledge,config,rec.store,repo_root,relations;
+                    entries=sequence_events,completed=submitted_policies)
+                last_relation_policy_check = count
+            end
+            if isnothing(prepared) && sequence_enabled && relation_goals && !isnothing(visual) && policy_needs_review
                 prepared = prepare_policy_learning!(knowledge,config,rec.store,repo_root,visual;
                     completed=submitted_policies)
                 policy_needs_review = false
-                if !isnothing(prepared)
-                    push!(submitted_policies,prepared.key)
-                    last_job = :policy
-                end
+            end
+            if !isnothing(prepared)
+                push!(submitted_policies,prepared.key)
+                last_job = :policy
             end
             if isnothing(prepared) && sequence_enabled && last_job == :effect &&
                     count-last_sequence_check >= count_for_batch

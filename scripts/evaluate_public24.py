@@ -1,6 +1,7 @@
 """Run the cold autonomous controller on the other official local games."""
 
 import argparse
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from hashlib import sha256
 import json
@@ -21,14 +22,25 @@ from tddesc_tools.run import (
 )
 from tddesc_tools.stitch import build_identity
 
-from tests.bench.check_real_public import offline_capture
+from tests.bench.check_real_public import offline_capture, public_scorecard_win
 from tests.bench.measurement_audit import receipts
+from tests.bench.policy_audit import TrajectoryPolicyAudit
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def load(path):
     return json.loads(path.read_bytes())
+
+
+def frame_identity(response):
+    raw = json.dumps(response["frame"], separators=(",", ":")).encode()
+    return sha256(raw).hexdigest()
+
+
+def earlier_start(public):
+    first = load(public / "replay.json")["applied_events"][0]
+    return frame_identity(load(public / "blobs" / first["response_blob"]))
 
 
 def require_acceptance(path, checks):
@@ -86,8 +98,24 @@ def evaluate_one(task_dir):
     clicks, object_probes, coordinate_probes = 0, 0, 0
     object_effect_followups = 0
     intervention_goals, intervention_confirmed, intervention_refuted = 0, 0, 0
+    relation_results = Counter()
+    policy_results = Counter()
+    policy_audit = TrajectoryPolicyAudit(public)
+    first_obligations = {}
+    failures = []
+    retries = []
+    peak = first["levels_completed"]
     for event, response in ordered:
         if not event["action"]["id"]:
+            attempt_file = public / "attempts" / (event["command_ref"] + ".json")
+            if attempt_file.is_file():
+                attempt = load(attempt_file)
+                assert attempt["event"] == event["event_id"]
+                assert attempt["level"] == response["levels_completed"]
+                if revision := attempt["revision"]:
+                    assert trace[revision["event"]][1]["state"] == "GAME_OVER"
+                    assert attempt["prior"] == revision["event"] == event["before_ref"]
+                    retries.append(attempt)
             continue
         command = event["command_ref"] + ".json"
         check = load(public / "checks" / command)
@@ -95,6 +123,7 @@ def evaluate_one(task_dir):
         assert check["action"] == decision["action"] == event["action"]
         parent = trace[event["before_ref"]][1]
         assert event["action"]["id"] in parent["available_actions"]
+        peak = max(peak, response["levels_completed"])
         checked += 1
         clicks += event["action"]["id"] == 6
         if check["definition_refs"]:
@@ -110,6 +139,55 @@ def evaluate_one(task_dir):
         policy_stops += (check.get("learned_policy_feedback") or {}).get(
             "result"
         ) == "stopped"
+        if relation := check.get("public_relation_feedback"):
+            assert (
+                relation["event"] == event["event_id"]
+                and relation["before"] == event["before_ref"]
+            )
+            assert relation["reached"] == {
+                "advanced": response["levels_completed"] > parent["levels_completed"],
+                "state": response["state"],
+            }
+            assert decision["task_arbitration"]["choice"]["action"] == event["action"]
+            relation_results["confirmed_transitions"] += 1
+            if operation := decision.get("public_relation_task"):
+                relation_results[operation["intent"]] += 1
+                if operation["reads"]:
+                    prediction = load(public / "predictions" / command)
+                    assert set(operation["reads"]) <= set(prediction["event_reads"])
+                    assert all(
+                        trace[ref][0]["sequence"] < event["sequence"]
+                        for ref in operation["reads"]
+                    )
+                assert relation["feedback"]["intent"] == operation["intent"]
+                relation_results[relation["feedback"]["result"]] += 1
+                if relation["feedback"]["result"] == "refuted":
+                    first_obligations.setdefault("task_refuted", event["event_id"])
+            if relation["unresolved"]:
+                for reason in relation["unresolved"]:
+                    first_obligations.setdefault(reason, event["event_id"])
+            if failure := relation["failure"]:
+                assert failure["history"][-1] == event["event_id"]
+                assert response["state"] == "GAME_OVER"
+                failures.append(event["event_id"])
+                first_obligations.setdefault("public_failure", event["event_id"])
+        if policy := check.get("relation_policy_feedback"):
+            evidence = decision["relation_policy"]
+            assert set(evidence["definitions"]) <= set(check["definition_refs"])
+            policy_audit.verify(evidence, policy, event, trace, check["read_events"])
+            changed = evidence["baseline_action"] != event["action"]
+            assert evidence["changed_action"] == changed
+            policy_results["steps"] += 1
+            policy_results["changed_baseline_action"] += changed
+            policy_results[policy["result"]] += 1
+            for branch in [*evidence["branches"], *policy["branches"]]:
+                policy_results[
+                    f"{branch['control']}_{str(branch['outcome']).lower()}"
+                ] += 1
+        if withdrawal := decision.get("relation_policy_withdrawal"):
+            assert trace[withdrawal["last_observed"]][0]["sequence"] < event["sequence"]
+            policy_results["unbound_next_task"] += 1
+            first_obligations.setdefault("policy_binding", event["event_id"])
         if feedback := check.get("intervention_feedback"):
             source = decision["intervention"]
             advanced = response["levels_completed"] > parent["levels_completed"]
@@ -146,32 +224,12 @@ def evaluate_one(task_dir):
             outcomes.append(
                 dict(event=event["event_id"], completed=response["levels_completed"])
             )
-    close = next(
-        (
-            command
-            for file in sorted((public / "commands").glob("*.json"), reverse=True)
-            if (command := load(file))["kind"] == "close_scorecard"
-        ),
-        {},
-    )
-    scorecard = (
-        load(public / "blobs" / close["response_blob"])
-        if close.get("completion") == "confirmed"
-        else {}
-    )
-    win = any(
-        entry["id"] == game_id
-        and entry["completed"]
-        and any(
-            row["guid"] == last["guid"] and row["state"] == "WIN"
-            for row in entry["runs"]
-        )
-        for entry in scorecard.get("environments", [])
-    )
+    win, scorecard_digest = public_scorecard_win(public, game_id, last)
     result.update(
         replay_exit=proc.returncode,
         state=last["state"],
         levels=last["levels_completed"],
+        peak_levels=peak,
         target=last["win_levels"],
         actions=checked,
         resets=sum(not row["action_input"]["id"] for _, row in ordered),
@@ -180,6 +238,7 @@ def evaluate_one(task_dir):
         and first["levels_completed"] == 0
         and "prior_evidence" not in config["learning"],
         scorecard_win=win,
+        scorecard_sha256=scorecard_digest,
         same_session=len({row["guid"] for _, row in ordered}) == 1,
         advancement=outcomes,
         learned_tasks=learned_tasks,
@@ -197,6 +256,12 @@ def evaluate_one(task_dir):
         actions_with_definitions=defined,
         local_predictions_supported=supported,
         actions_with_residual=residual,
+        relation_results=dict(relation_results),
+        relation_policy_results=dict(policy_results),
+        first_obligations=first_obligations,
+        failures=failures,
+        retries=retries,
+        first_frame_sha256=frame_identity(first),
     )
     result["verified"] = (
         code == proc.returncode == 0
@@ -225,24 +290,36 @@ def comparison_profile(profile):
 
 
 def campaign(args):
-    qualified_native = require_acceptance(
-        args.native,
-        (
-            "autonomous_public_win",
-            "autonomous_goal_program",
-            "autonomous_learned_task",
-            "autonomous_learned_policy",
-        ),
+    qualifications = (
+        {
+            "unified_relations": (
+                args.unified_relations,
+                ("public_relation_feedback_loop",),
+            ),
+            "relation_policies": (
+                args.relation_policies,
+                ("public_trajectory_policy",),
+            ),
+        }
+        if args.unified_relations
+        else {
+            "native": (
+                args.native,
+                (
+                    "autonomous_public_win",
+                    "autonomous_goal_program",
+                    "autonomous_learned_task",
+                    "autonomous_learned_policy",
+                ),
+            ),
+            "relationships": (args.relationships, ("learned_relationship_tasks",)),
+            "policy": (args.policy, ("published_policy_withheld_instances",)),
+            "projection": (args.projection, ("conditioned_projection_program",)),
+        }
     )
-    qualified_relationships = require_acceptance(
-        args.relationships, ("learned_relationship_tasks",)
-    )
-    qualified_policy = require_acceptance(
-        args.policy, ("published_policy_withheld_instances",)
-    )
-    qualified_projection = require_acceptance(
-        args.projection, ("conditioned_projection_program",)
-    )
+    earlier_sources = {
+        require_acceptance(path, checks) for path, checks in qualifications.values()
+    }
     status = subprocess.check_output(
         ["git", "status", "--porcelain"], cwd=ROOT, text=True
     )
@@ -253,13 +330,11 @@ def campaign(args):
     ).split()
     tree_digest = worktree_digest(ROOT)
     source = worktree_digest(ROOT, sources_only=True)
-    earlier_sources = {
-        qualified_native,
-        qualified_relationships,
-        qualified_policy,
-        qualified_projection,
-    }
     if args.interventions:
+        qualifications["interventions"] = (
+            args.interventions,
+            ("object_intervention_advancement",),
+        )
         if (
             require_acceptance(args.interventions, ("object_intervention_advancement",))
             != source
@@ -273,10 +348,9 @@ def campaign(args):
     profile = tomllib.loads(config_file.read_text())
     rust = (config_file.parent / profile["learning"]["engine"]).resolve()
     policy = (config_file.parent / profile["learning"]["policy_file"]).resolve()
-    native = args.native.parent
     engine = build_identity(ROOT, rust)
-    if (
-        load(native / "supervision.json")["engine_identity"]["build_sha256"]
+    if args.native and (
+        load(args.native.parent / "supervision.json")["engine_identity"]["build_sha256"]
         != engine["build_sha256"]
     ):
         raise ValueError("The qualification and campaign engine sources differ")
@@ -286,13 +360,19 @@ def campaign(args):
     if len(set(games)) != len(games) or len(games) != 24:
         raise ValueError("Expected all 24 other official games")
     comparison = None
+    comparison_rows = {}
+    baseline_starts = {}
+    baseline_sources = {}
     if args.baseline:
         prior_manifest = args.baseline / "manifest.json"
         prior_report = args.baseline / "generalization.json"
         earlier = load(prior_manifest)
         observed = load(prior_report)
         if (
-            earlier_sources != {earlier["solver_source_sha256"]}
+            (
+                not args.unified_relations
+                and earlier_sources != {earlier["solver_source_sha256"]}
+            )
             or earlier["games"] != games
             or observed["verified"] != len(games)
             or earlier["engine"]["binary_sha256"] != engine["binary_sha256"]
@@ -305,9 +385,20 @@ def campaign(args):
                 raise ValueError(f"Changed comparison configuration for {game}")
         comparison = dict(
             path=str(args.baseline.resolve()),
+            commit=earlier["commit"],
             manifest_sha256=sha256(prior_manifest.read_bytes()).hexdigest(),
             report_sha256=sha256(prior_report.read_bytes()).hexdigest(),
         )
+        comparison_rows = {row["game_id"]: row for row in observed["games"]}
+        for game in games:
+            path = args.baseline / game / "public"
+            baseline_starts[game] = earlier_start(path)
+            baseline_sources[game] = load(path / "arc-source.json")
+    workload = (
+        sorted(games, key=lambda game: -comparison_rows[game].get("capture_seconds", 0))
+        if comparison_rows
+        else games
+    )
     out = args.output.resolve()
     out.mkdir()
     runtime = runtime_paths(ROOT)
@@ -326,16 +417,10 @@ def campaign(args):
                     "path": str(path.resolve()),
                     "sha256": sha256(path.read_bytes()).hexdigest(),
                 }
-                for key, path in {
-                    "native": args.native,
-                    "relationships": args.relationships,
-                    "policy": args.policy,
-                    "projection": args.projection,
-                    "interventions": args.interventions,
-                }.items()
-                if path is not None
+                for key, (path, _) in qualifications.items()
             },
             games=games,
+            dispatch_order=workload,
             workers=args.workers,
         ),
     )
@@ -379,7 +464,7 @@ def campaign(args):
 
     finished = {}
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        jobs = {pool.submit(evaluate, game): game for game in games}
+        jobs = {pool.submit(evaluate, game): game for game in workload}
         for job in as_completed(jobs):
             game = jobs[job]
             try:
@@ -391,6 +476,22 @@ def campaign(args):
                     "error": str(error),
                 }
             answers = [finished[game] for game in games if game in finished]
+            pairs = [
+                {
+                    "game_id": row["game_id"],
+                    "before": comparison_rows[row["game_id"]]["levels"],
+                    "after": row["levels"],
+                    "peak": row["peak_levels"],
+                    "same_public_start": row["first_frame_sha256"]
+                    == baseline_starts[row["game_id"]],
+                    "same_game_build": load(
+                        out / row["game_id"] / "public/arc-source.json"
+                    )
+                    == baseline_sources[row["game_id"]],
+                }
+                for row in answers
+                if row["verified"] and row["game_id"] in comparison_rows
+            ]
             report = {
                 "games": answers,
                 "observed": len(answers),
@@ -402,10 +503,20 @@ def campaign(args):
                 "levels": sum(
                     row.get("levels", 0) for row in answers if row["verified"]
                 ),
+                "peak_levels": sum(
+                    row.get("peak_levels", 0) for row in answers if row["verified"]
+                ),
+                "comparison": pairs,
             }
             write_json(out / "generalization.json", report)
     print(
-        json.dumps({key: value for key, value in report.items() if key != "games"}),
+        json.dumps(
+            {
+                key: value
+                for key, value in report.items()
+                if key not in ("games", "comparison")
+            }
+        ),
         flush=True,
     )
     return int(report["verified"] != len(games))
@@ -419,23 +530,42 @@ if __name__ == "__main__":
     parser.add_argument("--policy", type=Path)
     parser.add_argument("--projection", type=Path)
     parser.add_argument("--interventions", type=Path)
+    parser.add_argument("--unified-relations", type=Path)
+    parser.add_argument("--relation-policies", type=Path)
     parser.add_argument("--baseline", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--workers", type=int, default=5)
     args = parser.parse_args()
     if args.one:
         raise SystemExit(int(not evaluate_one(args.one).get("verified", False)))
-    if bool(args.baseline) != bool(args.interventions):
+    modern = args.unified_relations or args.relation_policies
+    if modern and (
+        not args.unified_relations
+        or not args.relation_policies
+        or any(
+            (
+                args.native,
+                args.relationships,
+                args.policy,
+                args.projection,
+                args.interventions,
+            )
+        )
+    ):
+        parser.error("The two relation acceptances qualify a unified controller")
+    if not modern and bool(args.baseline) != bool(args.interventions):
         parser.error(
             "an object-intervention rerun requires both its acceptance and completed baseline"
         )
     if (
-        not all(
-            (args.native, args.relationships, args.policy, args.projection, args.output)
-        )
+        not args.output
         or args.workers < 1
+        or (
+            not modern
+            and not all((args.native, args.relationships, args.policy, args.projection))
+        )
     ):
         parser.error(
-            "the four acceptance records, output directory and positive worker count are required"
+            "Qualification records, an output directory and a positive worker count are required"
         )
     raise SystemExit(campaign(args))

@@ -91,6 +91,12 @@ function policy_corpus(control)
 end
 
 function analyze_policy_body(body,registry)
+    slot = relation_policy_slot(body)
+    if !isnothing(slot)
+        tree = analyze_relation_policy(body,registry,slot)
+        isnothing(tree) || return (;tree)
+    end
+    get(body,"kind",nothing) == "Call" || return nothing
     head(node) = registry[node["operator"]]["descriptor"]
     kind(node) = head(node)["kind"]
     kind(body) == "PolicyRepeat" || return nothing
@@ -108,8 +114,13 @@ function analyze_policy_body(body,registry)
         stop=head(stop)["layout"]["relation"],variant=head(body)["layout"]["variant"])
 end
 
-function prepare_policy_learning!(knowledge,config,store,root,control;completed=Set{String}())
-    corpus = policy_corpus(control)
+function prepare_policy_learning!(knowledge,config,store,root,control;completed=Set{String}(),entries=nothing)
+    corpus = if isnothing(entries)
+        policy_corpus(control)
+    else
+        published = Set(row.body["scope"] for row in knowledge.policies if haskey(row.body,"scope"))
+        policy_corpus(control,entries;published)
+    end
     isnothing(corpus) && return nothing
     key = semantic_hash([corpus.model,corpus.programs])
     key in completed && return nothing
@@ -128,7 +139,7 @@ function prepare_policy_learning!(knowledge,config,store,root,control;completed=
         config_text=policy,engine_identity=settings["engine_identity"],intent="program",
         consumer="policy-semantics",obligation_refs=corpus.events)
     atomic_json(joinpath(job,"policy-corpus.json"),corpus)
-    return (;job,manifest,corpus,snapshot,key)
+    return (;job,manifest,corpus,snapshot,key,agenda=isnothing(entries) ? nothing : control,entries)
 end
 
 function collect_policy_learning!(knowledge,store,prepared,status;available_after)
@@ -144,6 +155,9 @@ function collect_policy_learning!(knowledge,store,prepared,status;available_afte
     if isnothing(checked) || isempty(checked.verified) || isempty(last(checked.verified)["calls"])
         return record_program_assessment(job,merge(assessment,Dict("result"=>"policy_not_discovered")))
     end
+    checked.manifest["evidence_snapshot_id"] == snapshot && checked.text == corpus.programs &&
+        canonical_bytes(checked.signature) == canonical_bytes(corpus.signature) ||
+        error("The policy search input differs from its submitted corpus")
     id = publish_stitch!(store_path(store,"publication"),checked;current_evidence=snapshot)
     released = read_published_stitch(store_path(store,"publication");publication=id)
     registry,definitions = registry_from(corpus.signature,released.snapshot.entries)
@@ -151,14 +165,30 @@ function collect_policy_learning!(knowledge,store,prepared,status;available_afte
     for (i,text) in enumerate(released.bundle["rewritten_programs"])
         call = decode_program(text,registry)
         definition = get(call,"operator",nothing)
-        haskey(definitions,definition) || continue
-        any(row->row["program_index"] == i-1 && isempty(row["call_path"]) &&
-            row["definition_ref"] == definition,released.bundle["calls"]) ||
-            error("Policy call is absent from the search proof")
+        calls = [row for row in released.bundle["calls"] if row["program_index"] == i-1]
+        isempty(calls) && continue
         body = expand_library_term(call,definitions)
         body == decode_program(corpus.programs[i],registry) || error("Policy expansion changed its source")
         policy = analyze_policy_body(body,registry)
         isnothing(policy) && continue
+        if hasproperty(policy,:tree)
+            episode = corpus.episodes[i]
+            verify_relation_episode(policy.tree,episode,prepared.agenda,prepared.entries) ||
+                error("Policy does not reproduce its observed relation trajectory")
+            refs = sort!(unique([row["definition_ref"] for row in calls]))
+            depths = released.bundle["definition_depths"]
+            definition = argmax(ref->depths[ref],refs)
+            scope = semantic_hash(policy.tree)
+            body_record = Dict("tree"=>policy.tree,"definitions"=>refs,"scope"=>scope,
+                "structure"=>episode.structure,"structure_source"=>"confirmed_task_trajectory")
+            result = get!(selected,scope,LearnedPolicy(id,definition,depths[definition],corpus.model,
+                body_record,String[],available_after))
+            union!(result.training,episode.events)
+            continue
+        end
+        haskey(definitions,definition) || continue
+        any(row->isempty(row["call_path"]) && row["definition_ref"] == definition,calls) ||
+            error("Policy call is absent from the search proof")
         for action in corpus.episodes[i].actions
             expected = action.kind == "advance" ? "public_advancement" : "observed_site_change"
             actual = get(policy.rows,action.input,nothing)
@@ -176,7 +206,11 @@ function collect_policy_learning!(knowledge,store,prepared,status;available_afte
     merge!(knowledge.definition_depths,released.bundle["definition_depths"])
     verified = [selected[id] for id in sort!(collect(keys(selected)))]
     for policy in verified
-        union!(policy.training,corpus.events)
+        if haskey(policy.body,"scope")
+            filter!(old->get(old.body,"scope",nothing) != policy.body["scope"],knowledge.policies)
+        else
+            union!(policy.training,corpus.events)
+        end
         push!(knowledge.policies,policy)
     end
     atomic_json(joinpath(job,"policy-publication.json"),Dict("publication"=>id,"available_after"=>available_after,

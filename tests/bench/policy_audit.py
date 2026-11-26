@@ -1,5 +1,6 @@
 """Check published policy uses against public task bindings and their prefixes."""
 
+from collections import defaultdict
 from hashlib import sha256
 import json
 
@@ -121,4 +122,63 @@ class PolicyAudit:
                 status=result,
                 level=before["levels_completed"] + 1,
             )
+        )
+
+
+class TrajectoryPolicyAudit:
+    def __init__(self, public):
+        self.public = public
+        self.activations = defaultdict(list)
+        for path in (public / "learning").glob("job-*/policy-publication.json"):
+            activation = read(path)
+            for policy in activation["policies"]:
+                if (
+                    policy["body"].get("structure_source")
+                    == "confirmed_task_trajectory"
+                ):
+                    self.activations[activation_key(policy)].append(
+                        (path.parent, activation, policy)
+                    )
+        self.proofs = {}
+
+    def verify(self, decision, feedback, event, trace, read_events):
+        key = activation_key(decision)
+        matches = [
+            (job, activation, policy)
+            for job, activation, policy in self.activations[key]
+            if policy["training"] == decision["training"]
+            and policy["body"]["definitions"] == decision["definitions"]
+            and policy["body"]["structure"] == decision["structure"]
+        ]
+        require(bool(matches), "unknown_trajectory_policy_activation")
+        job, activation, policy = matches[0]
+        proof_key = (job, policy["publication"])
+        if proof_key not in self.proofs:
+            path = self.public / "publication" / (policy["publication"] + ".json")
+            raw = path.read_bytes()
+            bundle = json.loads(raw)
+            corpus = read(job / "policy-corpus.json")
+            require(
+                sha256(raw).hexdigest() == policy["publication"]
+                and bundle["semantic_context"]["consumer"] == "policy-semantics"
+                and bundle["source_programs"] == corpus["programs"]
+                and bundle["input_sha256"]
+                == activation["input_sha256"]
+                == sha256((job / "input/manifest.json").read_bytes()).hexdigest(),
+                "trajectory_policy_search_proof",
+            )
+            self.proofs[proof_key] = (
+                corpus["events"],
+                {call["definition_ref"] for call in bundle["calls"]},
+            )
+        events, definitions = self.proofs[proof_key]
+        references = {decision["available_after"], *decision["training"]}
+        require(
+            set(decision["training"]) <= set(events)
+            and set(decision["definitions"]) <= definitions
+            and references <= set(read_events)
+            and all(trace[ref][0]["sequence"] < event["sequence"] for ref in references)
+            and feedback["definition"] == decision["definition"]
+            and feedback["event"] == event["event_id"],
+            "trajectory_policy_scope_and_availability",
         )

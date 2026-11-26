@@ -77,7 +77,18 @@ def read(path):
     return json.loads(path.read_bytes())
 
 
-def capture(root, runtime, config, run, mode, number, *, fixture=FIXTURE, budget=9):
+def capture(
+    root,
+    runtime,
+    config,
+    run,
+    mode,
+    number,
+    *,
+    fixture=FIXTURE,
+    budget=9,
+    background_search=True,
+):
     base, revision = f"u{number:03}", f"{number:08x}"
     game = f"{base}-{revision}"
     games = run / "private/games"
@@ -100,7 +111,7 @@ def capture(root, runtime, config, run, mode, number, *, fixture=FIXTURE, budget
             budget=budget,
             sequences=True,
             batch=8,
-            background_search=True,
+            background_search=background_search,
         )
         agent.write_text(
             agent.read_text() + "autonomous = true\nrelation_goals = true\n"

@@ -159,7 +159,9 @@ function choose_intervention(memory,scene,obs,ranked,attempts;
         return (action=row.action,probe=:primitive,candidate=nothing,goal=nothing,fallback=nothing,
             reason="sample_action_alternative")
     end
-    role = [c for c in scene if get(memory.probes,(level,c.instance),0) == 0]
+    context = isnothing(agenda) ? nothing : relation_context(obs)
+    role = [c for c in scene if get(memory.probes,(level,c.instance),0) == 0 ||
+        !isnothing(agenda) && !c.broad && !haskey(agenda.visits,(context,action_key(click_action(c.point))))]
     fallback = coordinate_intervention(memory,level,obs.available_actions)
     if !isempty(role) && (isnothing(fallback) || mod(confirmed_count,7) != 6)
         followup = isnothing(agenda) ? nothing : object_effect_followup(agenda,level,role)

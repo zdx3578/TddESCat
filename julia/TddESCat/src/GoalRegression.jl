@@ -35,6 +35,7 @@ function goal_producer_needs(knowledge,goal,observation,history,coordinates,mete
             isempty(establishes) && continue
             reads = unique([model.rule.training_event;model.condition.support;model.counterexamples])
             push!(needs,(rule=model.rule.id,action,truth=gate.truth,establishes,
+                relations=producer_relations(model.rule),
                 conditions=predicate_record.(model.condition.atoms),
                 effect=plan_channels(base.fragments),counterexamples=copy(model.counterexamples),reads))
         end

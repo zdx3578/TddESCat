@@ -13,6 +13,7 @@ struct RelationSample
     unchanged::Bool
     available::Vector{Int}
     binding::Union{Nothing,NamedTuple}
+    dependency::Union{Nothing,String}
     contact::Union{Nothing,ContactSample}
     site_changes::Vector{NamedTuple}
 end
@@ -30,6 +31,8 @@ mutable struct RelationAgenda
     by_action::Dict{String,Vector{String}}
     by_relation::Dict{String,Vector{String}}
     lineages::Dict{MotionShape,String}
+    produced_at::Dict{String,Vector{Int}}
+    relation_replays::Set{Tuple{String,PublicActionKey,PublicActionKey}}
     visits::Dict{Tuple{String,PublicActionKey},Vector{Int}}
     pairs::Set{Tuple{String,PublicActionKey,PublicActionKey}}
     failures::Dict{Tuple{String,PublicActionKey,PublicActionKey},Int}
@@ -43,7 +46,7 @@ mutable struct RelationAgenda
     preparing::Union{Nothing,NamedTuple}
 end
 
-RelationAgenda() = RelationAgenda(RelationSample[],Dict(),Dict(),Dict(),Dict(),Dict(),Set(),Dict(),Set(),
+RelationAgenda() = RelationAgenda(RelationSample[],Dict(),Dict(),Dict(),Dict(),Dict(),Set(),Dict(),Set(),Dict(),Set(),
     Dict(),Set(),1,1,0,nothing,nothing)
 
 relation_context(obs) = semantic_hash([obs.levels_completed,size(last(obs.frames)),
@@ -89,6 +92,8 @@ function observed_producer!(agenda,sample,before,after)
         RelationProducer(rule,relations,Int[],Int[])
     end
     push!(producer.support,length(agenda.samples))
+    sample.state == "NOT_FINISHED" &&
+        push!(get!(Vector{Int},agenda.produced_at,sample.context),length(agenda.samples))
     return (;key,relations)
 end
 
@@ -136,9 +141,13 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
             (;lineage,point,appearance=click_profile(support,point))
         end
     end
+    prior = agenda.previous == 0 ? nothing : agenda.samples[agenda.previous]
+    dependency = !isnothing(prior) && !isnothing(proposal) &&
+        proposal.intent in (:distinguish_changed_context,:test_delayed_effect,:complete_preparation) ?
+        relation_ref(prior) : nothing
     sample = RelationSample(effects,prev.levels_completed,agenda.attempt,relation_context(prev),
         relation_context(next),agenda.previous,next.state,advanced,nothing_visible,prev.available_actions,
-        binding,contact,site_changes)
+        binding,dependency,contact,site_changes)
     push!(agenda.samples,sample)
     index = length(agenda.samples)
     action = action_key(effects.action)
@@ -154,7 +163,6 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
         end
     end
     contract = observed_producer!(agenda,sample,last(prev.frames),last(next.frames))
-    prior = sample.preceding == 0 ? nothing : agenda.samples[sample.preceding]
     if !isnothing(contract) && !isnothing(prior) && prior.unchanged && next.state == "NOT_FINISHED"
         contrasted = any(get(agenda.visits,(sample.context,action),Int[])) do at
             row = agenda.samples[at]
@@ -210,6 +218,11 @@ function verified_instance(agenda,producer,context,action,previous,level)
     witnesses = [row.binding for index in producer.support for row in (agenda.samples[index],)
         if row.level == level && row.state == "NOT_FINISHED" && !isnothing(row.binding)]
     contradicted = any(index->agenda.samples[index].level == level,producer.refuted)
+    if action[1] != 6
+        contexts = Set(row.context for index in producer.support for row in (agenda.samples[index],)
+            if row.level == level && row.state == "NOT_FINISHED" && previous_key(agenda,row.preceding)[1] == previous[1])
+        return length(contexts) >= 2 && !contradicted ? :replicated : :unverified
+    end
     return length(unique(row.point for row in witnesses)) >= 2 &&
         length(unique(row.lineage for row in witnesses)) >= 2 && !contradicted ? :replicated : :unverified
 end
@@ -236,7 +249,7 @@ function prepare_relation_tests(agenda,context,obs,groups,action;meters=())
         eval.truth == proven || continue
         expected = plan_channels(eval.fragments)
         isnothing(expected) && continue
-        if scope != :bound && !isnothing(rule.click) && !rule.click.local_pigment
+        if scope != :bound && (isnothing(rule.click) ? scope == :replicated : !rule.click.local_pigment)
             guard = (complete=true,)
             projected = projection_patch((model=(;rule,condition=guard),fragments=eval.fragments),frame)
             isnothing(projected) && continue
@@ -290,12 +303,13 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=())
         return (;action=prefix.effects.action,intent=:establish_preparation,tests=NamedTuple[],
             reads,obligation)
     end
+    sought = observed_relation_task(agenda,obs,decision,context;meters)
+    isnothing(sought) || return sought
     if !isnothing(prior) && prior.unchanged
         first_action = action_key(prior.effects.action)
         rows = filter(decision.ranked) do row
             key = action_key(row.action)
-            (context,first_action,key) ∉ agenda.pairs &&
-                (row.action["id"] != 6 || !haskey(agenda.visits,(context,key)))
+            (context,first_action,key) ∉ agenda.pairs
         end
         if !isempty(rows)
             row = argmin(row->(row.action["id"] == 6,
@@ -318,9 +332,34 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=())
     return (;action,intent=:test_concrete_effect,tests,reads=String[],obligation=nothing)
 end
 
+function observed_relation_task(agenda,obs,decision,context;meters)
+    previous = previous_key(agenda,agenda.previous)
+    examined = Set{PublicActionKey}()
+    candidates = NamedTuple[]
+    for index in Iterators.reverse(get(agenda.produced_at,context,Int[]))
+        row = agenda.samples[index]
+        action = row.effects.action
+        key = action_key(action)
+        key in examined && continue
+        push!(examined,key)
+        route = (context,previous,key)
+        (route in agenda.relation_replays || haskey(agenda.failures,route)) && continue
+        action["id"] in obs.available_actions || continue
+        tests = prepare_relation_tests(agenda,context,obs,decision.groups,action;meters)
+        isempty(tests) && continue
+        all(test->test.expected == first(tests).expected,tests) || continue
+        priority = any(test->test.scope in (:bound,:replicated),tests) ? 0 : 1
+        obligation = (;route,prior=relation_ref(row))
+        push!(candidates,(;action,intent=:establish_observed_relation,tests,reads=relation_refs(row),
+            obligation,priority))
+    end
+    return isempty(candidates) ? nothing : argmin(row->row.priority,candidates)
+end
+
 """Compare legal dispatches once. A grounded continuation survives speculative exploration."""
 function task_arbitration(item,spatial,intervention,relation,experiment;
-                          program,continuing_contact,conditional,object_probes)
+                          program,continuing_contact,conditional,object_probes,policy=nothing,
+                          continuing_policy=false)
     candidates = NamedTuple[]
     add(source,action,reason,priority) = push!(candidates,(;source,action,reason,priority))
     add(program ? :program : :base,item.action,item.reason,program ? 0 : conditional ? 1 : 8)
@@ -335,14 +374,17 @@ function task_arbitration(item,spatial,intervention,relation,experiment;
     end
     if !isnothing(relation)
         priority = relation.intent in (:revise_failed_trace,:complete_preparation) ? 1 :
-            relation.intent in (:test_concrete_effect,:distinguish_changed_context,:test_delayed_effect,:establish_preparation) ? 3 : 5
+            relation.intent in (:test_concrete_effect,:distinguish_changed_context,:test_delayed_effect,
+                :establish_preparation,:establish_observed_relation) ? 3 : 5
         reason = !isnothing(intervention) && relation.action == intervention.action &&
             relation.intent in (:test_concrete_effect,:test_delayed_effect) ?
             intervention.reason : string(relation.intent)
         add(:relation,relation.action,reason,priority)
     end
     isnothing(experiment) || add(:experiment,experiment.action,"distinguish_public_experiment",7)
-    return (choice=argmin(row->row.priority,candidates),candidates)
+    baseline = argmin(row->row.priority,candidates)
+    isnothing(policy) || add(:relation_policy,policy.action,"execute_relation_policy",continuing_policy ? 0 : 1)
+    return (choice=argmin(row->row.priority,candidates),baseline,candidates)
 end
 
 function changed_context_probe(agenda,obs,scene)
@@ -451,9 +493,12 @@ end
 function finish_relation_dispatch!(agenda,proposal)
     agenda.restart = nothing
     agenda.preparing = nothing
-    if !isnothing(proposal) && proposal.intent == :establish_preparation
+    isnothing(proposal) && return
+    if proposal.intent == :establish_preparation
         plan = proposal.obligation
         push!(agenda.preparations,(agenda.attempt,plan.context,plan.index))
         agenda.preparing = plan
+    elseif proposal.intent == :establish_observed_relation
+        push!(agenda.relation_replays,proposal.obligation.route)
     end
 end

@@ -8,6 +8,49 @@ struct LearnedProgram
     available_after::Union{Nothing,String}
 end
 
+function recorded_effect_relation(effect)
+    family = Symbol(effect["family"])
+    family == :measurement && return nothing
+    context = effect["context"]
+    prototype = if family == :count
+        context isa NamedTuple ? context.prototype : context["prototype"]
+    else
+        shape_template(effect["before"])
+    end
+    values = family == :selection ? Tuple(relative_click(effect["values"],effect["after"])) : effect["values"]
+    return effect_relation(family,prototype,values)
+end
+
+function witnessed_program_contract(program)
+    later = Set{Pixel}()
+    produced = String[]
+    for step in Iterators.reverse(program.steps)
+        for effect in step["effects"]
+            relation = recorded_effect_relation(effect)
+            isnothing(relation) && continue
+            # Later writes can invalidate an earlier relation on the same
+            # role. Count witnesses are asserted only at the final step.
+            effect["family"] == "count" && step !== last(program.steps) && continue
+            isdisjoint(later,Tuple.(effect["changed"])) && push!(produced,relation)
+        end
+        for effect in step["effects"]
+            union!(later,Tuple.(effect["changed"]))
+        end
+    end
+    first_step = first(program.steps)
+    return (before=first_step["before_ref"],action=first_step["action"]["id"],
+        preconditions=[(family=effect["family"],basis=effect["before"]) for effect in first_step["effects"]],
+        postconditions=sort!(unique!(produced)),shared=program.shared,source_events=program.sources)
+end
+
+function programs_for_relations(knowledge,needs)
+    isempty(needs) && return knowledge.programs
+    keys = unique([rel for need in needs for rel in need.relations])
+    matches = unique([program for relation in keys for program in get(knowledge.program_producers,relation,Any[])])
+    sort!(matches;by=program->(-length(program.steps),program.definition))
+    return union(matches,knowledge.programs)
+end
+
 mutable struct ProgramCursor
     program::LearnedProgram
     next_step::Int
@@ -291,11 +334,15 @@ function collect_program_learning!(knowledge,store,prepared,status; available_af
     released = read_published_stitch(directory;publication=id)
     released.bundle["input_sha256"] == checked.input_sha || error("The published program has a different input")
     programs = read_program_macros(released,corpus;available_after)
+    contracts = [(definition=program.definition,contract=witnessed_program_contract(program)) for program in programs]
     atomic_json(activation,Dict("publication"=>id,"available_after"=>available_after,
-        "snapshot"=>snapshot,"input_sha256"=>checked.input_sha))
-    for program in programs
-        any(p->p.definition == program.definition && p.sources == program.sources,knowledge.programs) ||
-            push!(knowledge.programs,program)
+        "snapshot"=>snapshot,"input_sha256"=>checked.input_sha,"relation_contracts"=>contracts))
+    for (program,row) in zip(programs,contracts)
+        any(p->p.definition == program.definition && p.sources == program.sources,knowledge.programs) && continue
+        push!(knowledge.programs,program)
+        for relation in row.contract.postconditions
+            push!(get!(Vector{Any},knowledge.program_producers,relation),program)
+        end
     end
     merge!(knowledge.definition_depths,released.bundle["definition_depths"])
     sort!(knowledge.programs;by=p->(-length(p.steps),p.definition))

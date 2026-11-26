@@ -113,6 +113,31 @@ def offline_capture(root, task, run):
         return supervise(root, agent, public, expected_paths=paths)
 
 
+def public_scorecard_win(public, game_id, final):
+    close = {}
+    for file in sorted((public / "commands").glob("*.json"), reverse=True):
+        command = json.loads(file.read_bytes())
+        if command["kind"] == "close_scorecard":
+            close = command
+            break
+    digest = close.get("response_blob")
+    if close.get("completion") != "confirmed" or not digest:
+        return False, None
+    raw = (public / "blobs" / digest).read_bytes()
+    if sha256(raw).hexdigest() != digest:
+        raise ValueError("Scorecard response digest mismatch")
+    won = final.get("state") == "WIN" and any(
+        entry["id"] == game_id
+        and entry["completed"]
+        and any(
+            row["guid"] == final["guid"] and row["state"] == "WIN"
+            for row in entry["runs"]
+        )
+        for entry in json.loads(raw).get("environments", [])
+    )
+    return won, digest
+
+
 def autonomous_report(root, run):
     public = run / "public"
     config = tomllib.loads((public / "agent.toml").read_text(encoding="utf-8"))
@@ -413,23 +438,7 @@ def autonomous_report(root, run):
         and first.get("levels_completed") == 0
         and {row["win_levels"] for row in receipts.values()} == {target}
     )
-    commands = sorted((public / "commands").glob("*.json"))
-    close = json.loads(commands[-1].read_bytes()) if commands else {}
-    scorecard = (
-        json.loads((public / "blobs" / close["response_blob"]).read_bytes())
-        if close.get("kind") == "close_scorecard"
-        and close.get("completion") == "confirmed"
-        else {}
-    )
-    official_completion = any(
-        game["id"] == game_id
-        and game["completed"]
-        and any(
-            trace["guid"] == final.get("guid") and trace["state"] == "WIN"
-            for trace in game["runs"]
-        )
-        for game in scorecard.get("environments", [])
-    )
+    official_completion, scorecard_digest = public_scorecard_win(public, game_id, final)
     single_session = {(row["game_id"], row["guid"]) for row in receipts.values()} == {
         (game_id, final.get("guid"))
     }
@@ -443,12 +452,16 @@ def autonomous_report(root, run):
         ):
             learned_progress.setdefault(row["progress_model"], set()).add(row["level"])
     progress_transfer = any(len(levels) > 1 for levels in learned_progress.values())
-    passed = (
+    actual_win = (
         cold
         and isolated
         and single_session
+        and official_completion
         and target > 0
-        and not audit_errors
+        and final.get("levels_completed") == target
+    )
+    contact_semantics = (
+        not audit_errors
         and progress_transfer
         and {row["event"] for row in progress}
         == {row["event"] for row in contact_control if row["outcome"] == "progress"}
@@ -463,12 +476,11 @@ def autonomous_report(root, run):
             for row in contact_control
         )
         and [row["completed"] for row in progress] == list(range(1, target + 1))
-        and final.get("state") == "WIN"
-        and official_completion
         and {row["level"] for row in decisions} == set(range(1, target + 1))
     )
     return {
-        "passed": passed,
+        "passed": actual_win,
+        "contact_semantics": contact_semantics,
         "cold_start": cold,
         "single_session": single_session,
         "state": final.get("state"),
@@ -488,7 +500,7 @@ def autonomous_report(root, run):
         "progress_transfer": progress_transfer,
         "isolated": isolated,
         "structural_consumption": structural_consumption,
-        "scorecard_sha256": close.get("response_blob"),
+        "scorecard_sha256": scorecard_digest,
         "scorecard_win": official_completion,
         "replay_exit": replay.returncode,
     }
@@ -506,7 +518,7 @@ def verify_autonomous_capture(root, run, code):
         identifier,
         passed,
         ["public/autonomous-verification.json", "grade/autonomous-replay.log"],
-        None if passed else "missing_cold_learning_and_full_game_win",
+        None if passed else "missing_verified_public_game_win",
     )
     agent = tomllib.loads((public / "agent.toml").read_text())
     if agent.get("planning", {}).get("relation_goals", False):

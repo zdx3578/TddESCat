@@ -1,0 +1,5 @@
+schema_version = 1
+kind = "relation_policies"
+output_name = "public-trajectory-policy"
+environment_config = "../bench_server.toml"
+timeout_seconds = 900
