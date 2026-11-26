@@ -83,6 +83,8 @@ def evaluate_one(task_dir):
     checked, defined, supported, residual = 0, 0, 0, 0
     learned_tasks, learned_policies, outcomes = 0, 0, []
     established_tasks, policy_stops = 0, 0
+    clicks, object_probes, coordinate_probes = 0, 0, 0
+    intervention_goals, intervention_confirmed, intervention_refuted = 0, 0, 0
     for event, response in ordered:
         if not event["action"]["id"]:
             continue
@@ -93,6 +95,7 @@ def evaluate_one(task_dir):
         parent = trace[event["before_ref"]][1]
         assert event["action"]["id"] in parent["available_actions"]
         checked += 1
+        clicks += event["action"]["id"] == 6
         if check["definition_refs"]:
             defined += 1
         if set(check["assessments"].values()) == {"supported"}:
@@ -106,6 +109,31 @@ def evaluate_one(task_dir):
         policy_stops += (check.get("learned_policy_feedback") or {}).get(
             "result"
         ) == "stopped"
+        if feedback := check.get("intervention_feedback"):
+            source = decision["intervention"]
+            advanced = response["levels_completed"] > parent["levels_completed"]
+            assert (
+                feedback["event"] == event["event_id"]
+                and feedback["advanced"] == advanced
+            )
+            assert (
+                feedback["action"] == event["action"]
+                and feedback["before"] == event["before_ref"]
+            )
+            object_probes += source["probe"] == "representative"
+            coordinate_probes += source["probe"] == "coordinate"
+            if goal := source["goal"]:
+                predicted = load(public / "predictions" / command)
+                assert predicted["predicted_values"]["public_advancement"] is True
+                assert set(goal["reads"]) <= set(predicted["event_reads"])
+                assert all(
+                    trace[ref][0]["sequence"] < event["sequence"]
+                    for ref in goal["reads"]
+                )
+                assert feedback["result"] == ("established" if advanced else "refuted")
+                intervention_goals += 1
+                intervention_confirmed += advanced
+                intervention_refuted += not advanced
         if response["levels_completed"] > parent["levels_completed"]:
             outcomes.append(
                 dict(event=event["event_id"], completed=response["levels_completed"])
@@ -150,6 +178,12 @@ def evaluate_one(task_dir):
         learned_policies=learned_policies,
         established_tasks=established_tasks,
         policy_stops=policy_stops,
+        clicks=clicks,
+        object_probes=object_probes,
+        coordinate_probes=coordinate_probes,
+        intervention_goals=intervention_goals,
+        intervention_confirmed=intervention_confirmed,
+        intervention_refuted=intervention_refuted,
         reached_ten_actions=checked >= 10,
         actions_with_definitions=defined,
         local_predictions_supported=supported,
@@ -166,6 +200,19 @@ def evaluate_one(task_dir):
     write_json(public / "generalization.json", result)
     write_artifact_index(task_dir)
     return result
+
+
+def comparison_profile(profile):
+    normalized = dict(profile)
+    normalized["environment"] = {
+        k: v for k, v in profile["environment"].items() if k != "game_id"
+    }
+    normalized["learning"] = {
+        k: v
+        for k, v in profile["learning"].items()
+        if k not in ("engine", "policy_file")
+    }
+    return normalized
 
 
 def campaign(args):
@@ -197,12 +244,21 @@ def campaign(args):
     ).split()
     tree_digest = worktree_digest(ROOT)
     source = worktree_digest(ROOT, sources_only=True)
-    if {
+    earlier_sources = {
         qualified_native,
         qualified_relationships,
         qualified_policy,
         qualified_projection,
-    } != {source}:
+    }
+    if args.interventions:
+        if (
+            require_acceptance(args.interventions, ("object_intervention_advancement",))
+            != source
+        ):
+            raise ValueError(
+                "Object interventions must qualify on this campaign source"
+            )
+    elif earlier_sources != {source}:
         raise ValueError("Both deliveries must qualify on the exact campaign source")
     config_file = ROOT / "config/autonomous_public.toml"
     profile = tomllib.loads(config_file.read_text())
@@ -220,6 +276,29 @@ def campaign(args):
     games = [value for value in suite["game_ids"] if value != baseline]
     if len(set(games)) != len(games) or len(games) != 24:
         raise ValueError("Expected all 24 other official games")
+    comparison = None
+    if args.baseline:
+        prior_manifest = args.baseline / "manifest.json"
+        prior_report = args.baseline / "generalization.json"
+        earlier = load(prior_manifest)
+        observed = load(prior_report)
+        if (
+            earlier_sources != {earlier["solver_source_sha256"]}
+            or earlier["games"] != games
+            or observed["verified"] != len(games)
+            or earlier["engine"]["binary_sha256"] != engine["binary_sha256"]
+            or earlier["policy_sha256"] != sha256(policy.read_bytes()).hexdigest()
+        ):
+            raise ValueError("The rerun must match a completed, qualified baseline")
+        for game in games:
+            original = tomllib.loads((args.baseline / game / "agent.toml").read_text())
+            if comparison_profile(original) != comparison_profile(profile):
+                raise ValueError(f"Changed comparison configuration for {game}")
+        comparison = dict(
+            path=str(args.baseline.resolve()),
+            manifest_sha256=sha256(prior_manifest.read_bytes()).hexdigest(),
+            report_sha256=sha256(prior_report.read_bytes()).hexdigest(),
+        )
     out = args.output.resolve()
     out.mkdir()
     runtime = runtime_paths(ROOT)
@@ -231,6 +310,7 @@ def campaign(args):
             worktree_sha256=tree_digest,
             solver_source_sha256=source,
             engine=engine,
+            comparison=comparison,
             policy_sha256=sha256(policy.read_bytes()).hexdigest(),
             qualification={
                 key: {
@@ -242,7 +322,9 @@ def campaign(args):
                     "relationships": args.relationships,
                     "policy": args.policy,
                     "projection": args.projection,
+                    "interventions": args.interventions,
                 }.items()
+                if path is not None
             },
             games=games,
             workers=args.workers,
@@ -327,11 +409,17 @@ if __name__ == "__main__":
     parser.add_argument("--relationships", type=Path)
     parser.add_argument("--policy", type=Path)
     parser.add_argument("--projection", type=Path)
+    parser.add_argument("--interventions", type=Path)
+    parser.add_argument("--baseline", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--workers", type=int, default=5)
     args = parser.parse_args()
     if args.one:
         raise SystemExit(int(not evaluate_one(args.one).get("verified", False)))
+    if bool(args.baseline) != bool(args.interventions):
+        parser.error(
+            "an object-intervention rerun requires both its acceptance and completed baseline"
+        )
     if (
         not all(
             (args.native, args.relationships, args.policy, args.projection, args.output)

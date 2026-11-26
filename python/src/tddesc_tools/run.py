@@ -59,6 +59,7 @@ KIND_IDS = {
     "relation_goal": ("relation_goal_producer",),
     "learned_relationships": ("learned_relationship_tasks",),
     "learned_policy": ("published_policy_withheld_instances",),
+    "object_interventions": ("object_intervention_advancement",),
 }
 MODULES = {
     "protocol": "tests.protocol.test_faults",
@@ -97,6 +98,7 @@ MODULES = {
     "relation_goal": "tests.bench.check_relation_goal",
     "learned_relationships": "tests.bench.check_learned_relation_goals",
     "learned_policy": "tests.bench.check_learned_policy",
+    "object_interventions": "tests.bench.check_object_interventions",
     "stitch_growth": "tests.bench.check_kernel",
 }
 
@@ -330,6 +332,7 @@ def run_task(root, config_path, task, run_dir, runtime):
         "relation_goal",
         "learned_relationships",
         "learned_policy",
+        "object_interventions",
     )
     offline_arc = kind in ("arc_offline", "autonomous_offline", "arc_public25")
     isolated = (

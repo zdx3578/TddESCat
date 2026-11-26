@@ -201,13 +201,19 @@ end
 function mechanism_key(rule; composing=false)
     patch = rule.patch
     observation = composing && !isnothing(patch) ? (patch.shape,patch.moving,patch.fixed) : nothing
+    portable_pigment = !isnothing(rule.click) && rule.click.local_pigment
     meaning = [rule.action_id,
-        [(item.family,item.template,item.position,item.family == :selection ? Int[] : item.values,
+        [(item.family,item.template,portable_pigment ? nothing : item.position,item.family == :selection ? Int[] : item.values,
           item.visibility,item.enclosed,isnothing(item.measurement) ? nothing :
             (meter_layout(item.measurement),meter_window(item.measurement.face.box),item.measurement.face.fill))
             for item in rule.effects],
         any(effect->effect.family == :count,rule.effects) ? rule.anchors : Pixel[],
         rule.spacing,rule.entry_colors,isnothing(rule.parent)]
+    if !isnothing(rule.click)
+        click = rule.click
+        push!(meaning,(geometry(click.support),relative_click(click.point,click.support),
+            click.local_pigment ? nothing : anchor(click.support)))
+    end
     composing && push!(meaning,observation)
     return content_hash(JSON.json(meaning))
 end
@@ -231,7 +237,7 @@ function candidate_evaluation(active, before, groups, enclosure, action, history
         truth == disproven ? "learned_condition_false" : "learned_condition_unknown")
 end
 
-function public_action_candidates(observation, max_action_coordinates)
+function public_action_candidates(observation, max_action_coordinates;object_probes=false)
     frame = last(observation.frames)
     groups = public_components(frame)
     enclosure = enclosure_pairs(groups)
@@ -245,7 +251,8 @@ function public_action_candidates(observation, max_action_coordinates)
         hinted = [position_offsets(item.target) for item in enclosure]
         visually_bound = sort(groups; by=s->(any(item->item.target == s,enclosure),
             position_offsets(s) ∉ hinted,length(s),anchor(s)))
-        coordinates = unique((first(shape)[1],first(shape)[2]) for shape in visually_bound)
+        coordinates = unique(object_probes ? component_probe(shape) : (first(shape)[1],first(shape)[2])
+            for shape in visually_bound)
         isempty(coordinates) && (coordinates = Pixel[(0,0)])
         for (x,y) in Iterators.take(coordinates,max_action_coordinates)
             push!(actions,Dict("id"=>6,"x"=>x,"y"=>y))
@@ -289,8 +296,9 @@ function resource_binding(rule, fragments)
 end
 
 function ranked_public_actions(knowledge, observation, history, attempts, max_action_coordinates;
-        composing=false, required_action=nothing, programs_pending=false, program_cursor=nothing,meters=())
-    values = public_action_candidates(observation,max_action_coordinates)
+        composing=false, required_action=nothing, programs_pending=false, program_cursor=nothing,meters=(),
+        object_probes=false)
+    values = public_action_candidates(observation,max_action_coordinates;object_probes)
     transients = receipt_transient_colors(observation.frames)
     if programs_pending
         for action in program_click_actions(knowledge,program_cursor,values.groups,observation.available_actions)
@@ -399,7 +407,7 @@ function ranked_public_actions(knowledge, observation, history, attempts, max_ac
             rank=(priority,trial_count)))
     end
     sort!(judged;by=row->row.rank,alg=Base.Sort.MergeSort)
-    return (; ranked=judged, values.click_count)
+    return (; ranked=judged, values.click_count, values.groups)
 end
 
 function coverage_record(decision, item, effects, assessment)
@@ -434,10 +442,16 @@ function recovery_reads(rec, model)
     return sort!(unique([rec.before_ref; own_sources; tail]))
 end
 
-function predict_public(rec, item; plan_reads=String[])
+function predict_public(rec, item; plan_reads=String[],intervention_goal=nothing)
     choice = item.chosen
     if isnothing(choice)
-        return nothing
+        isnothing(intervention_goal) && return nothing
+        return (before_ref=rec.before_ref,payload=Dict("model_version"=>intervention_goal.model,
+            "binding"=>[Dict("slot"=>0,"ref"=>rec.before_ref * "-clicked-object")],
+            "action"=>item.action,"guard_truth"=>true,"query_scope"=>["public_advancement"],
+            "predicted_values"=>Dict("public_advancement"=>true),
+            "event_reads"=>sort!(unique([rec.before_ref;plan_reads])),"enumeration_complete"=>false,
+            "assumptions"=>[item.reason]))
     end
     measurements = String[ref for part in choice.fragments if part.family == :measurement
         for ref in (part.binding.face.source,part.binding.calibrated_at)]
@@ -446,9 +460,14 @@ function predict_public(rec, item; plan_reads=String[])
         Dict("slot"=>i-1,"ref"=>rec.before_ref * "-query-" * key)
         for (i,key) in enumerate(sort!(collect(keys(choice.expected))))
     ]
+    values = copy(choice.expected)
+    if !isnothing(intervention_goal)
+        values["public_advancement"] = true
+        push!(binding,Dict("slot"=>length(binding),"ref"=>rec.before_ref * "-clicked-object"))
+    end
     return (before_ref=rec.before_ref,payload=Dict("model_version"=>active_id(choice.model),
         "binding"=>binding,"action"=>item.action,"guard_truth"=>true,
-        "query_scope"=>sort!(collect(keys(choice.expected))),"predicted_values"=>choice.expected,
+        "query_scope"=>sort!(collect(keys(values))),"predicted_values"=>values,
         "event_reads"=>reads,"enumeration_complete"=>choice.model.condition.complete,
         "assumptions"=>[item.reason]))
 end
@@ -612,6 +631,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     history = [0]
     pairs = []
     experiments = ExperimentSchedule()
+    intervention_memory = InterventionMemory()
     publications = String[]
     count = 0
     continuation = nothing
@@ -681,8 +701,10 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         end
         !isnothing(goal) && goal_truth(goal,last(obs.frames)) == proven && break
         programs_pending = !isempty(knowledge.programs)
+        object_probes = !isnothing(visual) && !composing && 6 in obs.available_actions
         decision = ranked_public_actions(knowledge,obs,history,attempts,coordinates;
-            composing,programs_pending,program_cursor,meters)
+            composing,programs_pending,program_cursor,meters,object_probes)
+        click_scene = object_probes ? intervention_scene(last(obs.frames),decision.groups) : NamedTuple[]
         isempty(decision.ranked) && break
         item = first(decision.ranked)
         policy_note = nothing
@@ -722,6 +744,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         end
         spatial_baseline = spatial_choice
         baseline_action = isnothing(spatial_choice) ? item.action : Dict("id"=>spatial_choice.id)
+        continuing_contact = false
         contact_domain = if relation_goals && !isnothing(spatial) && programs_pending
             contact_goal_domain(visual,spatial,obs)
         end
@@ -730,6 +753,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             if !isnothing(verified_contact)
                 spatial_choice = verified_contact
                 visual.continuation = nothing
+                continuing_contact = true
             end
             contact_pending = nothing
         end
@@ -821,7 +845,25 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 end
             end
         end
-        experiment = if !frozen && !composing && isnothing(program_cursor) && isnothing(spatial_choice)
+        intervention = if object_probes && isnothing(program_cursor) && !continuing_contact
+            contact = get(something(spatial_choice,(;)),:contact,nothing)
+            certified_motion = !isnothing(contact) && contact.conditions.judgment == :admitted &&
+                contact.progress.judgment == :progress
+            choose_intervention(intervention_memory,click_scene,obs,decision.ranked,attempts;
+                explore=!frozen && !certified_motion,goal_learning=relation_goals,confirmed_count=count)
+        end
+        if !isnothing(intervention)
+            choice = findfirst(row->row.action == intervention.action,decision.ranked)
+            if isnothing(choice)
+                decision = ranked_public_actions(knowledge,obs,history,attempts,coordinates;
+                    required_action=intervention.action,meters,object_probes)
+                choice = findfirst(row->row.action == intervention.action,decision.ranked)
+            end
+            item = merge(decision.ranked[choice],(reason=intervention.reason,))
+            spatial_choice = nothing
+            policy_note = nothing
+        end
+        experiment = if !object_probes && !frozen && !composing && isnothing(program_cursor) && isnothing(spatial_choice)
             select_experiment!(experiments,rec.store,decision.ranked,obs.available_actions,rec.before_ref)
         end
         if !isnothing(experiment) && experiment.action != item.action
@@ -839,6 +881,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             item = merge(requested,(reason=spatial_choice.reason,))
             policy_note = nothing
         end
+        object_probes && (intervention = executed_intervention(intervention,click_scene,item.action))
+        intervention_goal = isnothing(intervention) ? nothing : intervention.goal
         task = advancement_task(learned_goal,visual,spatial,obs,spatial_choice)
         policy_task = policy_task_record(selected_policy,learned_goal,spatial_choice,blocked_policies)
         plan_reads = isnothing(goal_cursor) ? String[] : reduce(vcat,
@@ -846,6 +890,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             init=String[])
         isnothing(task) || append!(plan_reads,task.reads)
         isnothing(policy_task) || append!(plan_reads,policy_task.reads)
+        isnothing(intervention_goal) || append!(plan_reads,intervention_goal.reads)
         isnothing(policy_counterexample) || push!(plan_reads,policy_counterexample.event)
         isnothing(policy_note) || append!(plan_reads,get(policy_note,"event_reads",String[]))
         if !isnothing(program_cursor)
@@ -879,7 +924,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         if !isnothing(projected)
             append!(plan_reads,[projected.training;projected.reads])
         end
-        prediction = predict_public(rec,item;plan_reads)
+        prediction = predict_public(rec,item;plan_reads,intervention_goal)
         if !isnothing(spatial_choice)
             reads = unique([rec.before_ref;spatial_choice.reads])
             spatial_version = "spatial-" * content_hash(JSON.json(spatial_choice))
@@ -920,6 +965,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         isnothing(policy_note) || (decision_record["policy"] = policy_note)
         isnothing(task) || (decision_record["relation_task"] = task)
         isnothing(policy_task) || (decision_record["learned_policy"] = policy_task)
+        isnothing(intervention) || (decision_record["intervention"] = intervention_record(intervention,rec.before_ref))
         isnothing(spatial_choice) || (decision_record["spatial_experiment"] = spatial_choice)
         if !isnothing(spatial_baseline) && spatial_baseline != spatial_choice
             decision_record["spatial_baseline"] = spatial_baseline
@@ -968,6 +1014,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         isnothing(experiment) || record_experiment_service!(experiments,rec.store,experiment,event)
         sample = motion_example(entry,resulting;history)
         effects = observed_effects(entry,resulting;meters=measurement)
+        intervention_feedback = observe_intervention!(intervention_memory,intervention,entry,resulting,effects;learn=!frozen)
         knowledge.observations[effects.event_id] = effects
         if sequence_enabled
             push!(sequence_events,resulting)
@@ -1115,6 +1162,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 "evidence"=>public_effect_record(effects),"coverage"=>coverage_record(decision,item,effects,assessment),
                 "policy"=>policy_note,"program"=>program_note,"projection"=>projection_feedback,
                 "task_feedback"=>advancement_feedback(task,entry,resulting,contact_feedback),
+                "intervention_feedback"=>intervention_feedback,
                 "learned_policy_feedback"=>policy_result,
                 "spatial_feedback"=>spatial_feedback,
                 "visual_feedback"=>visual_feedback,"contact_feedback"=>contact_feedback,
