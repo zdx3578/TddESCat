@@ -9,6 +9,28 @@ function picture_entry(ref, parent, action, frame;coordinates=Dict{String,Int}()
     return (event=Dict("event_id"=>ref,"before_ref"=>parent),observation=observation)
 end
 
+@testset "A survey keeps the route and its ordered evidence" begin
+    frame = fill(0x00,64,64)
+    frame[1,1:2] .= 0x04
+    spatial = TS.SpatialLearning()
+    spatial.role = [(0,0,0x04),(1,0,0x04)]
+    spatial.role_reads = ["role"]
+    spatial.floors[0x00] = 1
+    for (id,offset) in enumerate(((1,0),(0,1),(-1,0),(0,-1)))
+        spatial.offsets[id] = Dict(offset=>["offset-$id"])
+    end
+    control = TS.VisualControl()
+    control.scene.occlusion_ref = "occlusion"
+    push!(control.scene.viewpoints,(0,0))
+    obs = picture_entry("survey",nothing,0,frame).observation
+    decision = (ranked=[(;action=Dict("id"=>id)) for id in 1:4],)
+    selected = TS.scene_survey(control,spatial,obs,decision)
+    @test selected.role == (0,0)
+    @test selected.id == 1 && selected.destination == (1,0)
+    @test selected.frontier == (62,63)
+    @test selected.reads == ["role","occlusion","offset-1","offset-2"]
+end
+
 @testset "Click movement does not establish a controlled spatial role" begin
     function scene(clicked_x, mover_x)
         frame = fill(0x00,24,24)

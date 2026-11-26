@@ -207,19 +207,24 @@ function scene_survey(control, spatial, obs, decision)
     isnothing(charge) && return nothing
     meter_model = fit_meter_dynamics(control.meter_dynamics)
     state = (here,charge,Tuple(sort!(collect(control.spent))))
-    agenda = NamedTuple[(state=state,action=0,first_point=here,reads=String[],depth=0)]
-    best = nothing
+    agenda = NamedTuple[(state=state,action=0,first_point=here,parent=0,reads=String[],depth=0)]
+    best = 0
     rank = (0,0,0)
     reached = Dict{Tuple{Pixel,Tuple},Int}((here,state[3])=>charge)
     edges = Dict{Tuple{Pixel,Int,Bool},Union{Nothing,NamedTuple}}()
-    for row in agenda
+    tiles = Dict{Pixel,NamedTuple}()
+    novelties = Dict{Pixel,Int}()
+    transfers = Dict{Tuple,Union{Nothing,NamedTuple}}()
+    for (index,row) in enumerate(agenda)
         p,left,used = row.state
         if p ∉ scene.viewpoints && !isempty(scene.viewpoints)
-            novelty = minimum(sum(abs.(p .- q) .÷ stride) for q in scene.viewpoints)
+            novelty = get!(novelties,p) do
+                minimum(sum(abs.(p .- q) .÷ stride) for q in scene.viewpoints)
+            end
             score = (novelty,left,-row.depth)
             if score > rank
                 rank = score
-                best = row
+                best = index
             end
         end
         left > 0 || continue
@@ -233,26 +238,41 @@ function scene_survey(control, spatial, obs, decision)
             isnothing(edge) && continue
             q = edge.point
             q in targets && q ∉ control.matched && continue
-            tile = scene_tile(scene,spatial,frame,q,here)
+            tile = get!(tiles,q) do
+                scene_tile(scene,spatial,frame,q,here)
+            end
             isempty(tile.patch) && continue
             haskey(spatial.layouts,q) || 2count(==(floor),tile.patch) >= length(tile.patch) || continue
-            transfer = visual_meter_prediction(control,meter_model,id,tile.patch,left,q in used;moved=p!=q)
+            already_used,moved = q in used,p != q
+            transfer = get!(transfers,(id,tile.patch,left,already_used,moved)) do
+                visual_meter_prediction(control,meter_model,id,tile.patch,left,already_used;moved)
+            end
             isnothing(transfer) && continue
             remaining = transfer.value
             next_used = remaining > left ? extend_visual_set(used,q) : used
             key = (q,next_used)
             remaining > get(reached,key,-1) || continue
             reached[key] = remaining
-            reads = [row.reads;first(sources);edge.reads;tile.reads;transfer.reads]
+            reads = [first(sources);edge.reads;tile.reads;transfer.reads]
             push!(agenda,(state=(q,remaining,next_used),action=row.action == 0 ? id : row.action,
-                first_point=row.action == 0 ? q : row.first_point,reads=unique(reads),depth=row.depth+1))
+                first_point=row.action == 0 ? q : row.first_point,parent=index,reads,depth=row.depth+1))
         end
     end
-    isnothing(best) && return nothing
+    best == 0 && return nothing
+    path = Int[]
+    index = best
+    while agenda[index].parent != 0
+        push!(path,index)
+        index = agenda[index].parent
+    end
+    reads = [spatial.role_reads;control.reads;scene.occlusion_ref]
+    for index in Iterators.reverse(path)
+        append!(reads,agenda[index].reads)
+    end
+    selected = agenda[best]
     control.continuation = nothing
-    return (id=best.action,reason="inspect_unseen_neighborhood",
-        reads=unique([spatial.role_reads;control.reads;scene.occlusion_ref;best.reads]),
-        role=here,destination=best.first_point,frontier=best.state[1],expected=nothing)
+    return (id=selected.action,reason="inspect_unseen_neighborhood",reads=unique!(reads),
+        role=here,destination=selected.first_point,frontier=selected.state[1],expected=nothing)
 end
 
 function autonomous_visual_plan(control,spatial,obs,decision,event;goal=nothing,relationship=nothing,refuted=nothing)
