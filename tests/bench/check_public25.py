@@ -47,7 +47,7 @@ def source_manifest(catalog, games, ids):
     }
 
 
-def write_episode_config(path, url, game_id):
+def write_episode_config(path, url, game_id, actions_per_game):
     path.write_text(
         f"""schema_version = 1
 run_name = "{game_id}"
@@ -62,7 +62,7 @@ connect_timeout_seconds = 2
 request_timeout_seconds = 10
 
 [execution]
-max_public_commands = 3
+max_public_commands = {actions_per_game + 1}
 one_inflight_per_guid = true
 post_retry = false
 redirect = false
@@ -91,13 +91,15 @@ def run_batch(root, runtime, run, mode, script, entry):
     return json.loads(proc.stdout.splitlines()[-1])
 
 
-def audit_episode(path, game_id, contracts, captured, replayed):
+def audit_episode(path, game_id, contracts, captured, replayed, actions_per_game):
     assert "error" not in captured, "Julia capture failed; see grade/capture.log"
     assert "error" not in replayed, "Julia replay failed; see grade/replay.log"
     assert captured["requested_game_id"] == game_id and not captured["quarantined"]
     commands = [load(row) for row in sorted((path / "commands").glob("*.json"))]
     count = captured["recorded"]
-    assert 2 <= count <= 3, "Expected a RESET and at least one concrete action"
+    assert count == actions_per_game + 1, (
+        f"Expected RESET and {actions_per_game} concrete actions, recorded {count} events"
+    )
     assert [c["kind"] for c in commands] == [
         "open_scorecard",
         "reset",
@@ -169,6 +171,7 @@ def audit_episode(path, game_id, contracts, captured, replayed):
     assert report["through_event"] == last_event
     return {
         "events": trace,
+        "confirmed_actions": count - 1,
         "final_state": previous["state"],
         "levels_completed": previous["levels_completed"],
     }
@@ -178,6 +181,7 @@ def main(config, run):
     root = Path.cwd()
     task = read_task(config)
     bundle, ids = task["offline_bundle"], task["game_ids"]
+    actions_per_game = task["actions_per_game"]
     public = run / "public"
     catalog = bundle / "offline_public_games_manifest.json"
     games = bundle / "environment_files"
@@ -221,7 +225,7 @@ def main(config, run):
         for game_id in ids:
             path = public / game_id
             path.mkdir()
-            write_episode_config(path / "agent.toml", url, game_id)
+            write_episode_config(path / "agent.toml", url, game_id, actions_per_game)
             episodes.append({"game_id": game_id, "public": str(path)})
         write_json(public / "episodes.json", episodes)
         captured = run_batch(root, runtime, run, "capture", script, entry)
@@ -243,6 +247,7 @@ def main(config, run):
                 contracts,
                 captured[game_id],
                 replayed[game_id],
+                actions_per_game,
             )
         except (
             AssertionError,
@@ -264,7 +269,15 @@ def main(config, run):
     passes = sum(row["status"] == "PASS" for row in results.values())
     write_json(
         public / "summary.json",
-        {"passed": passes, "expected": len(ids), "games": results},
+        {
+            "passed": passes,
+            "expected": len(ids),
+            "actions_required_per_game": actions_per_game,
+            "confirmed_actions": sum(
+                row.get("confirmed_actions", 0) for row in results.values()
+            ),
+            "games": results,
+        },
     )
     return int(passes != len(ids))
 

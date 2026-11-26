@@ -4,6 +4,7 @@ output_name = "arc-public25"
 timeout_seconds = 480
 environment_config = "../bench_server.toml"
 offline_bundle = "../../../arc3wm/offline_bundle/arc_agi3_public25_bundle"
+actions_per_game = 10
 game_ids = [
   "ar25-e3c63847",
   "bp35-0a0ad940",
