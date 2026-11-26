@@ -25,6 +25,53 @@ function recorded_frame(ref,previous,frame,action,available)
     return (event=Dict("event_id"=>ref,"before_ref"=>previous),observation=observation)
 end
 
+@testset "Two witnessed suffixes can share more than one preparation" begin
+    agenda = TC.RelationAgenda()
+    entries = Any[]
+    for (attempt,final) in enumerate((3,4,3,4))
+        attempt > 1 && TC.begin_relation_attempt!(agenda,nothing)
+        frame = fill(0x00,64,64)
+        frame[11:13,9:11] .= 0x04
+        frame[40:41,44:45] .= final == 3 ? 0x03 : 0x05
+        previous = recorded_frame("fork-reset-$attempt",nothing,frame,Dict("id"=>0),[1,2,3,4])
+        push!(entries,previous)
+        for (action,color) in zip((1,2,final),(0x07,0x08,UInt8(9+final)))
+            changed = copy(last(previous.observation.frames))
+            changed[11:13,9:11] .= color
+            row = recorded_frame("fork-$attempt-$action",previous.event["event_id"],
+                changed,Dict("id"=>action),[1,2,3,4])
+            TC.observe_relations!(agenda,previous,row,TC.observed_effects(previous,row),
+                nothing,NamedTuple[],nothing)
+            push!(entries,row)
+            previous = row
+        end
+    end
+    corpus = TC.policy_corpus(agenda,entries)
+    @test !isnothing(corpus)
+    forks = filter(corpus.episodes) do episode
+        body = episode.body
+        episode.structure == "branch" && body["kind"] == "RelationSequence" &&
+            body["children"][2]["kind"] == "RelationBranch"
+    end
+    @test length(forks) == 4
+    @test all(episode->TC.verify_relation_episode(episode.body,episode,agenda,entries),forks)
+    @test Set(last(agenda.samples[episode.members]).effects.action["id"] for episode in forks) == Set((3,4))
+    for episode in forks
+        prefix,branch = episode.body["children"]
+        @test getindex.(getindex.(prefix["children"],"layout"),"id") == [1,2]
+        @test all(!isempty,branch["layout"]["shared_by_branch"])
+        cursor = TC.RelationPolicyCursor(TC.LearnedPolicy("","",0,"",
+            Dict("tree"=>episode.body),String[],""))
+        by_ref = Dict(row.event["event_id"]=>row.observation for row in entries)
+        choices = [TC.next_relation_instruction!(cursor,by_ref[agenda.samples[index].effects.before_id])
+            for index in episode.members]
+        @test isempty(choices[1].branches) && isempty(choices[2].branches)
+        @test only(choices[3].branches).control == :branch
+        @test choices[3].instruction.node["layout"]["id"] ==
+            agenda.samples[last(episode.members)].effects.action["id"]
+    end
+end
+
 @testset "A new guard preserves a bound continuation" begin
     task(id) = TC.policy_expr("RelationTask";layout=Dict(
         "id"=>id,"role"=>nothing,"wait"=>true,"relations"=>[]))

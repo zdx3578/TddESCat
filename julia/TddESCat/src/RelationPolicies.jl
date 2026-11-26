@@ -69,25 +69,26 @@ function source_policy_episodes(agenda,trace)
         push!(get!(Vector{Vector{Int}},families,identify(rows)),rows)
     end
     replicated = filter(pair->length(last(pair)) >= 2,families)
-    for (_,sources) in collect(replicated)
-        # Extend a motif on actual shared roles while two nonoverlapping
-        # witnesses remain. This works for traces of any witnessed length.
-        current = sources
-        while true
-            extended = Dict{String,Vector{Vector{Int}}}()
-            for rows in current
-                tail = get(next,last(rows),0)
-                tail == 0 && continue
-                any(i->agenda.samples[i].context == agenda.samples[tail].context,rows) && continue
-                interval = [rows;tail]
-                siblings = get!(Vector{Vector{Int}},extended,identify(interval))
-                (isempty(siblings) || last(last(siblings)) < first(interval)) && push!(siblings,interval)
-            end
-            choices = filter(pair->length(last(pair)) >= 2,extended)
-            isempty(choices) && break
-            _,current = argmin(pair->(-length(last(pair)),first(pair)),collect(choices))
+    pending = collect(values(replicated))
+    while !isempty(pending)
+        current = pop!(pending)
+        # Keep each extension with independent witnesses. Sharing a prefix
+        # can expose more than one valid continuation.
+        extended = Dict{String,Vector{Vector{Int}}}()
+        for rows in current
+            tail = get(next,last(rows),0)
+            tail == 0 && continue
+            any(i->agenda.samples[i].context == agenda.samples[tail].context,rows) && continue
+            interval = [rows;tail]
+            siblings = get!(Vector{Vector{Int}},extended,identify(interval))
+            (isempty(siblings) || last(last(siblings)) < first(interval)) && push!(siblings,interval)
         end
-        length(first(current)) > 2 && (replicated[identify(first(current))] = current)
+        choices = [rows for rows in values(extended) if length(rows) >= 2]
+        if isempty(choices)
+            length(first(current)) > 2 && (replicated[identify(first(current))] = current)
+        else
+            append!(pending,choices)
+        end
     end
     return replicated
 end
@@ -169,18 +170,35 @@ function policy_episodes(agenda,entries;solver=nothing,snapshot="trajectory")
             emit(repeat,indices,"repeat")
         end
     end
-    # Compare different witnessed continuations with a common entry task.
-    # Conditions are evaluated at that actual entry in each episode.
+    # Compare witnessed continuations after a common prefix. An entry guard
+    # can select a program before its first step when the entry separates it.
     for i in eachindex(ordered), j in i+1:length(ordered)
         left,right = last(ordered[i]),last(ordered[j])
         a,b = first(left),first(right)
         trace.descriptors[first(a)] == trace.descriptors[first(b)] || continue
-        trace.descriptors[a[2]] == trace.descriptors[b[2]] && continue
-        guard = distinguish([before(first(rows)) for rows in left],
-            [before(first(rows)) for rows in right])
-        isnothing(guard) && continue
-        branch = policy_expr("RelationBranch",policy_expr("RelationTest";layout=guard),
-            sequence_policy(trace,a),sequence_policy(trace,b))
+        offset = findfirst(2:min(length(a),length(b))) do position
+            trace.descriptors[a[position]] != trace.descriptors[b[position]] ||
+                trace.neighbors[a[position]].shared != trace.neighbors[b[position]].shared
+        end
+        isnothing(offset) && continue
+        position = offset + 1
+        entry_guard = if position == 2
+            distinguish([before(first(rows)) for rows in left],[before(first(rows)) for rows in right])
+        end
+        branch = if !isnothing(entry_guard)
+            policy_expr("RelationBranch",policy_expr("RelationTest";layout=entry_guard),
+                sequence_policy(trace,a),sequence_policy(trace,b))
+        else
+            guard = distinguish([before(rows[position]) for rows in left],
+                [before(rows[position]) for rows in right])
+            isnothing(guard) && continue
+            prefix = sequence_policy(trace,a[1:position-1])
+            shared = [trace.neighbors[a[position]].shared,trace.neighbors[b[position]].shared]
+            suffix = policy_expr("RelationBranch",policy_expr("RelationTest";layout=guard),
+                sequence_policy(trace,a[position:end]),sequence_policy(trace,b[position:end]);
+                layout=Dict("shared_by_branch"=>shared))
+            policy_expr("RelationSequence",prefix,suffix;layout=Dict("shared"=>[]))
+        end
         for rows in [left;right]
             emit(branch,rows,"branch")
         end
@@ -309,7 +327,9 @@ function next_relation_instruction!(cursor,scene)
             yes = relation_predicate(first(children)["layout"],scene)
             isnothing(yes) && return (;instruction=nothing,branches,status=:unknown_guard)
             push!(branches,(control=:branch,outcome=yes))
-            push!(cursor.pending,(node=children[yes ? 2 : 3],iteration=0,shared=instruction.shared))
+            shared = haskey(layout,"shared_by_branch") ?
+                layout["shared_by_branch"][yes ? 1 : 2] : instruction.shared
+            push!(cursor.pending,(node=children[yes ? 2 : 3],iteration=0,shared))
         elseif kind == "RelationRepeat"
             yes = relation_predicate(first(children)["layout"],scene)
             isnothing(yes) && return (;instruction=nothing,branches,status=:unknown_guard)
