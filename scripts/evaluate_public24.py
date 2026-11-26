@@ -25,6 +25,7 @@ from tddesc_tools.stitch import build_identity
 from tests.bench.check_real_public import offline_capture, public_scorecard_win
 from tests.bench.measurement_audit import receipts
 from tests.bench.policy_audit import TrajectoryPolicyAudit
+from tests.bench.public_coverage import PublicCoverage
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -135,7 +136,9 @@ def evaluate_one(task_dir):
     failures = []
     retries = []
     peak = first["levels_completed"]
+    coverage = PublicCoverage()
     for event, response in ordered:
+        coverage.observe(event, response)
         if not event["action"]["id"]:
             attempt_file = public / "attempts" / (event["command_ref"] + ".json")
             if attempt_file.is_file():
@@ -153,6 +156,7 @@ def evaluate_one(task_dir):
         assert check["action"] == decision["action"] == event["action"]
         parent = trace[event["before_ref"]][1]
         assert event["action"]["id"] in parent["available_actions"]
+        coverage.confirm(trace[event["before_ref"]],event,response,decision,check)
         peak = max(peak, response["levels_completed"])
         checked += 1
         clicks += event["action"]["id"] == 6
@@ -296,6 +300,7 @@ def evaluate_one(task_dir):
         actions_with_residual=residual,
         relation_results=dict(relation_results),
         relation_policy_results=dict(policy_results),
+        causal_coverage=coverage.report(),
         first_obligations=first_obligations,
         failures=failures,
         retries=retries,
