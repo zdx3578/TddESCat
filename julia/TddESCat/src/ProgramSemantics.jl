@@ -14,6 +14,18 @@ mutable struct ProgramCursor
     outputs::Vector
 end
 
+function program_relation_contract(program,forecast)
+    inputs = first(forecast.path).item.chosen
+    outputs = last(forecast.path).item.chosen
+    regression = get(forecast,:regression,nothing)
+    return (definition=program.definition,publication=program.publication,
+        preconditions=predicate_record.(inputs.model.condition.atoms),
+        postconditions=outputs.expected,port_bindings=program_input.(inputs.fragments),
+        scope=[step.item.projection_contract.version for step in forecast.path],
+        shared=program.shared,goal_effect=isnothing(regression) ? nothing : regression.established,
+        source_events=copy(program.sources),available_after=program.available_after)
+end
+
 function merge_semantic_signature!(signature, previous)
     for (key, identity) in (("sorts","id"),("operators","symbol"))
         existing = Dict(entry[identity]=>entry for entry in signature[key])
