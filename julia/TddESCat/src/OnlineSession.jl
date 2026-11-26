@@ -648,6 +648,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     experiments = ExperimentSchedule()
     intervention_memory = InterventionMemory()
     relations = RelationAgenda()
+    exploration_frontier = isnothing(rec.limit) ? PublicFrontier() : nothing
     responses = ResponseLearning()
     publications = String[]
     count = 0
@@ -704,7 +705,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         meters = collect(values(measurement.bindings))
         obs.state == "WIN" && break
         failed = obs.state == "GAME_OVER"
-        retry = failed && relation_tasks ? failure_retry!(relations) : nothing
+        retry = failed && relation_tasks ? failure_retry!(relations;frontier=exploration_frontier) : nothing
         failed && isnothing(retry) && break
         exhausted = !isnothing(visual) && !isnothing(visual.resource) &&
             read_meter(last(obs.frames),visual.resource) == 0
@@ -910,7 +911,19 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         relation_choice = if relation_tasks
             relation_experiment(relations,obs,decision,intervention,context;meters,
                 uncertainty=circuit_experiment_scores(responses,relations),circuit_ref=responses.scope,
-                distinguish=action->history_experiment_score(responses,relations,action,context,obs.levels_completed))
+                distinguish=action->history_experiment_score(responses,relations,action,context,obs.levels_completed),
+                frontier=exploration_frontier)
+        end
+        if relation_tasks && !isnothing(exploration_frontier)
+            preferred = !isnothing(relation_choice) ? relation_choice.action :
+                isnothing(intervention) ? item.action : intervention.action
+            if isnothing(relation_choice) || relation_choice.intent == :test_concrete_effect
+                alternate = frontier_choice(exploration_frontier,relations,obs,decision,intervention,preferred)
+                isnothing(alternate) || (relation_choice = alternate)
+            else
+                frontier_options!(exploration_frontier,context,previous_key(relations,relations.previous),
+                    decision.ranked,intervention)
+            end
         end
         relation_policy = if relation_tasks && isnothing(relations.restart)
             relation_policy_choice(knowledge.policies,relation_policy_cursor,attempted_relation_policies,
@@ -1176,6 +1189,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             observation = observe_relations!(relations,entry,resulting,effects,contact_feedback,site_transitions,
                 relation_proposal;groups=decision.groups)
             finish_relation_dispatch!(relations,relation_proposal)
+            isnothing(exploration_frontier) || frontier_observe!(exploration_frontier,relations)
             observation
         end
         relation_policy_feedback = if !isnothing(relation_policy)

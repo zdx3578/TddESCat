@@ -149,6 +149,20 @@ function finalize_receipt(store, command, value)
     return event
 end
 
+function command_failure(error)
+    detail = Dict{String,Any}("exception"=>string(typeof(error)))
+    if error isa HTTP.TimeoutError
+        detail["operation"] = error.operation
+        detail["timeout_ns"] = error.timeout_ns
+        detail["elapsed_ns"] = error.elapsed_ns
+    elseif error isa Union{HTTP.ConnectError,HTTP.DNSError,HTTP.TLSHandshakeError,HTTP.TLSTransportError}
+        detail["cause"] = command_failure(error.cause)
+    elseif error isa Base.IOError
+        detail["code"] = error.code
+    end
+    return detail
+end
+
 function transact!(rec::Recorder, command; rejection=nothing, hook=(_...) -> nothing)
     store = rec.store
     if !isnothing(rejection)
@@ -161,8 +175,10 @@ function transact!(rec::Recorder, command; rejection=nothing, hook=(_...) -> not
     save_command(store, command)
     is_action_command(command) && (rec.sent_count += 1)
     hook(:sent, command)
+    stage = "request"
     try
         response = public_request(rec.client, "POST", command["path"], command["request_body"])
+        stage = "store_receipt"
         command["http_status"] = Int(response.status)
         key = rec.client.api_key
         if !isnothing(key) && !isnothing(findfirst(codeunits(key), response.body))
@@ -172,6 +188,7 @@ function transact!(rec::Recorder, command; rejection=nothing, hook=(_...) -> not
         end
         save_command(store, command)
         hook(:receipt, command)
+        stage = "validate_receipt"
         value = checked_receipt(store, command)
         event = finalize_receipt(store, command, value)
         hook(:confirmed, command)
@@ -193,6 +210,8 @@ function transact!(rec::Recorder, command; rejection=nothing, hook=(_...) -> not
         command["completion"] = "outcome_unknown"
         command["reason"] = error isa ProtocolError ? error.reason : "transport_or_storage"
         save_command(store, command)
+        atomic_json(store_path(store,"command-failures",command["command_id"] * ".json"),
+            (;command=command["command_id"],stage,detail=command_failure(error)))
     end
     return command
 end

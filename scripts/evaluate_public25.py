@@ -7,6 +7,7 @@ from hashlib import file_digest
 import json
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import tomllib
 
@@ -14,7 +15,7 @@ from tddesc_tools.public_run import absolute_compute_settings, atomic_json
 from tddesc_tools.run import read_task, runtime_paths, worktree_digest
 from tddesc_tools.stitch import build_identity
 
-from scripts.evaluate_public24 import ROOT, evaluate_isolated
+from scripts.evaluate_public24 import ROOT, evaluate_isolated, unconfirmed_transport
 
 
 def prepare_cases(output, games, template, suite, bundle):
@@ -125,6 +126,29 @@ def sha256_file(path):
         return file_digest(stream, "sha256").hexdigest()
 
 
+def evaluate_game(case, game, runtime):
+    result = evaluate_isolated(case, game, runtime)
+    failure = None if result.get("verified") else unconfirmed_transport(case)
+    if failure is None:
+        return {**result, "compute_receipts": backend_receipts(case / "public")}
+    first = {**result, "verdict": game_verdict(result), "transport_failure": failure}
+    first["compute_receipts"] = backend_receipts(case / "public")
+    # The previous GUID stays quarantined. Start a cold case and retain both
+    # sets of public transactions independently.
+    retry = case / "transport-retry"
+    for directory in ("public", "grade"):
+        (retry / directory).mkdir(parents=True)
+    for name in ("agent.toml", "task.toml"):
+        shutil.copyfile(case / name, retry / name)
+    result = evaluate_isolated(retry, game, runtime)
+    return {
+        **result,
+        "selected_attempt": retry.name,
+        "discarded_transport_attempt": first,
+        "compute_receipts": backend_receipts(retry / "public"),
+    }
+
+
 def campaign(args):
     runtime = runtime_paths(ROOT)
     catalog_config = ROOT / "config/acceptance/arc_public25.toml"
@@ -165,7 +189,7 @@ def campaign(args):
     atomic_json(report_file, campaign_report(games, finished))
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
         tasks = {
-            pool.submit(evaluate_isolated, output / game, game, runtime): game
+            pool.submit(evaluate_game, output / game, game, runtime): game
             for game in games
         }
         for task in as_completed(tasks):
@@ -174,7 +198,6 @@ def campaign(args):
                 row = task.result()
             except Exception as error:
                 row = {"game_id": game, "error": str(error)}
-            row["compute_receipts"] = backend_receipts(output / game / "public")
             row["verdict"] = game_verdict(row)
             finished[game] = row
             report = campaign_report(games, finished)

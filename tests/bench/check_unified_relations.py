@@ -22,12 +22,12 @@ class Fixture(ARCBaseGame):
     def __init__(self, seed=0):
         frame = np.zeros((64, 64), dtype=np.int8)
         frame[10:13, 8:11] = 4
-        if MODE in ("directions", "restart"):
+        if MODE in ("directions", "restart", "restart-choices"):
             frame[10:13, 23:26] = 4
             frame[10:13, 38:41] = 4
         else:
             frame[40:42, 44:46] = 2
-        actions = {"delayed": [5, 7], "remote": [5, 6], "directions": [6], "restart": [6], "progress-restart": [6]}
+        actions = {"delayed": [5, 7], "remote": [5, 6], "directions": [6], "restart": [6], "progress-restart": [6], "restart-choices": [6]}
         levels = [Level(sprites=[Sprite(frame.copy(), name="board")])]
         if MODE == "progress-restart":
             frame[10:13, 23:26] = 4
@@ -85,6 +85,11 @@ class Fixture(ARCBaseGame):
                     self.next_level()
                 elif tile == 8:
                     self.lose()
+            if MODE == "restart-choices":
+                if tile in (8, 23):
+                    self.lose()
+                elif tile == 38:
+                    self.next_level()
         self.complete_action()
 """
 
@@ -193,6 +198,13 @@ def observed_steps(public):
 
 def verify(mode, public):
     rows = list(observed_steps(public))
+    if mode == "restart-choices":
+        assert [row[2]["state"] for row in rows] == ["GAME_OVER", "GAME_OVER", "WIN"]
+        assert len({row[0]["action"]["x"] for row in rows}) == 3
+        assert all(row[3]["intent"] == "revise_failed_trace" for row in rows[1:])
+        resets = read(public / "learning/deferred-tail.json")
+        assert resets["public_state"] == "WIN"
+        return [row[0]["event_id"] for row in rows]
     if mode == "progress-restart":
         original = next(row for row in rows if row[2]["levels_completed"] == 1)
         failure = next(row for row in rows if row[2]["state"] == "GAME_OVER")
@@ -257,6 +269,8 @@ def verify(mode, public):
 
 def main(config, run):
     root = Path.cwd()
+    run = run.resolve()
+    (run / "grade").mkdir(parents=True, exist_ok=True)
     task, runtime = read_task(config), runtime_paths(root)
 
     def case(number, mode):
@@ -280,7 +294,14 @@ def main(config, run):
             )
         return verify(mode, directory / "public")
 
-    modes = ("delayed", "remote", "directions", "restart", "progress-restart")
+    modes = (
+        "delayed",
+        "remote",
+        "directions",
+        "restart",
+        "progress-restart",
+        "restart-choices",
+    )
     with ThreadPoolExecutor(max_workers=len(modes)) as pool:
         cases = {
             mode: pool.submit(case, number, mode)
@@ -307,6 +328,9 @@ if __name__ == "__main__":
             Path(directory),
             mode,
             int(number),
+            budget="unlimited"
+            if mode in ("progress-restart", "restart-choices")
+            else 9,
             compute=bool(extra),
         )
         if extra:

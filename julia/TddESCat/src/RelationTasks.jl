@@ -155,7 +155,8 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
         push!(agenda.pairs,(sample.context,previous,action))
     end
     feedback = relation_checks(proposal,last(next.frames),effects)
-    if !isnothing(proposal) && proposal.intent == :recover_confirmed_progress
+    if !isnothing(proposal) && proposal.intent in
+            (:recover_confirmed_progress,:restore_failure_experiment_context,:explore_observed_frontier_path)
         observed = sample.next_context == proposal.obligation.expected &&
             sample.advanced == proposal.obligation.advanced && sample.state == "NOT_FINISHED"
         feedback = merge(feedback,(result=observed ? :established : :refuted,))
@@ -268,28 +269,45 @@ function prepare_relation_tests(agenda,context,obs,groups,action;meters=())
 end
 
 function relation_experiment(agenda,obs,decision,intervention,context;meters=(),uncertainty=Dict{Int,Float64}(),
-                             circuit_ref=nothing,distinguish=(_ -> 0))
+                             circuit_ref=nothing,distinguish=(_ -> 0),frontier=nothing)
     previous = agenda.previous
     prior = previous == 0 ? nothing : agenda.samples[previous]
     if !isnothing(agenda.restart)
         failure = agenda.restart
-        if failure.cursor <= length(failure.prefix)
-            row = agenda.samples[failure.prefix[failure.cursor]]
+        recovery_trace = [failure.prefix;failure.experiment_path]
+        if failure.cursor <= length(recovery_trace)
+            row = agenda.samples[recovery_trace[failure.cursor]]
             action = row.effects.action
             bound = context == row.context && row.level == obs.levels_completed &&
                 action["id"] in obs.available_actions
             if bound
                 obligation = (;failure=failure.event,source=relation_ref(row),
                     expected=row.next_context,advanced=row.advanced,step=failure.cursor)
-                return (;action,intent=:recover_confirmed_progress,tests=NamedTuple[],
+                intent = failure.cursor <= length(failure.prefix) ?
+                    :recover_confirmed_progress : :restore_failure_experiment_context
+                return (;action,intent,tests=NamedTuple[],
                     reads=unique([failure.event;relation_refs(row)]),obligation)
             end
         end
         # The original first action is excluded only in its own public context.
         altered(row) = failure.initial != context || action_key(row.action) != failure.first
         rows = [row for row in decision.ranked if altered(row)]
-        if isempty(rows) && !isnothing(intervention) && altered(intervention)
+        if !isnothing(intervention) && altered(intervention) &&
+                all(row->row.action != intervention.action,rows)
             push!(rows,(action=intervention.action,rank=(0,0)))
+        end
+        if !isnothing(frontier)
+            node = (context,previous_key(agenda,previous))
+            tried = get(frontier.outcomes,node,nothing)
+            if !isnothing(tried)
+                filter!(row->!haskey(tried,action_key(row.action)),rows)
+            end
+            if isempty(rows)
+                fresh = frontier_new_configuration(frontier,node,obs.available_actions)
+                if !isnothing(fresh)
+                    push!(rows,(action=concrete_action(fresh),rank=(0,0)))
+                end
+            end
         end
         if !isempty(rows)
             function rank_revision(row)
@@ -407,7 +425,7 @@ function task_arbitration(item,spatial,intervention,relation,experiment;
         add(:intervention,intervention.action,intervention.reason,isnothing(intervention.goal) ? 6 : 2)
     end
     if !isnothing(relation)
-        priority = relation.intent == :recover_confirmed_progress ? -1 :
+        priority = relation.intent in (:recover_confirmed_progress,:restore_failure_experiment_context) ? -1 :
             relation.intent in (:revise_failed_trace,:complete_preparation) ? 1 :
             relation.intent in (:test_concrete_effect,:distinguish_changed_context,:test_delayed_effect,
                 :establish_preparation,:establish_observed_relation) ? 3 : 5
@@ -504,24 +522,37 @@ function relation_prediction(rec,item,prediction,task;role_proof=nothing,resourc
     return prediction
 end
 
-function failure_retry!(agenda)
+function failure_retry!(agenda;frontier=nothing)
     isempty(agenda.samples) && return nothing
     length(agenda.samples) >= agenda.start || return nothing
     ending = last(agenda.samples)
     ending.state == "GAME_OVER" || return nothing
     scope = (ending.context,previous_key(agenda,ending.preceding),action_key(ending.effects.action))
-    scope in agenda.reopened && return nothing
     last_level = findprev(row->row.advanced,agenda.samples,length(agenda.samples))
     first_index = isnothing(last_level) ? agenda.start : max(agenda.start,last_level+1)
     first_sample = agenda.samples[first_index]
     # RETRY needs a different experiment in the failed level.
     first_action = action_key(first_sample.effects.action)
-    length(first_sample.available) > 1 || 6 in first_sample.available || return nothing
+    experiment_path = Int[]
+    if isnothing(frontier)
+        scope in agenda.reopened && return nothing
+        length(first_sample.available) > 1 || 6 in first_sample.available || return nothing
+    else
+        origin = (first_sample.context,previous_key(agenda,first_sample.preceding))
+        if isempty(frontier_untried(frontier,origin))
+            reachable = frontier_path(frontier,agenda,origin)
+            if !isnothing(reachable)
+                experiment_path = reachable.route
+            elseif isnothing(frontier_new_configuration(frontier,origin,first_sample.available))
+                return nothing
+            end
+        end
+    end
     push!(agenda.reopened,scope)
     return (;event=relation_ref(ending),initial=first_sample.context,first=first_action,
         level=first_sample.level,attempt=agenda.attempt,attribution=:unresolved,
         role=isnothing(first_sample.binding) ? nothing : first_sample.binding.appearance,
-        prefix=Int[],cursor=1)
+        prefix=Int[],experiment_path,cursor=1)
 end
 
 function winning_prefix(agenda,restart,context,level)
@@ -561,7 +592,7 @@ function finish_relation_dispatch!(agenda,proposal)
     agenda.restart = nothing
     agenda.preparing = nothing
     isnothing(proposal) && return
-    if proposal.intent == :recover_confirmed_progress
+    if proposal.intent in (:recover_confirmed_progress,:restore_failure_experiment_context)
         row = last(agenda.samples)
         expected = proposal.obligation
         if row.next_context == expected.expected && row.advanced == expected.advanced &&

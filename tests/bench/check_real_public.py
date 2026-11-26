@@ -83,6 +83,9 @@ def offline_capture(root, task, run):
         games,
         private / "server",
         run / "grade/environment.log",
+        startup_timeout=90
+        if values["execution"]["max_public_commands"] == "unlimited"
+        else 20,
     ) as (url, server_pid):
         agent = public / "agent.toml"
         engine = (original.parent / values["learning"]["engine"]).resolve()

@@ -419,16 +419,42 @@ end
 
 function relation_policy_choice(policies,cursor,attempted,agenda,obs,decision;meters=())
     context = relation_context(obs)
-    candidates = isnothing(cursor) ?
-        [RelationPolicyCursor(policy) for policy in Iterators.reverse(policies) if haskey(policy.body,"tree") &&
-            (policy.body["scope"],context) ∉ attempted] : [cursor]
-    sort!(candidates;by=row->row.policy.body["structure"] == "sequence")
-    for candidate in candidates
+    function ready(candidate)
         next = peek_relation_instruction(candidate,obs)
-        next.status == :task || continue
+        next.status == :task || return nothing
         proposal = bind_relation_instruction(next.cursor,next.instruction,obs,decision,agenda;meters)
-        isnothing(proposal) && continue
+        isnothing(proposal) && return nothing
         return (;cursor=next.cursor,proposal,next.branches,context)
+    end
+
+    choices = [policy for policy in Iterators.reverse(policies) if haskey(policy.body,"tree") &&
+        (policy.body["scope"],context) ∉ attempted]
+    if !isnothing(cursor)
+        current = ready(cursor)
+        isnothing(current) && return nothing
+        cursor.policy.body["structure"] == "sequence" || return current
+        # A guarded branch can reuse the current dispatch when it preserves
+        # the remaining sequence or extends it after its last task.
+        for policy in choices
+            policy.body["structure"] == "branch" || continue
+            next = ready(RelationPolicyCursor(policy))
+            isnothing(next) && continue
+            a,b = current.proposal,next.proposal
+            a.action == b.action && a.obligation.wait == b.obligation.wait &&
+                a.obligation.sought == b.obligation.sought || continue
+            a_effects = Set(semantic_hash(test.expected) for test in a.tests)
+            b_effects = Set(semantic_hash(test.expected) for test in b.tests)
+            a_effects == b_effects || continue
+            (isempty(current.cursor.pending) || current.cursor.pending == next.cursor.pending) || continue
+            proposal = merge(b,(reads=unique([a.reads;b.reads]),))
+            return merge(next,(;proposal))
+        end
+        return current
+    end
+    sort!(choices;by=policy->policy.body["structure"] == "sequence")
+    for policy in choices
+        next = ready(RelationPolicyCursor(policy))
+        isnothing(next) || return next
     end
     return nothing
 end

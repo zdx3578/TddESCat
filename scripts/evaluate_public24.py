@@ -53,6 +53,21 @@ def require_acceptance(path, checks):
     return load(path.parent / "source-identity.json")["solver_source_sha256"]
 
 
+def unconfirmed_transport(case):
+    public = case / "public"
+    for path in (public / "command-failures").glob("*.json"):
+        diagnostic = load(path)
+        if diagnostic["stage"] == "request":
+            receipt = load(public / "commands" / path.name)
+            if (
+                receipt["completion"] == "outcome_unknown"
+                and receipt["reason"] == "transport_or_storage"
+                and "http_status" not in receipt
+            ):
+                return diagnostic
+    return None
+
+
 def evaluate_one(task_dir):
     public = task_dir / "public"
     grade = task_dir / "grade"
@@ -74,6 +89,21 @@ def evaluate_one(task_dir):
     }
     if not trace:
         write_json(public / "generalization.json", result)
+        return result
+    if (
+        code != 0
+        and result["budget_commands"] == "unlimited"
+        and (failure := unconfirmed_transport(task_dir)) is not None
+    ):
+        _, last = next(reversed(trace.values()))
+        result.update(
+            state=last["state"],
+            levels=last["levels_completed"],
+            transport_failure=failure,
+            replay_status="quarantined_before_retry",
+        )
+        write_json(public / "generalization.json", result)
+        write_artifact_index(task_dir)
         return result
     replay_script = ROOT / "scripts/run.jl"
     with (grade / "replay.log").open("wb") as log:

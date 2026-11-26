@@ -7,8 +7,8 @@ base_url = "http://127.0.0.1:0"
 competition_mode = false
 game_selection = "explicit"
 game_id = "ls20-9607627b"
-connect_timeout_seconds = 2
-request_timeout_seconds = 10
+connect_timeout_seconds = 15
+request_timeout_seconds = 60
 
 [execution]
 max_public_commands = "unlimited"

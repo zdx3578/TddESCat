@@ -107,7 +107,9 @@ def solver_sandbox(
 
 
 @contextmanager
-def environment_server(root, runtime, server_config, games, work, log):
+def environment_server(
+    root, runtime, server_config, games, work, log, *, startup_timeout=20
+):
     python = Path(runtime["python"]["executable"])
     python_distribution = python.resolve().parents[1]
     work.mkdir(parents=True)
@@ -135,7 +137,7 @@ def environment_server(root, runtime, server_config, games, work, log):
     with log.open("wb") as output:
         server = subprocess.Popen(cmd, cwd=root, stdout=output, stderr=output)
         try:
-            deadline = monotonic() + 20
+            deadline = monotonic() + startup_timeout
             ready = work / "ready.json"
             while not ready.exists():
                 if server.poll() is not None or monotonic() >= deadline:

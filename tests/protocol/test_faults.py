@@ -139,6 +139,16 @@ def checks(results):
         case = results[name]
         verify_unknown(case, "transport_or_storage")
         assert case.sent("/api/cmd/ACTION1")[0]["backend_executed"]
+    timeout = results["P02-timeout"]
+    record = timeout.actions[0]
+    diagnostic = json.loads(
+        (
+            timeout.public / "command-failures" / (record["command_id"] + ".json")
+        ).read_bytes()
+    )
+    assert diagnostic["command"] == record["command_id"]
+    assert diagnostic["stage"] == "request"
+    assert diagnostic["detail"]["exception"]
     yield "P02", ["P02-drop", "P02-timeout"]
 
     local = results["P03-local"]

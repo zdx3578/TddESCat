@@ -25,6 +25,34 @@ function recorded_frame(ref,previous,frame,action,available)
     return (event=Dict("event_id"=>ref,"before_ref"=>previous),observation=observation)
 end
 
+@testset "A new guard preserves a bound continuation" begin
+    task(id) = TC.policy_expr("RelationTask";layout=Dict(
+        "id"=>id,"role"=>nothing,"wait"=>true,"relations"=>[]))
+    sequence(after) = TC.policy_expr("RelationSequence",task(5),task(after);
+        layout=Dict("shared"=>[]))
+    marker = Dict("kind"=>"color_present","value"=>3)
+    guard = TC.policy_expr("RelationTest";layout=Dict("guard_schema"=>"public-atoms-v1",
+        "guard"=>Dict("var"=>"color"),"atoms"=>Dict("color"=>marker)))
+    branch = TC.policy_expr("RelationBranch",guard,sequence(7),sequence(4))
+    policy(id,structure,tree) = TC.LearnedPolicy("artifact",id,1,"model",
+        Dict("scope"=>id,"structure"=>structure,"tree"=>tree),["evidence-" * id],"published")
+    serial = policy("serial","sequence",sequence(7))
+    guarded = policy("guarded","branch",branch)
+    available = [4,5,7]
+    decision = (ranked=[(action=Dict("id"=>id),) for id in available],)
+    matching = recorded_frame("matching",nothing,fill(0x03,4,4),Dict("id"=>0),available)
+    absent = recorded_frame("absent",nothing,fill(0x00,4,4),Dict("id"=>0),available)
+    agenda = TC.RelationAgenda()
+    cursor = TC.RelationPolicyCursor(serial)
+    picked = TC.relation_policy_choice([guarded],cursor,Set(),agenda,matching.observation,decision)
+    @test picked.cursor.policy.definition == "guarded"
+    @test only(picked.branches).outcome
+    @test Set(picked.proposal.reads) == Set(["evidence-serial","evidence-guarded","published"])
+    retained = TC.relation_policy_choice([guarded],cursor,Set(),agenda,absent.observation,decision)
+    @test retained.cursor.policy.definition == "serial"
+    @test cursor.pending == TC.RelationPolicyCursor(serial).pending
+end
+
 @testset "Repeated relation tasks use a witnessed exit condition" begin
     agenda = TC.RelationAgenda()
     entries = Any[]
@@ -89,7 +117,11 @@ end
             typed_repeats = filter(row->row.structure == "repeat",compiled.episodes)
             @test length(typed_repeats) >= 2
             @test all(row->first(row.body["children"])["layout"]["synthesis"] == "cvc5",typed_repeats)
+            @test all(row->first(row.body["children"])["layout"]["validation"] == "held_out",typed_repeats)
             @test all(row->TC.verify_relation_episode(row.body,row,agenda,entries),typed_repeats)
+            positive = TC.policy_scene_atoms(entries[1].observation)
+            negative = TC.policy_scene_atoms(entries[5].observation)
+            @test TC.typed_policy_guard(worker,[positive,negative],[negative,negative],"withheld-conflict") === nothing
         finally
             close(worker)
         end

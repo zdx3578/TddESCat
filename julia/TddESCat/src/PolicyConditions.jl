@@ -28,9 +28,20 @@ function policy_scene_atoms(observation)
     return types
 end
 
+function policy_atom_active(atoms,atom)
+    atom["kind"] == "all" && return all(member->policy_atom_active(atoms,member),atom["members"])
+    return haskey(atoms,semantic_hash(atom))
+end
+
+function policy_guard_value(layout,atoms)
+    valuation = Dict(name=>policy_atom_active(atoms,atom) for (name,atom) in layout["atoms"])
+    return evaluate_constraint(layout["guard"],valuation)
+end
+
 function typed_policy_guard(worker,positives,negatives,snapshot)
-    (isempty(positives) || isempty(negatives)) && return nothing
-    examples = [positives;negatives]
+    min(length(positives),length(negatives)) >= 2 || return nothing
+    examples = [positives[1:end-1];negatives[1:end-1]]
+    positive_count = length(positives)-1
     atoms = reduce(merge,examples)
     features = filter(sort!(collect(keys(atoms)))) do key
         count(row -> haskey(row,key),examples) ∉ (0,length(examples))
@@ -43,7 +54,7 @@ function typed_policy_guard(worker,positives,negatives,snapshot)
     incidence = Dict((i,key)=>(values[j] ? proven : disproven)
         for (i,values) in enumerate(valuations) for (j,key) in enumerate(features))
     rectangles = relational_factors(eachindex(examples),features,incidence,
-        [1:length(positives),length(positives)+1:length(examples)])
+        [1:positive_count,positive_count+1:length(examples)])
     for factor in rectangles.factors
         length(factor.intent) >= 2 || continue
         push!(definitions,(kind="all",members=[atoms[key] for key in factor.intent]))
@@ -52,7 +63,7 @@ function typed_policy_guard(worker,positives,negatives,snapshot)
         end
     end
     names = ["atom_" * string(i) for i in eachindex(definitions)]
-    samples = [(features=row,expected=index<=length(positives))
+    samples = [(features=row,expected=index<=positive_count)
         for (index,row) in enumerate(valuations)]
     solution = compute_request!(worker,snapshot,"synthesize_guard",(;features=names,samples))
     solution.execution == "completed" && solution.answer == "value" || return nothing
@@ -69,15 +80,14 @@ function typed_policy_guard(worker,positives,negatives,snapshot)
     end
     collect_atoms(guard)
     definitions = Dict(name=>atom for (name,atom) in zip(names,definitions) if name in used)
-    return Dict("guard_schema"=>"public-atoms-v1","guard"=>guard,
-        "atoms"=>parse_json(JSON.json(definitions)),"synthesis"=>"cvc5")
+    layout = Dict("guard_schema"=>"public-atoms-v1","guard"=>guard,
+        "atoms"=>parse_json(JSON.json(definitions)),"synthesis"=>"cvc5","validation"=>"held_out")
+    policy_guard_value(layout,last(positives)) === true &&
+        policy_guard_value(layout,last(negatives)) === false || return nothing
+    return layout
 end
 
 function evaluate_policy_guard(layout,observation)
     observation isa PublicObservation || return nothing
-    atoms = policy_scene_atoms(observation)
-    active(atom) = atom["kind"] == "all" ? all(active,atom["members"]) :
-        haskey(atoms,semantic_hash(atom))
-    valuation = Dict(name=>active(atom) for (name,atom) in layout["atoms"])
-    return evaluate_constraint(layout["guard"],valuation)
+    return policy_guard_value(layout,policy_scene_atoms(observation))
 end
