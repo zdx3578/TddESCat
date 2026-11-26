@@ -1,0 +1,11 @@
+{
+  "source_commit": "b3932e1e11f608022978f4e98c72df2b245e8e05",
+  "source_sha256": {
+    "tests/bench/autonomous_audit.py": "84fb63319c541205d657da042f1e240bf31bf856a941aae53d56974d77b16733",
+    "tests/bench/measurement_audit.py": "9aac1bcfd2c647c0ff67e50a94168cde4366f9127efd4672d538bfff8fcddc54",
+    "tests/bench/projection_audit.py": "6cc37686e5a8ccb667bdbbd91f6aa942a64295550a079a8ea932d29cd9a6f648",
+    "tests/bench/program_audit.py": "9600163287b88c9a5e480fa062d8f4707aaebfac02bd61532bbc5368853fa08b",
+    "tests/bench/policy_audit.py": "24c2ae87a5a9e536dfbc86097e359744718da2b3d68e338e7b941973d12f6a65",
+    "tests/bench/check_real_public.py": "f5ee7390c3b6886de8374770872b4a0faf620851945559acde1d33e25d02a3ce"
+  }
+}

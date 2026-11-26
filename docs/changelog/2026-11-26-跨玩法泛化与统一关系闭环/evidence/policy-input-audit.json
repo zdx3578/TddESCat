@@ -1,0 +1,72 @@
+{
+  "source_commit": "b3932e1e11f608022978f4e98c72df2b245e8e05",
+  "evidence_relative_path": "public/learning/job-000078/policy-corpus.json",
+  "source_file_sha256": "957e3721eb780bb66b96f9ffc54a6815892aa77a1229f090ab1d372c4fa238f9",
+  "input_count": 6,
+  "scene_slot_normalized_text_count": 1,
+  "normalization": "Replace only scene slot tokens $<number> with $SCENE. This is a text normalization, not a claim of independently proving policy semantics.",
+  "normalized_input_sha256": [
+    "ca17b790a66e3cdc6f4b7a3221cd78f68ddda1ca8c3383474456cac88d4fd44f"
+  ],
+  "episodes": [
+    [
+      {
+        "kind": "advance",
+        "input": 1,
+        "event": "e-e98b9f660e8c1ab0-c000000026",
+        "proof": "e-e98b9f660e8c1ab0-c000000026"
+      }
+    ],
+    [
+      {
+        "kind": "advance",
+        "input": 1,
+        "event": "e-e98b9f660e8c1ab0-c000000128",
+        "proof": "e-e98b9f660e8c1ab0-c000000128"
+      }
+    ],
+    [
+      {
+        "kind": "advance",
+        "input": 1,
+        "event": "e-e98b9f660e8c1ab0-c000000231",
+        "proof": "e-e98b9f660e8c1ab0-c000000231"
+      }
+    ],
+    [
+      {
+        "kind": "advance",
+        "input": 1,
+        "event": "e-e98b9f660e8c1ab0-c000000317",
+        "proof": "e-e98b9f660e8c1ab0-c000000317"
+      }
+    ],
+    [
+      {
+        "kind": "advance",
+        "input": 1,
+        "event": "e-e98b9f660e8c1ab0-c000000384",
+        "proof": "e-e98b9f660e8c1ab0-c000000384"
+      }
+    ],
+    [
+      {
+        "kind": "resolve_site",
+        "input": 2,
+        "event": "e-e98b9f660e8c1ab0-c000000429",
+        "proof": "e-e98b9f660e8c1ab0-c000000430"
+      },
+      {
+        "kind": "advance",
+        "input": 1,
+        "event": "e-e98b9f660e8c1ab0-c000000498",
+        "proof": "e-e98b9f660e8c1ab0-c000000498"
+      }
+    ]
+  ],
+  "source_locations": [
+    "PolicySemantics.jl::policy_corpus",
+    "PolicySemantics.jl::analyze_policy_body"
+  ],
+  "interpretation": "The compiler constructs a fixed contact-domain Repeat/Branch/Stop structure. Observed conditions and episodes are data-derived; E-Stitch searches shared definitions within the compiled inputs."
+}

@@ -1,0 +1,658 @@
+{
+  "source_commit": "b3932e1e11f608022978f4e98c72df2b245e8e05",
+  "source_sha256": {
+    "tests/bench/autonomous_audit.py": "84fb63319c541205d657da042f1e240bf31bf856a941aae53d56974d77b16733",
+    "tests/bench/measurement_audit.py": "9aac1bcfd2c647c0ff67e50a94168cde4366f9127efd4672d538bfff8fcddc54",
+    "tests/bench/projection_audit.py": "6cc37686e5a8ccb667bdbbd91f6aa942a64295550a079a8ea932d29cd9a6f648",
+    "tests/bench/program_audit.py": "9600163287b88c9a5e480fa062d8f4707aaebfac02bd61532bbc5368853fa08b",
+    "tests/bench/policy_audit.py": "24c2ae87a5a9e536dfbc86097e359744718da2b3d68e338e7b941973d12f6a65",
+    "tests/bench/check_real_public.py": "f5ee7390c3b6886de8374770872b4a0faf620851945559acde1d33e25d02a3ce"
+  },
+  "review_scope": {
+    "executed": [
+      "indexed file size and SHA-256 verification",
+      "public receipt SHA-256 verification",
+      "pinned current Python autonomous audit including task and policy audit",
+      "pinned current Python program audit including projection prefix reconstruction",
+      "raw source and control records counted"
+    ],
+    "not_executed": [
+      "game",
+      "Julia replay",
+      "Julia definition expansion proof",
+      "Rust search",
+      "fresh isolation probe",
+      "public24 raw trajectory audit"
+    ],
+    "replay_exit_and_isolation_are_saved_author_results": true,
+    "full_baseline_is_recorded_not_a_separate_Julia_rerun": true
+  },
+  "manifest": {
+    "schema_version": 1,
+    "suite_id": "autonomous-offline-win",
+    "run_id": "object-native-ls20-r03",
+    "git_commit": "9dd2606a0fe7946f4475013bbc4f4f91ce241ee3",
+    "worktree_sha256": "dfef1ca43e81bf3df62d05b1ca382d03f0e4ac79d3e4b6cc1471aa0ecd0e80b6",
+    "config_sha256": "1042b988b2cb9a8e6ce2a14531af88bc97f0acbdceba1b7757055045e6fea853",
+    "locks": {
+      "python": "606a07ec1ecbd2282472e305c1b24f94107343ea491acef8969801b703d89540",
+      "julia": "0ec6da0595f34a8ef38d83105253b1733668929e66540aa61f9f9ec5d432bbc8",
+      "rust": "fde43e008180855291f962e1f96f92efd990386d1c7eab9a688dfb803cf7f5f2"
+    },
+    "environment": "official_offline_http",
+    "isolation": "linux_namespaces",
+    "started_at": "2026-11-26T02:01:09.014611+00:00"
+  },
+  "indexed_files": 8527,
+  "index_errors": [],
+  "events": 752,
+  "actions": 744,
+  "resets": 8,
+  "frames": 1498,
+  "action_ids": {
+    "1": 245,
+    "2": 214,
+    "3": 133,
+    "4": 152
+  },
+  "final": {
+    "game_id": "ls20-9607627b",
+    "guid": "cbf580bc-8826-485b-a993-0ca29dfb8a47",
+    "state": "WIN",
+    "levels_completed": 7,
+    "win_levels": 7
+  },
+  "single_session": true,
+  "cold_start": true,
+  "scorecard_win": true,
+  "replay_ledger_all_events_in_order": true,
+  "stored_replay_exit": 0,
+  "recomputed_gates": {
+    "autonomous_public_win": true,
+    "autonomous_learned_task": true,
+    "autonomous_goal_program": true,
+    "autonomous_learned_policy": true
+  },
+  "audit_errors": [],
+  "program_errors": [],
+  "stored_report_different_keys": [],
+  "stored_program_different_keys": [],
+  "program_calls": 14,
+  "program_steps": 28,
+  "program_ordinary_choice_changed": 20,
+  "program_baseline_choice_changed": 0,
+  "program_cross_level": true,
+  "program_relation_uses": [],
+  "program_dispositions": {
+    "completed": 14
+  },
+  "program_goal_contracts": {
+    "observed_route_waypoint": 28
+  },
+  "program_dependency_depths": {
+    "2": 26,
+    "1": 2
+  },
+  "task_records": 94,
+  "task_levels": {
+    "6": 35,
+    "7": 59
+  },
+  "task_outcomes": {
+    "continue": 92,
+    "established": 2
+  },
+  "task_relations": {
+    "public_advancement": 94
+  },
+  "task_rule_models": [
+    [
+      "progress-a758723b66c08ddb6fb3ee0ff8b09c6a6af99f5eefa5551b367666f8370b7994",
+      [
+        {
+          "variable": "remaining_sites",
+          "rows": [
+            [
+              1,
+              true
+            ],
+            [
+              2,
+              false
+            ]
+          ]
+        }
+      ]
+    ]
+  ],
+  "task_distinct_level_target_models": 2,
+  "task_first": {
+    "event": "e-e98b9f660e8c1ab0-c000000464",
+    "level": 6,
+    "model": "progress-a758723b66c08ddb6fb3ee0ff8b09c6a6af99f5eefa5551b367666f8370b7994",
+    "relation": "public_advancement",
+    "producer": {
+      "relation": "public_advancement",
+      "action": 2,
+      "origin": [
+        54,
+        45
+      ],
+      "target": [
+        54,
+        50
+      ],
+      "displacement": [
+        0,
+        5
+      ],
+      "guard": [
+        {
+          "same": [
+            "support",
+            "pigment"
+          ],
+          "different": []
+        },
+        {
+          "same": [
+            "extent",
+            "support",
+            "pigment"
+          ],
+          "different": []
+        },
+        {
+          "same": [
+            "support",
+            "pigment",
+            "cardinality"
+          ],
+          "different": []
+        },
+        {
+          "same": [
+            "extent",
+            "support",
+            "pigment",
+            "cardinality"
+          ],
+          "different": []
+        }
+      ],
+      "advancement": [
+        {
+          "variable": "remaining_sites",
+          "rows": [
+            [
+              1,
+              true
+            ],
+            [
+              2,
+              false
+            ]
+          ]
+        }
+      ],
+      "read_events": [
+        "e-e98b9f660e8c1ab0-c000000386",
+        "e-e98b9f660e8c1ab0-c000000003",
+        "e-e98b9f660e8c1ab0-c000000004",
+        "e-e98b9f660e8c1ab0-c000000012",
+        "e-e98b9f660e8c1ab0-c000000013",
+        "e-e98b9f660e8c1ab0-c000000025",
+        "e-e98b9f660e8c1ab0-c000000026",
+        "e-e98b9f660e8c1ab0-c000000130",
+        "e-e98b9f660e8c1ab0-c000000131",
+        "e-e98b9f660e8c1ab0-c000000159",
+        "e-e98b9f660e8c1ab0-c000000160",
+        "e-e98b9f660e8c1ab0-c000000318",
+        "e-e98b9f660e8c1ab0-c000000319",
+        "e-e98b9f660e8c1ab0-c000000331",
+        "e-e98b9f660e8c1ab0-c000000332",
+        "e-e98b9f660e8c1ab0-c000000029",
+        "e-e98b9f660e8c1ab0-c000000127",
+        "e-e98b9f660e8c1ab0-c000000128",
+        "e-e98b9f660e8c1ab0-c000000230",
+        "e-e98b9f660e8c1ab0-c000000231",
+        "e-e98b9f660e8c1ab0-c000000243",
+        "e-e98b9f660e8c1ab0-c000000316",
+        "e-e98b9f660e8c1ab0-c000000317",
+        "e-e98b9f660e8c1ab0-c000000383",
+        "e-e98b9f660e8c1ab0-c000000384",
+        "e-e98b9f660e8c1ab0-c000000428",
+        "e-e98b9f660e8c1ab0-c000000429",
+        "e-e98b9f660e8c1ab0-c000000430"
+      ]
+    },
+    "requirements": [
+      [
+        "approach_contact",
+        "missing"
+      ],
+      [
+        "admissible_contact",
+        "missing"
+      ]
+    ],
+    "outcome": "continue"
+  },
+  "task_established": [
+    {
+      "event": "e-e98b9f660e8c1ab0-c000000498",
+      "level": 6,
+      "model": "progress-a758723b66c08ddb6fb3ee0ff8b09c6a6af99f5eefa5551b367666f8370b7994",
+      "relation": "public_advancement",
+      "producer": {
+        "relation": "public_advancement",
+        "action": 2,
+        "origin": [
+          54,
+          45
+        ],
+        "target": [
+          54,
+          50
+        ],
+        "displacement": [
+          0,
+          5
+        ],
+        "guard": [
+          {
+            "same": [
+              "support",
+              "pigment"
+            ],
+            "different": []
+          },
+          {
+            "same": [
+              "extent",
+              "support",
+              "pigment"
+            ],
+            "different": []
+          },
+          {
+            "same": [
+              "support",
+              "pigment",
+              "cardinality"
+            ],
+            "different": []
+          },
+          {
+            "same": [
+              "extent",
+              "support",
+              "pigment",
+              "cardinality"
+            ],
+            "different": []
+          }
+        ],
+        "advancement": [
+          {
+            "variable": "remaining_sites",
+            "rows": [
+              [
+                1,
+                true
+              ],
+              [
+                2,
+                false
+              ]
+            ]
+          }
+        ],
+        "read_events": [
+          "e-e98b9f660e8c1ab0-c000000386",
+          "e-e98b9f660e8c1ab0-c000000003",
+          "e-e98b9f660e8c1ab0-c000000004",
+          "e-e98b9f660e8c1ab0-c000000012",
+          "e-e98b9f660e8c1ab0-c000000013",
+          "e-e98b9f660e8c1ab0-c000000025",
+          "e-e98b9f660e8c1ab0-c000000026",
+          "e-e98b9f660e8c1ab0-c000000130",
+          "e-e98b9f660e8c1ab0-c000000131",
+          "e-e98b9f660e8c1ab0-c000000159",
+          "e-e98b9f660e8c1ab0-c000000160",
+          "e-e98b9f660e8c1ab0-c000000318",
+          "e-e98b9f660e8c1ab0-c000000319",
+          "e-e98b9f660e8c1ab0-c000000331",
+          "e-e98b9f660e8c1ab0-c000000332",
+          "e-e98b9f660e8c1ab0-c000000029",
+          "e-e98b9f660e8c1ab0-c000000127",
+          "e-e98b9f660e8c1ab0-c000000128",
+          "e-e98b9f660e8c1ab0-c000000230",
+          "e-e98b9f660e8c1ab0-c000000231",
+          "e-e98b9f660e8c1ab0-c000000243",
+          "e-e98b9f660e8c1ab0-c000000316",
+          "e-e98b9f660e8c1ab0-c000000317",
+          "e-e98b9f660e8c1ab0-c000000383",
+          "e-e98b9f660e8c1ab0-c000000384",
+          "e-e98b9f660e8c1ab0-c000000428",
+          "e-e98b9f660e8c1ab0-c000000429",
+          "e-e98b9f660e8c1ab0-c000000430"
+        ]
+      },
+      "requirements": [
+        [
+          "approach_contact",
+          "proven"
+        ],
+        [
+          "admissible_contact",
+          "proven"
+        ]
+      ],
+      "outcome": "established"
+    },
+    {
+      "event": "e-e98b9f660e8c1ab0-c000000753",
+      "level": 7,
+      "model": "progress-a758723b66c08ddb6fb3ee0ff8b09c6a6af99f5eefa5551b367666f8370b7994",
+      "relation": "public_advancement",
+      "producer": {
+        "relation": "public_advancement",
+        "action": 2,
+        "origin": [
+          29,
+          45
+        ],
+        "target": [
+          29,
+          50
+        ],
+        "displacement": [
+          0,
+          5
+        ],
+        "guard": [
+          {
+            "same": [
+              "support",
+              "pigment"
+            ],
+            "different": []
+          },
+          {
+            "same": [
+              "extent",
+              "support",
+              "pigment"
+            ],
+            "different": []
+          },
+          {
+            "same": [
+              "support",
+              "pigment",
+              "cardinality"
+            ],
+            "different": []
+          },
+          {
+            "same": [
+              "extent",
+              "support",
+              "pigment",
+              "cardinality"
+            ],
+            "different": []
+          }
+        ],
+        "advancement": [
+          {
+            "variable": "remaining_sites",
+            "rows": [
+              [
+                1,
+                true
+              ],
+              [
+                2,
+                false
+              ]
+            ]
+          }
+        ],
+        "read_events": [
+          "e-e98b9f660e8c1ab0-c000000500",
+          "e-e98b9f660e8c1ab0-c000000003",
+          "e-e98b9f660e8c1ab0-c000000004",
+          "e-e98b9f660e8c1ab0-c000000012",
+          "e-e98b9f660e8c1ab0-c000000013",
+          "e-e98b9f660e8c1ab0-c000000025",
+          "e-e98b9f660e8c1ab0-c000000026",
+          "e-e98b9f660e8c1ab0-c000000130",
+          "e-e98b9f660e8c1ab0-c000000131",
+          "e-e98b9f660e8c1ab0-c000000159",
+          "e-e98b9f660e8c1ab0-c000000160",
+          "e-e98b9f660e8c1ab0-c000000318",
+          "e-e98b9f660e8c1ab0-c000000319",
+          "e-e98b9f660e8c1ab0-c000000331",
+          "e-e98b9f660e8c1ab0-c000000332",
+          "e-e98b9f660e8c1ab0-c000000029",
+          "e-e98b9f660e8c1ab0-c000000127",
+          "e-e98b9f660e8c1ab0-c000000128",
+          "e-e98b9f660e8c1ab0-c000000230",
+          "e-e98b9f660e8c1ab0-c000000231",
+          "e-e98b9f660e8c1ab0-c000000243",
+          "e-e98b9f660e8c1ab0-c000000316",
+          "e-e98b9f660e8c1ab0-c000000317",
+          "e-e98b9f660e8c1ab0-c000000383",
+          "e-e98b9f660e8c1ab0-c000000384",
+          "e-e98b9f660e8c1ab0-c000000386",
+          "e-e98b9f660e8c1ab0-c000000428",
+          "e-e98b9f660e8c1ab0-c000000429",
+          "e-e98b9f660e8c1ab0-c000000430",
+          "e-e98b9f660e8c1ab0-c000000497",
+          "e-e98b9f660e8c1ab0-c000000498",
+          "e-e98b9f660e8c1ab0-c000000670"
+        ]
+      },
+      "requirements": [
+        [
+          "approach_contact",
+          "proven"
+        ],
+        [
+          "admissible_contact",
+          "proven"
+        ]
+      ],
+      "outcome": "established"
+    }
+  ],
+  "policy_records": 59,
+  "policy_levels": {
+    "7": 59
+  },
+  "policy_relations": {
+    "public_advancement": 59
+  },
+  "policy_statuses": {
+    "continue": 58,
+    "stopped": 1
+  },
+  "policy_target_cardinalities": {
+    "1": 59
+  },
+  "policy_unique_definitions": [
+    "lib_724428c8bdd059aeb188f5d2510ffa2830399205c178ea5d7b057e02ad04b646"
+  ],
+  "policy_first": {
+    "event": "e-e98b9f660e8c1ab0-c000000695",
+    "definition": "lib_724428c8bdd059aeb188f5d2510ffa2830399205c178ea5d7b057e02ad04b646",
+    "relation": "public_advancement",
+    "targets": [
+      [
+        29,
+        50
+      ]
+    ],
+    "status": "continue",
+    "level": 7
+  },
+  "policy_last": {
+    "event": "e-e98b9f660e8c1ab0-c000000753",
+    "definition": "lib_724428c8bdd059aeb188f5d2510ffa2830399205c178ea5d7b057e02ad04b646",
+    "relation": "public_advancement",
+    "targets": [
+      [
+        29,
+        50
+      ]
+    ],
+    "status": "stopped",
+    "level": 7
+  },
+  "policy_activations": [
+    {
+      "job": "job-000078",
+      "definition": "lib_724428c8bdd059aeb188f5d2510ffa2830399205c178ea5d7b057e02ad04b646",
+      "publication": "f3fcee8c9e4e036dd46406555627f3c77af9b28b3632def964aae36746b07d48",
+      "available_after": "e-e98b9f660e8c1ab0-c000000499",
+      "model": "progress-a758723b66c08ddb6fb3ee0ff8b09c6a6af99f5eefa5551b367666f8370b7994",
+      "body": {
+        "stop": "confirmed_public_advance",
+        "variant": "strict_visible_site_subset",
+        "rows": [
+          [
+            1,
+            true
+          ],
+          [
+            2,
+            false
+          ]
+        ],
+        "negative": "observed_site_change",
+        "positive": "public_advancement"
+      },
+      "training_events": [
+        "e-e98b9f660e8c1ab0-c000000025",
+        "e-e98b9f660e8c1ab0-c000000026",
+        "e-e98b9f660e8c1ab0-c000000004",
+        "e-e98b9f660e8c1ab0-c000000127",
+        "e-e98b9f660e8c1ab0-c000000128",
+        "e-e98b9f660e8c1ab0-c000000029",
+        "e-e98b9f660e8c1ab0-c000000230",
+        "e-e98b9f660e8c1ab0-c000000231",
+        "e-e98b9f660e8c1ab0-c000000131",
+        "e-e98b9f660e8c1ab0-c000000316",
+        "e-e98b9f660e8c1ab0-c000000317",
+        "e-e98b9f660e8c1ab0-c000000243",
+        "e-e98b9f660e8c1ab0-c000000383",
+        "e-e98b9f660e8c1ab0-c000000384",
+        "e-e98b9f660e8c1ab0-c000000319",
+        "e-e98b9f660e8c1ab0-c000000428",
+        "e-e98b9f660e8c1ab0-c000000429",
+        "e-e98b9f660e8c1ab0-c000000386",
+        "e-e98b9f660e8c1ab0-c000000497",
+        "e-e98b9f660e8c1ab0-c000000498",
+        "e-e98b9f660e8c1ab0-c000000430"
+      ],
+      "episode_lengths": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        2
+      ],
+      "source_program_count": 6
+    },
+    {
+      "job": "job-000153",
+      "definition": "lib_724428c8bdd059aeb188f5d2510ffa2830399205c178ea5d7b057e02ad04b646",
+      "publication": "18bbf5831fa48801a07ed93c55074649b8e1dfe7155078c37fac31fb25e040c9",
+      "available_after": "e-e98b9f660e8c1ab0-c000000753",
+      "model": "progress-a758723b66c08ddb6fb3ee0ff8b09c6a6af99f5eefa5551b367666f8370b7994",
+      "body": {
+        "stop": "confirmed_public_advance",
+        "variant": "strict_visible_site_subset",
+        "rows": [
+          [
+            1,
+            true
+          ],
+          [
+            2,
+            false
+          ]
+        ],
+        "negative": "observed_site_change",
+        "positive": "public_advancement"
+      },
+      "training_events": [
+        "e-e98b9f660e8c1ab0-c000000025",
+        "e-e98b9f660e8c1ab0-c000000026",
+        "e-e98b9f660e8c1ab0-c000000004",
+        "e-e98b9f660e8c1ab0-c000000127",
+        "e-e98b9f660e8c1ab0-c000000128",
+        "e-e98b9f660e8c1ab0-c000000029",
+        "e-e98b9f660e8c1ab0-c000000230",
+        "e-e98b9f660e8c1ab0-c000000231",
+        "e-e98b9f660e8c1ab0-c000000131",
+        "e-e98b9f660e8c1ab0-c000000316",
+        "e-e98b9f660e8c1ab0-c000000317",
+        "e-e98b9f660e8c1ab0-c000000243",
+        "e-e98b9f660e8c1ab0-c000000383",
+        "e-e98b9f660e8c1ab0-c000000384",
+        "e-e98b9f660e8c1ab0-c000000319",
+        "e-e98b9f660e8c1ab0-c000000428",
+        "e-e98b9f660e8c1ab0-c000000429",
+        "e-e98b9f660e8c1ab0-c000000386",
+        "e-e98b9f660e8c1ab0-c000000497",
+        "e-e98b9f660e8c1ab0-c000000498",
+        "e-e98b9f660e8c1ab0-c000000430",
+        "e-e98b9f660e8c1ab0-c000000752",
+        "e-e98b9f660e8c1ab0-c000000753",
+        "e-e98b9f660e8c1ab0-c000000670"
+      ],
+      "episode_lengths": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        2,
+        1
+      ],
+      "source_program_count": 7
+    }
+  ],
+  "decision_reasons": {
+    "uncovered": 1,
+    "test_unbound_spatial_action": 43,
+    "experiment_on_unknown_visual_effect": 171,
+    "experiment_on_contact_relation": 110,
+    "revalidated_learned_program": 28,
+    "experiment_at_learned_spatial_frontier": 39,
+    "learned_visual_contact": 202,
+    "inspect_unseen_neighborhood": 150
+  },
+  "decisions_with_spatial": 743,
+  "policy_decisions_with_spatial": 59,
+  "task_decisions_with_spatial": 94,
+  "policy_decisions_with_program": 0,
+  "task_decisions_with_program": 0,
+  "policy_actions_different_from_recorded_spatial": 0,
+  "task_actions_different_from_recorded_spatial": 0,
+  "definition_reference_actions": 479,
+  "all_local_queries_supported": 436,
+  "all_local_supported_with_residual": 260,
+  "coverage_qualifications": {
+    "unresolved": 277,
+    "predicted_queries_only": 467
+  },
+  "cohort_statuses": {
+    "search_complete": 60,
+    "unsubmitted": 89
+  }
+}
