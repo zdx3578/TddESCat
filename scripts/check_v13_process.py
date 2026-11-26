@@ -176,17 +176,38 @@ def audit_campaign(directory, expected_revision):
         "Public25 report game IDs differ from its manifest",
     )
     results = []
+    verified_attempts = []
     for game, verdict in zip(catalog, report["games"], strict=True):
         case = directory / game
         attempt = verdict.get("selected_attempt")
         require(attempt in (None, "transport-retry"), f"Unsupported attempt for {game}")
+        discarded = []
         if attempt:
+            check_profile(case / "agent.toml", game)
+            original_profile = case / "public/agent.toml"
+            if original_profile.is_file():
+                check_profile(original_profile, game)
+            original = verdict.get("discarded_transport_attempt")
+            require(
+                isinstance(original, dict),
+                f"Missing original attempt verdict for {game}",
+            )
+            discarded.append(audit_case(case / "public", game, original))
             case = case / attempt
         check_profile(case / "agent.toml", game)
         actual_profile = case / "public/agent.toml"
         if actual_profile.is_file() or verdict.get("verdict") == "WIN":
             check_profile(actual_profile, game)
-        results.append(audit_case(case / "public", game, verdict))
+        selected = audit_case(case / "public", game, verdict)
+        if discarded:
+            selected["discarded_attempts"] = discarded
+        attempts = [*discarded, selected]
+        verified_attempts.extend(attempts)
+        selected["observed_peak_levels"] = max(run["peak_levels"] for run in attempts)
+        selected["any_attempt_started"] = any(
+            run["states"].get("actions", 0) > 0 for run in attempts
+        )
+        results.append(selected)
     wins = sum(case["verified_win"] for case in results)
     complete = wins == len(catalog) and report["status"] == "PASS"
     return {
@@ -198,9 +219,13 @@ def audit_campaign(directory, expected_revision):
         if report["status"] == "IN_PROGRESS"
         else "FAIL",
         "verified_wins": wins,
-        "games_started": sum(case["states"].get("actions", 0) > 0 for case in results),
-        "confirmed_actions": sum(case["states"].get("actions", 0) for case in results),
-        "confirmed_resets": sum(case["states"].get("resets", 0) for case in results),
+        "games_started": sum(case["any_attempt_started"] for case in results),
+        "confirmed_actions": sum(
+            case["states"].get("actions", 0) for case in verified_attempts
+        ),
+        "confirmed_resets": sum(
+            case["states"].get("resets", 0) for case in verified_attempts
+        ),
         "games": results,
     }
 
