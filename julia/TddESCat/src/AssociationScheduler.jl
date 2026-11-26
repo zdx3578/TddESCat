@@ -111,6 +111,28 @@ function record_experiment_prefix!(schedule,level,available,history,action,event
     return nothing
 end
 
+function prefix_probe(schedule,prefix,past,baseline,preferred;independent=false)
+    baseline_count, baseline_event = past[baseline]
+    obligation = (;prefix=last(prefix),baseline=concrete_action((baseline,-1,-1)),
+        previous_experiments=first(get(past,preferred,(0,""))),
+        baseline_experiments=baseline_count,baseline_event)
+    return (;round=schedule.round,cursor=schedule.cursor,action=concrete_action((preferred,-1,-1)),
+        obligation,independent)
+end
+
+function mixed_prefix_experiment(schedule,level,available,history)
+    6 in available || return nothing
+    prefix = experiment_prefix_key(level,available,history)
+    past = get(schedule.prefixes,prefix,nothing)
+    isnothing(past) && return nothing
+    tried = [id for id in available if id != 6 && haskey(past,id)]
+    isempty(tried) && return nothing
+    untried = [id for id in available if id != 6 && !haskey(past,id)]
+    isempty(untried) && return nothing
+    baseline = argmax(id->(first(past[id]),-id),tried)
+    return prefix_probe(schedule,prefix,past,baseline,minimum(untried);independent=true)
+end
+
 function select_experiment!(schedule, store, ranked, available, before_ref;level=nothing,history=Int[])
     isempty(available) && return nothing
     schedule.cursor <= length(schedule.queue) || begin
@@ -146,11 +168,7 @@ function select_experiment!(schedule, store, ranked, available, before_ref;level
         visits(action) = first(get(past,action,(0,"")))
         preferred = argmin(action->(visits(action),action),alternatives)
         if visits(preferred) < visits(first(key))
-            action = concrete_action((preferred,-1,-1))
-            obligation = (;prefix=last(prefix),baseline=concrete_action(key),
-                previous_experiments=visits(preferred),baseline_experiments=visits(first(key)),
-                baseline_event=last(past[first(key)]))
-            return (;round=schedule.round,cursor=schedule.cursor,action,obligation)
+            return prefix_probe(schedule,prefix,past,first(key),preferred)
         end
     end
     return (;round=schedule.round,cursor=schedule.cursor,action=concrete_action(key))
@@ -159,9 +177,11 @@ end
 function record_experiment_service!(schedule, store, item, event)
     event["action"] == item.action || error("Experiment receipt differs from the selected obligation")
     obligation = get(item,:obligation,nothing)
+    independent = get(item,:independent,false)
     atomic_json(store_path(store,"experiments","service-" * event["event_id"] * ".json"),
         Dict("event_ref"=>event["event_id"],"before_ref"=>event["before_ref"],"action"=>item.action,
-            "round"=>item.round,"cursor"=>item.cursor,"prefix_obligation"=>obligation))
+            "round"=>item.round,"cursor"=>item.cursor,"prefix_obligation"=>obligation,"independent"=>independent))
+    independent && return nothing
     if isnothing(obligation)
         schedule.cursor += 1
         schedule.deferred_once = false

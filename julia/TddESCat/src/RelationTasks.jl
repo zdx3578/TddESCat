@@ -830,7 +830,10 @@ function task_arbitration(item,spatial,intervention,relation,experiment;
             intervention.reason : string(relation.intent)
         add(:relation,relation.action,reason,priority)
     end
-    isnothing(experiment) || add(:experiment,experiment.action,"distinguish_public_experiment",7)
+    if !isnothing(experiment)
+        priority = get(experiment,:independent,false) ? 4 : 7
+        add(:experiment,experiment.action,"distinguish_public_experiment",priority)
+    end
     baseline = argmin(row->row.priority,candidates)
     isnothing(policy) || add(:relation_policy,policy.action,"execute_relation_policy",continuing_policy ? 0 : 1)
     choice = argmin(row->row.priority,candidates)
@@ -843,6 +846,8 @@ function task_arbitration(item,spatial,intervention,relation,experiment;
         elseif choice.source == :relation
             choice.priority <= 2 || relation.intent in
                 (:establish_preparation,:probe_observed_advancement,:prepare_public_outcome,:establish_outcome_relation)
+        elseif choice.source == :experiment
+            get(experiment,:independent,false)
         else
             choice.priority <= 2
         end

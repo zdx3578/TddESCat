@@ -947,9 +947,13 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 agenda=relation_tasks ? relations : nothing,groups=decision.groups,
                 meters,condition_view)
         end
-        experiment = if !object_probes && !frozen && !composing && isnothing(program_cursor) && isnothing(spatial_choice)
-            select_experiment!(experiments,rec.store,decision.ranked,obs.available_actions,rec.before_ref;
-                level=obs.levels_completed,history)
+        experiment = if !frozen && !composing
+            if object_probes
+                mixed_prefix_experiment(experiments,obs.levels_completed,obs.available_actions,history)
+            elseif isnothing(program_cursor) && isnothing(spatial_choice)
+                select_experiment!(experiments,rec.store,decision.ranked,obs.available_actions,rec.before_ref;
+                    level=obs.levels_completed,history)
+            end
         end
         context = relation_tasks ? relation_context(obs) : nothing
         relation_choice = if relation_tasks

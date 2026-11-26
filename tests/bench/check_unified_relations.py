@@ -48,7 +48,8 @@ class Fixture(ARCBaseGame):
             "primitive-outcome": [2, 5], "outcome-relation-chain": [2, 5, 7],
             "bridge-partition": [5], "concrete-object-followup": [5, 6],
             "frontier-dispatch": [1, 2], "frontier-route": [2], "frontier-remote-coordinate": [2],
-            "sequence-experiment": [1, 2, 3], "circuit-role": [6, 7], "coordinate-restart": [6]}
+            "sequence-experiment": [1, 2, 3], "mixed-sequence": [1, 2, 3, 6],
+            "circuit-role": [6, 7], "coordinate-restart": [6]}
         if MODE == "outcome-relation-chain":
             frame[50:52, 48:50] = 3
         levels = [Level(sprites=[Sprite(frame.copy(), name="board")])]
@@ -104,7 +105,7 @@ class Fixture(ARCBaseGame):
                 pixels[50, 50] = 12
             elif pixels[self.action.data["y"], self.action.data["x"]] == 11:
                 pixels[40:42, 44:46] = 7
-        elif MODE == "sequence-experiment":
+        elif MODE in ("sequence-experiment", "mixed-sequence"):
             if action == 3 and self.previous == 2 and self.hits >= 7:
                 self.next_level()
             else:
@@ -309,6 +310,7 @@ def capture(
         "advancement-refutation",
         "concrete-object-followup",
         "sequence-experiment",
+        "mixed-sequence",
     )
     public = run / "public"
     public.mkdir()
@@ -363,6 +365,7 @@ def capture(
             "primitive-outcome": "outcome_relation_public.jl",
             "outcome-relation-chain": "outcome_relation_public.jl",
             "sequence-experiment": "sequence_experiment_public.jl",
+            "mixed-sequence": "sequence_experiment_public.jl",
         }
         if mode in direct_tests:
             name = direct_tests[mode]
@@ -373,7 +376,7 @@ def capture(
                 runtime,
                 public,
                 str(agent),
-                *([mode] if mode in ("long-history", "primitive-outcome", "outcome-relation-chain") else []),
+                *([mode] if mode in ("long-history", "primitive-outcome", "outcome-relation-chain", "mixed-sequence") else []),
                 str(public),
                 script=script,
                 extra_read=paths,
@@ -574,8 +577,8 @@ def verify(mode, public):
             assert set(task["reads"]) <= set(prediction["event_reads"])
             assert all(trace[source][0]["sequence"] < command["sequence"] for source in task["reads"])
         return [comparison, preparation, original, *required, win]
-    if mode == "sequence-experiment":
-        record = read(public / "sequence-experiment.json")
+    if mode in ("sequence-experiment", "mixed-sequence"):
+        record = read(public / f"{mode}.json")
         trace = receipts(public)
         event, reply = trace[record["event"]]
         prior = [(row, raw) for row, raw in trace.values() if row["sequence"] < event["sequence"]]
@@ -591,6 +594,10 @@ def verify(mode, public):
         service = read(public / "experiments" / ("service-" + event["event_id"] + ".json"))
         assert service["prefix_obligation"] == record["proposal"]["obligation"]
         assert service["cursor"] == record["proposal"]["cursor"] == 1
+        if mode == "mixed-sequence":
+            assert service["independent"] is True
+            assert trace[event["before_ref"]][1]["available_actions"] == [1, 2, 3, 6]
+            assert record["intervention"] == {"id": 6, "x": 9, "y": 11}
         return [event["event_id"]]
     if mode in ("history-matrix", "history-receipt", "long-history"):
         record = read(public / "history-matrix.json")
@@ -942,6 +949,7 @@ def main(config, run):
         "history-receipt",
         "long-history",
         "sequence-experiment",
+        "mixed-sequence",
     )
     with ThreadPoolExecutor(max_workers=len(modes)) as pool:
         cases = {
