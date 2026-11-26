@@ -105,6 +105,38 @@ function observed_neighbor_counts(observed,connectivity)
     end
 end
 
+function pigment_conjunctions(observations,examples)
+    masks = [foldl(|,(UInt16(1) << (i-1) for i in eachindex(row) if row[i] > 0);init=UInt16(0))
+        for row in observations]
+    shared = reduce(&,(masks[i] for i in eachindex(masks) if examples[i].verdict == proven))
+    missing = unique([shared & ~masks[i] for i in eachindex(masks) if examples[i].verdict == disproven])
+    any(iszero,missing) && return Tuple[]
+    minimal = UInt16[0]
+    for required in sort!(missing;by=count_ones)
+        extended = Set{UInt16}()
+        for candidate in minimal
+            if candidate & required != 0
+                push!(extended,candidate)
+                continue
+            end
+            for pigment in 0:15
+                bit = UInt16(1) << pigment
+                required & bit == 0 || push!(extended,candidate | bit)
+            end
+        end
+        empty!(minimal)
+        for candidate in sort!(collect(extended);by=mask->(count_ones(mask),mask))
+            any(value->value & candidate == value,minimal) || push!(minimal,candidate)
+        end
+    end
+    return [Tuple(p for p in 0:15 if mask & (UInt16(1) << p) != 0) for mask in minimal]
+end
+
+function conjoined_relation_condition!(signature,connectivity,pigments)
+    clauses = [relation_condition!(signature,connectivity,pigment) for pigment in pigments]
+    return reduce((left,right)->relation_join!(signature,left,right;shared=[(0,0)],output=[0]),clauses)
+end
+
 function relation_definition(program,signature)
     registry,_ = registry_from(signature,[])
     input = decode_program(program,registry)
@@ -145,7 +177,8 @@ function construct_relation(examples)
         "sorts"=>Dict{String,Any}[],"operators"=>Dict{String,Any}[])
     candidates = []
     function test_candidate(connectivity,pigment;neighbor_count=nothing)
-        query = relation_condition!(signature,connectivity,pigment;neighbor_count)
+        query = pigment isa Tuple ? conjoined_relation_condition!(signature,connectivity,pigment) :
+            relation_condition!(signature,connectivity,pigment;neighbor_count)
         term = render_term(query.term)
         judged = [relation_truth(term,signature,observed,connectivity) for observed in contexts]
         all(result.verdict == example.verdict for (result,example) in zip(judged,recalled)) || return
@@ -156,9 +189,10 @@ function construct_relation(examples)
         test_candidate(connectivity,pigment)
     end
     if isempty(candidates)
-        for connectivity in (4,8)
-            observations = [observed_neighbor_counts(context,connectivity) for context in contexts]
-            any(isnothing,observations) && continue
+        views = [(connectivity,[observed_neighbor_counts(context,connectivity) for context in contexts])
+            for connectivity in (4,8)]
+        filter!(row->!any(isnothing,last(row)),views)
+        for (connectivity,observations) in views
             for pigment in 0:15
                 counts = [row[pigment+1] for row in observations]
                 supported = unique(counts[i] for i in eachindex(counts) if recalled[i].verdict == proven)
@@ -166,6 +200,11 @@ function construct_relation(examples)
                 neighbor_count = only(supported)
                 all(counts[i] != neighbor_count for i in eachindex(counts) if recalled[i].verdict == disproven) || continue
                 test_candidate(connectivity,pigment;neighbor_count)
+            end
+        end
+        if isempty(candidates)
+            for (connectivity,observations) in views, pigments in pigment_conjunctions(observations,recalled)
+                test_candidate(connectivity,pigments)
             end
         end
     end
@@ -178,7 +217,12 @@ function construct_relation(examples)
             "dag"=>contexts[i].context.witnesses) for (i,entry) in enumerate(recalled)],
         "candidates"=>[begin
             certificate = Dict("program"=>candidate.term,"entry"=>candidate.entry,
-                "connectivity"=>candidate.connectivity,"pigment"=>candidate.pigment)
+                "connectivity"=>candidate.connectivity)
+            if candidate.pigment isa Tuple
+                certificate["pigments"] = collect(candidate.pigment)
+            else
+                certificate["pigment"] = candidate.pigment
+            end
             isnothing(candidate.neighbor_count) || (certificate["neighbor_count"] = candidate.neighbor_count)
             certificate
         end for candidate in candidates])

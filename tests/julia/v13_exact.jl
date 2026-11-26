@@ -123,6 +123,36 @@ end
     @test TC.evaluate_predicate(predicate,base,negative.binding,(0,0),[0]) == TC.disproven
 end
 
+@testset "A learned joint condition binds pigments to the same observed role" begin
+    base = zeros(UInt8,28,28)
+    base[10:12,10:12] .= 4
+    red,blue = copy(base),copy(base)
+    red[11,9] = 2
+    blue[11,13] = 3
+    together = copy(red)
+    together[11,13] = 3
+    function example(frame,name,verdict)
+        support = TC.point_component(TC.public_components(frame),(10,10))
+        sample = TC.MotionExample(name,"before-" * name,1,frame,frame,[0])
+        return TC.AssociationExample(sample,TC.MotionBinding(support,TC.anchor(support)),verdict)
+    end
+    positive = example(together,"together",TC.proven)
+    negative = [example(red,"red",TC.disproven),example(blue,"blue",TC.disproven)]
+    predicate = TC.construct_relation([positive;negative])
+    @test !isnothing(predicate)
+    @test all(row["pigments"] == [2,3] for row in predicate.certificate["candidates"])
+    withheld = copy(base)
+    withheld[9,11] = 2
+    withheld[13,11] = 3
+    binding = example(withheld,"held-out",TC.proven).binding
+    @test TC.evaluate_predicate(predicate,withheld,binding,(0,0),[0]) == TC.proven
+    elsewhere = copy(red)
+    elsewhere[20:22,20:22] .= 4
+    elsewhere[19,21] = 3
+    binding = example(elsewhere,"different-role",TC.disproven).binding
+    @test TC.evaluate_predicate(predicate,elsewhere,binding,(0,0),[0]) == TC.disproven
+end
+
 @testset "Runtime backend capabilities restrict dispatch" begin
     config = load_run_config(joinpath(ROOT,"config","v13_public25.toml"))
     TC.with_compute(config) do workers
