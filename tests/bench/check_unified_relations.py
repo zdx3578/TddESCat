@@ -24,6 +24,8 @@ class Fixture(ARCBaseGame):
     def __init__(self, seed=0):
         frame = np.zeros((64, 64), dtype=np.int8)
         frame[10:13, 8:11] = 4
+        if MODE == "circuit-role":
+            frame[10:13, 38:41] = 11
         if MODE == "bridge-partition":
             frame[10:13, 8:11] = 0
             frame[20, 14:23] = 4
@@ -39,7 +41,7 @@ class Fixture(ARCBaseGame):
             "history-continuation": [1, 4], "history-matrix": [1, 4], "history-receipt": [1, 4], "long-history": [1, 4],
             "outcome-preparation": [5, 7], "outcome-chain": [5, 7], "role-outcome": [5, 6],
             "bridge-partition": [5], "frontier-dispatch": [1, 2], "frontier-route": [2],
-            "sequence-experiment": [1, 2, 3]}
+            "sequence-experiment": [1, 2, 3], "circuit-role": [6, 7]}
         levels = [Level(sprites=[Sprite(frame.copy(), name="board")])]
         if MODE == "progress-restart":
             frame[10:13, 23:26] = 4
@@ -79,7 +81,12 @@ class Fixture(ARCBaseGame):
             self.complete_action()
             return
         pixels = self.current_level.get_sprites_by_name("board")[0].pixels
-        if MODE == "sequence-experiment":
+        if MODE == "circuit-role":
+            if action == 7:
+                pixels[50, 50] = 12
+            elif pixels[self.action.data["y"], self.action.data["x"]] == 11:
+                pixels[40:42, 44:46] = 7
+        elif MODE == "sequence-experiment":
             if action == 3 and self.previous == 2 and self.hits >= 7:
                 self.next_level()
             else:
@@ -232,7 +239,7 @@ def capture(
     (folder / "fixture.py").write_text(
         f"MODE = {fixture_mode!r}\nGAME = {game!r}\n{fixture}"
     )
-    compute_enabled = compute or mode == "history-dispatch"
+    compute_enabled = compute or mode in ("history-dispatch", "circuit-role")
     extended_timeout = compute_enabled or mode in (
         "outcome-preparation",
         "outcome-chain",
@@ -284,6 +291,7 @@ def capture(
         agent.write_text(settings + additions)
         direct_tests = {
             "history-dispatch": "history_public.jl",
+            "circuit-role": "circuit_role_public.jl",
             "frontier-dispatch": "frontier_dispatch.jl",
             "frontier-route": "frontier_route_public.jl",
             "history-matrix": "history_matrix_public.jl",
@@ -373,6 +381,30 @@ def observed_steps(public):
 
 
 def verify(mode, public):
+    if mode == "circuit-role":
+        record = read(public / "circuit-role.json")
+        trace = receipts(public)
+        event, result = trace[record["event"]]
+        ref = record["artifact"]
+        artifact = read(public / "learning" / "circuits" / (ref + ".json"))
+        assert artifact["applicable"] and artifact["calibration"]["accepted"]
+        assert artifact["calibration"]["role_improves"]
+        assert artifact["dimensions"] == [7, 2, 4] and len(artifact["role_domain"]) == 2
+        assert event["action"] == record["chosen"] != record["baseline"]
+        assert event["action"]["id"] == record["baseline"]["id"] == 6
+        assert record["task"]["obligation"]["circuit"] == ref
+        reply = result["action_input"]
+        assert reply["id"] == 6 and reply["data"]["game_id"] == result["game_id"]
+        assert all(reply["data"][axis] == event["action"][axis] for axis in ("x", "y"))
+        prediction = read(public / "predictions" / (event["command_ref"] + ".json"))
+        assert ref in prediction["event_reads"]
+        trained = set(artifact["model"]["events"])
+        checked = artifact["calibration"]["evaluations"]
+        assert len({row["key"][2] for row in checked}) == 2
+        assert sum(row["model_loss"] for row in checked) < sum(row["marginal_loss"] for row in checked)
+        assert trained.isdisjoint(artifact["calibration"]["events"])
+        assert all(trace[source][0]["sequence"] < event["sequence"] for source in trained)
+        return [ref, event["event_id"]]
     if mode == "role-outcome":
         record = read(public / "role-outcome.json")
         trace = receipts(public)
@@ -756,6 +788,7 @@ def main(config, run):
         "role-outcome",
         "history-refinement",
         "history-dispatch",
+        "circuit-role",
         "bridge-partition",
         "frontier-dispatch",
         "frontier-route",
@@ -806,6 +839,7 @@ if __name__ == "__main__":
                 "history-receipt",
                 "long-history",
                 "sequence-experiment",
+                "circuit-role",
             )
             else 9,
             compute=bool(extra),

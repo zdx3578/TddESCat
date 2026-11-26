@@ -559,6 +559,15 @@ function prepare_relation_tests(agenda,context,obs,groups,action;meters=(),condi
     return tests
 end
 
+function experimental_response_score(scores,action,groups)
+    id = action["id"]
+    (id != 6 || isempty(scores) || haskey(scores,id)) && return get(scores,id,0.0)
+    point = (action["x"],action["y"])
+    support = point_component(groups,point)
+    isnothing(support) && return 0.0
+    return get(scores,(id,click_profile(support,point)),0.0)
+end
+
 function relation_experiment(agenda,obs,decision,intervention,context;meters=(),uncertainty=Dict{Int,Float64}(),
                              circuit_ref=nothing,history_model=nothing,frontier=nothing)
     previous = agenda.previous
@@ -677,7 +686,7 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
                 !isnothing(intervention) && row.action != intervention.action,
                 length(get(agenda.visits,(context,action_key(row.action)),Int[])))
             baseline = argmin(row->(priority(row),row.rank),rows)
-            entropy(row) = isnothing(circuit_ref) ? 0.0 : get(uncertainty,row.action["id"],0.0)
+            entropy(row) = isnothing(circuit_ref) ? 0.0 : experimental_response_score(uncertainty,row.action,decision.groups)
             circuit = isnothing(circuit_ref) ? baseline : argmin(row->(priority(row),-entropy(row),row.rank),rows)
             row = isnothing(history_model) ? circuit :
                 argmin(row->(priority(row),!unseen(row),-entropy(row),row.rank),rows)

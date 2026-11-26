@@ -8,19 +8,25 @@ end
 
 HistoryLearning() = HistoryLearning(nothing,0,false,nothing,nothing)
 
+const ResponseKey = Tuple{Int,Int,Union{Nothing,String}}
+
 mutable struct ResponseLearning
     job::Union{Nothing,Task}
     submitted::Int
-    summaries::Dict{Tuple{Int,Int},Vector{Float64}}
+    summaries::Dict{ResponseKey,Vector{Float64}}
     scope::Union{Nothing,String}
     history::HistoryLearning
     level::Int
     dimensions::Tuple
     contrasts::Dict{Tuple{String,Int},Dict{Int,Set{Int}}}
+    history_feature::Bool
+    roles::Vector{String}
+    role_contrasts::Dict{Tuple{String,Tuple},Dict{String,Set{Int}}}
     revision::Int
 end
 
-ResponseLearning() = ResponseLearning(nothing,0,Dict(),nothing,HistoryLearning(),-1,(7,4),Dict(),0)
+ResponseLearning() = ResponseLearning(nothing,0,Dict(),nothing,HistoryLearning(),-1,(7,4),Dict(),false,
+    String[],Dict(),0)
 
 function response_class(row)
     row.state == "GAME_OVER" && return 3
@@ -59,12 +65,29 @@ function invalidate_response_scores!(memory)
     memory.scope = nothing
 end
 
+function update_response_role_domain!(memory,agenda,row,outcome)
+    isnothing(row.binding) && return false
+    key = (row.context,relation_history_key(agenda,row.context,row.preceding))
+    contrasts = get!(Dict{String,Set{Int}},memory.role_contrasts,key)
+    outcomes = get!(Set{Int},contrasts,row.binding.appearance)
+    push!(outcomes,outcome)
+    stable = [role for (role,observations) in contrasts if length(observations) == 1]
+    length(unique(only(contrasts[role]) for role in stable)) > 1 || return false
+    admitted = sort!(union(memory.roles,stable))
+    admitted == memory.roles && return false
+    memory.roles = admitted
+    return true
+end
+
 function observe_response!(memory,agenda;refinement=nothing)
     row = last(agenda.samples)
     if row.level != memory.level
         memory.level = row.level
         memory.dimensions = (7,4)
+        memory.history_feature = false
+        empty!(memory.roles)
         empty!(memory.contrasts)
+        empty!(memory.role_contrasts)
         invalidate_response_scores!(memory)
         memory.history.needed = false
         memory.history.model = nothing
@@ -78,12 +101,17 @@ function observe_response!(memory,agenda;refinement=nothing)
         invalidate_response_scores!(memory)
     end
     push!(seen,outcome)
-    if length(memory.dimensions) == 2 &&
+    history_changed = !memory.history_feature &&
             length(unique(only(outcomes) for outcomes in values(histories) if length(outcomes) == 1)) > 1
-        memory.dimensions = (7,8,4)
+    memory.history_feature |= history_changed
+    roles_changed = update_response_role_domain!(memory,agenda,row,outcome)
+    if history_changed || roles_changed
+        previous_dimension = memory.history_feature ? (8,) : ()
+        role_dimension = isempty(memory.roles) ? () : (length(memory.roles),)
+        memory.dimensions = (7,previous_dimension...,role_dimension...,4)
         invalidate_response_scores!(memory)
     end
-    memory.history.needed |= length(memory.dimensions) == 3 || !isnothing(refinement)
+    memory.history.needed |= memory.history_feature || !isnothing(refinement)
     if !isnothing(memory.history.model)
         observed = current_history_state(memory.history.model,agenda,row.next_context)
         if observed.status == :contradicted
@@ -98,18 +126,28 @@ function observe_response!(memory,agenda;refinement=nothing)
     return nothing
 end
 
+function response_encoding(agenda,row,history,roles)
+    action = response_action(row)
+    previous = history ? first(previous_key(agenda,row.preceding)) : 0
+    role = isnothing(row.binding) ? nothing : row.binding.appearance
+    known = get(roles,role,nothing)
+    conditions = Union{Nothing,Int}[action-1]
+    history && push!(conditions,previous)
+    isempty(roles) || push!(conditions,known)
+    key = (previous,action,isnothing(known) ? nothing : role)
+    return (;event=relation_ref(row),values=[conditions;response_class(row)],conditions,key)
+end
+
 function request_response_model!(memory,worker,agenda,snapshot,batch)
     isnothing(memory.job) || return
     n = length(agenda.samples)
     n-memory.submitted >= batch || return
     dimensions,level,revision = memory.dimensions,memory.level,memory.revision
     last(agenda.samples).advanced && return
-    rows = map(filter(row->row.level == level,agenda.samples)) do row
-        act = response_action(row)-1
-        previous = first(previous_key(agenda,row.preceding))
-        vals = length(dimensions) == 3 ? [act,previous,response_class(row)] : [act,response_class(row)]
-        (;event=relation_ref(row),values=vals)
-    end
+    role_domain = copy(memory.roles)
+    roles = Dict(role=>i-1 for (i,role) in enumerate(role_domain))
+    history_feature = memory.history_feature
+    rows = [response_encoding(agenda,row,history_feature,roles) for row in agenda.samples if row.level == level]
     # A changed variable layout re-encodes every prior confirmed event.
     length(rows) >= max(batch,4) || return
     held_out = max(2,length(rows)÷5)
@@ -117,34 +155,36 @@ function request_response_model!(memory,worker,agenda,snapshot,batch)
     length(unique(row.values[end] for row in training)) >= 2 || return
     memory.submitted = n
     memory.job = @async begin
+        samples = [(;row.event,row.values) for row in training]
+        steps = isempty(role_domain) ? 24 : 256
         result = compute_request!(worker,snapshot,"train_circuit",
-            (;dimensions,units=2,steps=24,samples=training,seed=0))
+            (;dimensions,units=2,steps,samples,seed=0))
         result.execution == "completed" && result.answer == "value" &&
             result.value["status"] == "fitted" || return nothing
         model = result.value
         model["events"] == [row.event for row in training] ||
             error("Circuit training discarded confirmed events")
         model["sample_count"] == length(training) || error("Circuit training changed event count")
-        conditions = [(previous,id) for previous in (length(dimensions)==3 ? (0:7) : (0:0))
-            for id in 1:7]
-        evidence = [length(dimensions)==3 ? [id-1,previous,nothing] : [id-1,nothing]
-            for (previous,id) in conditions]
+        known_conditions = unique(row->row.key,training)
+        evidence = [[row.conditions;nothing] for row in known_conditions]
+        marginals = [row for row in known_conditions if !isnothing(last(row.key))]
+        append!(evidence,[[row.conditions[1:end-1];nothing;nothing] for row in marginals])
         evaluated = compute_request!(worker,snapshot,"query_circuit",
             (;artifact=model["artifact"],evidence,target=length(dimensions)-1))
         evaluated.execution == "completed" && evaluated.answer == "value" &&
             evaluated.value["status"] == "supported" || return nothing
         predictions = evaluated.value["rows"]
-        scores = Dict{Tuple{Int,Int},Vector{Float64}}()
-        for (key,row) in zip(conditions,predictions)
+        length(predictions) == length(evidence) || error("Circuit query changed the requested conditions")
+        scores = Dict{ResponseKey,Vector{Float64}}()
+        without_role = Dict{ResponseKey,Vector{Float64}}()
+        for (table,conditions,replies) in ((scores,known_conditions,predictions[1:length(known_conditions)]),
+                (without_role,marginals,predictions[length(known_conditions)+1:end])), (known,row) in zip(conditions,replies)
             row["status"] == "supported" || continue
             values = row["probabilities"]
             length(values) == last(dimensions) || continue
             total = normalized_probability_total(values)
-            isnothing(total) || (scores[key] = Float64.(values)./total)
+            isnothing(total) || (table[known.key] = Float64.(values)./total)
         end
-        key_of(row) = length(dimensions)==3 ? (row.values[2],row.values[1]+1) : (0,row.values[1]+1)
-        trained_keys = Set(key_of.(training))
-        filter!(pair->first(pair) in trained_keys,scores)
         baseline = ones(last(dimensions))
         for row in training
             baseline[last(row.values)+1] += 1
@@ -152,16 +192,22 @@ function request_response_model!(memory,worker,agenda,snapshot,batch)
         baseline ./= sum(baseline)
         evaluations = NamedTuple[]
         for row in validation
-            distribution = get(scores,key_of(row),nothing)
+            distribution = get(scores,row.key,nothing)
             isnothing(distribution) && continue
             target = last(row.values)+1
-            push!(evaluations,(event=row.event,model_loss=-log(max(distribution[target],eps())),
-                baseline_loss=-log(baseline[target])))
+            marginal = get(without_role,row.key,nothing)
+            push!(evaluations,(event=row.event,key=row.key,model_loss=-log(max(distribution[target],eps())),
+                baseline_loss=-log(baseline[target]),
+                marginal_loss=isnothing(marginal) ? nothing : -log(max(marginal[target],eps()))))
         end
+        role_tests = [row for row in evaluations if !isnothing(last(row.key))]
+        role_improves = isempty(role_domain) || (length(unique(last(row.key) for row in role_tests)) >= 2 &&
+            all(row->!isnothing(row.marginal_loss),role_tests) &&
+            sum(row.model_loss for row in role_tests) < sum(row.marginal_loss for row in role_tests))
         accepted = length(evaluations) == length(validation) &&
-            sum(row.model_loss for row in evaluations) < sum(row.baseline_loss for row in evaluations)
-        calibration = (;accepted,events=[row.event for row in validation],evaluations)
-        return (;model,scores,dimensions,level,snapshot,calibration,revision)
+            sum(row.model_loss for row in evaluations) < sum(row.baseline_loss for row in evaluations) && role_improves
+        calibration = (;accepted,role_improves,events=[row.event for row in validation],evaluations)
+        return (;model,scores,dimensions,history_feature,role_domain,optimization_steps=steps,level,snapshot,calibration,revision)
     end
     return nothing
 end
@@ -174,27 +220,27 @@ function collect_response_model!(memory,store,agenda)
     isnothing(result) && return
     # Evidence appended under a changed feature schema requires a full fit.
     applicable = result.revision == memory.revision && result.level == memory.level &&
-        result.dimensions == memory.dimensions &&
+        result.dimensions == memory.dimensions && result.role_domain == memory.roles &&
         !last(agenda.samples).advanced
     if applicable
         memory.summaries = result.calibration.accepted ? result.scores : Dict()
         memory.scope = result.calibration.accepted ? result.snapshot : nothing
     end
     atomic_json(store_path(store,"learning","circuits",result.snapshot * ".json"),
-        (;result.dimensions,result.level,result.snapshot,result.model,result.calibration,
-            result.revision,applicable))
+        (;result.dimensions,result.history_feature,result.role_domain,result.optimization_steps,result.level,
+            result.snapshot,result.model,result.calibration,result.revision,applicable))
     return nothing
 end
 
 function circuit_experiment_scores(memory,agenda)
-    previous = first(previous_key(agenda,agenda.previous))
-    scores = Dict{Int,Float64}()
-    for id in 1:7
-        distribution = get(memory.summaries,(previous,id),get(memory.summaries,(0,id),nothing))
-        isnothing(distribution) && continue
+    previous = memory.history_feature ? first(previous_key(agenda,agenda.previous)) : 0
+    scores = Dict{Union{Int,Tuple{Int,String}},Float64}()
+    for ((past,id,role),distribution) in memory.summaries
+        past == previous || continue
+        id == 6 && !isempty(memory.roles) && isnothing(role) && continue
         # Only use observational predictions for ranking learning experiments.
         entropy = -sum(p>0 ? p*log(p) : 0.0 for p in distribution)
-        scores[id] = entropy
+        scores[isnothing(role) ? id : (id,role)] = entropy
     end
     return scores
 end
