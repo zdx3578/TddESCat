@@ -37,7 +37,7 @@ class Fixture(ARCBaseGame):
             "restart": [6], "progress-restart": [6], "restart-choices": [6],
             "advancement-transfer": [6], "history-refinement": [1, 4],
             "history-continuation": [1, 4], "outcome-preparation": [5, 7],
-            "bridge-partition": [5], "frontier-dispatch": [1, 2]}
+            "bridge-partition": [5], "frontier-dispatch": [1, 2], "frontier-route": [2]}
         levels = [Level(sprites=[Sprite(frame.copy(), name="board")])]
         if MODE == "progress-restart":
             frame[10:13, 23:26] = 4
@@ -62,6 +62,8 @@ class Fixture(ARCBaseGame):
             self._available_actions = [1, 4]
         if MODE == "outcome-preparation":
             self._available_actions = [5, 7]
+        if MODE == "frontier-route":
+            self._available_actions = [2]
 
     def handle_reset(self):
         if MODE == "progress-restart" and self._state.name == "GAME_OVER":
@@ -75,7 +77,14 @@ class Fixture(ARCBaseGame):
             self.complete_action()
             return
         pixels = self.current_level.get_sprites_by_name("board")[0].pixels
-        if MODE == "frontier-dispatch":
+        if MODE == "frontier-route":
+            if action == 2:
+                self.hits += 1
+                pixels[10, 8] = 5 if self.hits % 2 else 4
+                self._available_actions = [1, 2, 3] if self.hits % 2 else [2]
+            elif action == 1:
+                self.next_level()
+        elif MODE == "frontier-dispatch":
             if action == 2:
                 self.hits += 1
             elif self.hits >= 2:
@@ -193,6 +202,7 @@ def capture(
         "outcome-preparation",
         "bridge-partition",
         "frontier-dispatch",
+        "frontier-route",
     )
     public = run / "public"
     public.mkdir()
@@ -222,8 +232,13 @@ def capture(
                 f'circuit_python = "{root / "python/compute/.venv/bin/python"}"\n'
             )
         agent.write_text(agent.read_text() + additions)
-        if mode in ("history-dispatch", "frontier-dispatch"):
-            name = "history_public.jl" if mode == "history-dispatch" else "frontier_dispatch.jl"
+        direct_tests = {
+            "history-dispatch": "history_public.jl",
+            "frontier-dispatch": "frontier_dispatch.jl",
+            "frontier-route": "frontier_route_public.jl",
+        }
+        if mode in direct_tests:
+            name = direct_tests[mode]
             script = root / "tests/julia" / name
             paths = public_settings(root, agent, tomllib.loads(agent.read_text()))
             result = solver_process(
@@ -302,6 +317,24 @@ def observed_steps(public):
 
 
 def verify(mode, public):
+    if mode == "frontier-route":
+        route = read(public / "frontier-route.json")
+        trace = receipts(public)
+        followed, completed = (route[key] for key in ("followed", "completed"))
+        first, arrived = trace[followed["event"]]
+        last, won = trace[completed["event"]]
+        source = trace[followed["task"]["obligation"]["path"][0]][1]
+        assert source["frame"] == arrived["frame"]
+        assert followed["feedback"] == {"status": "confirmed", "step": 1, "next": 2}
+        assert first["action"] == {"id": 2}
+        assert last["action"] == {"id": 1} and won["state"] == "WIN"
+        assert last["before_ref"] == first["event_id"]
+        assert completed["task"]["obligation"]["baseline"] == {"id": 3}
+        for record, event in ((followed, first), (completed, last)):
+            prediction = read(public / "predictions" / (event["command_ref"] + ".json"))
+            assert all(trace[ref][0]["sequence"] < event["sequence"] for ref in record["task"]["reads"])
+            assert set(record["task"]["reads"]) <= set(prediction["event_reads"])
+        return [first["event_id"], last["event_id"]]
     if mode == "frontier-dispatch":
         record = read(public / "frontier-experiment.json")
         trace = receipts(public)
@@ -549,6 +582,7 @@ def main(config, run):
         "history-dispatch",
         "bridge-partition",
         "frontier-dispatch",
+        "frontier-route",
     )
     with ThreadPoolExecutor(max_workers=len(modes)) as pool:
         cases = {
@@ -585,6 +619,7 @@ if __name__ == "__main__":
                 "history-continuation",
                 "outcome-preparation",
                 "frontier-dispatch",
+                "frontier-route",
             )
             else 9,
             compute=bool(extra),

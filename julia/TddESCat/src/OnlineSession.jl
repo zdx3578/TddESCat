@@ -780,6 +780,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 intervention_memory.prior_observation = nothing
             end
             begin_relation_attempt!(relations,retry;observation=rec.observation)
+            isnothing(exploration_frontier) || (exploration_frontier.route = nothing)
             atomic_json(store_path(rec.store,"attempts",reset["command_id"] * ".json"),(;
                 event=rec.before_ref,prior=event["before_ref"],attempt=relations.attempt,revision=relations.restart,
                 previous_level=obs.levels_completed,level=rec.observation.levels_completed,
@@ -1233,6 +1234,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             if !isnothing(exploration_frontier)
                 refined = frontier_observe!(exploration_frontier,relations)
                 isnothing(refined) || (observation = merge(observation,(history_refinement=refined,)))
+                route = confirm_frontier_route!(exploration_frontier,relations,relation_proposal)
+                isnothing(route) || (observation = merge(observation,(frontier_continuation=route,)))
             end
             observation
         end

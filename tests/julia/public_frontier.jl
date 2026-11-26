@@ -38,12 +38,18 @@ end
     @test plan.intent == :explore_observed_frontier_path
     @test plan.obligation.future_experiment == Dict("id"=>3)
     @test plan.obligation.path == ["action-3"]
+    @test isnothing(search.route)
     observe!(right,[2,3],1)
+    @test TC.confirm_frontier_route!(search,agenda,plan) == (status=:confirmed,step=1,next=2)
     decision = (ranked=[(action=Dict("id"=>id),) for id in [2,3]],)
-    next = TC.frontier_choice(search,agenda,current.observation,decision,nothing,Dict("id"=>2))
+    next = TC.frontier_choice(search,agenda,current.observation,decision,nothing,Dict("id"=>3))
     @test next.action == Dict("id"=>3)
     @test next.intent == :distinguish_public_frontier
+    @test next.obligation.source == "reachable_frontier_obligation"
+    @test search.route.cursor == 2
     observe!(left,[1],2)
+    @test TC.confirm_frontier_route!(search,agenda,nothing).status == :released
+    @test isnothing(search.route)
     alternative = copy(left)
     alternative[1,1] = 0x07
     observe!(alternative,[2,3],1;state="GAME_OVER")
