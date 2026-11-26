@@ -37,23 +37,24 @@ mutable struct VisualControl
     matched::Set{Pixel}
     detached::Set{Pixel}
     site_status::Dict{Pixel,String}
+    site_entries::Dict{Pixel,String}
     contact_samples::Vector{ContactSample}
+    goal_samples::Vector{GoalSample}
     reads::Vector{String}
     changes::Dict{Tuple,Vector{VisualTransition}}
     contacts::Vector{VisualContact}
     scene::SceneMemory
     boundary_rules::Dict{UInt8,Vector{BoundaryMotion}}
     resource::Union{Nothing,MeterBinding}
-    rate::Int
-    refill::Dict{Tuple,String}
+    meter_dynamics::MeterDynamics
     spent::Set{Pixel}
     exhausted_evidence::Set{String}
     continuation::Union{Nothing,VisualContinuation}
     site_surveys::Vector{NamedTuple}
 end
 
-VisualControl() = VisualControl(nothing,Dict(),Set(),Set(),Dict(),ContactSample[],String[],Dict(),VisualContact[],
-    SceneMemory(),Dict(),nothing,0,Dict(),Set(),Set(),nothing,NamedTuple[])
+VisualControl() = VisualControl(nothing,Dict(),Set(),Set(),Dict(),Dict(),ContactSample[],GoalSample[],String[],Dict(),VisualContact[],
+    SceneMemory(),Dict(),nothing,MeterDynamics(),Set(),Set(),nothing,NamedTuple[])
 
 function begin_visual_level!(control, spatial)
     if !isempty(spatial.role)
@@ -65,11 +66,12 @@ function begin_visual_level!(control, spatial)
     empty!(control.matched)
     empty!(control.detached)
     empty!(control.site_status)
+    empty!(control.site_entries)
     empty!(control.reads)
     empty!(control.contacts)
     control.scene = SceneMemory()
     control.resource = nothing
-    control.rate = 0
+    empty!(control.meter_dynamics.local_rows)
     empty!(control.spent)
     empty!(control.exhausted_evidence)
     control.continuation = nothing
@@ -90,7 +92,8 @@ function may_retry_visual_attempt!(control, spatial, level)
         [(p,tile.patch,tile.perimeter) for (p,tile) in control.scene.tiles],
         [(c.patch,c.transition.before,c.transition.after) for c in control.contacts],
         [(s.point,s.context,s.site.value,s.outcome) for s in control.contact_samples if s.level == level],
-        collect(keys(control.refill)),conditions,collect(control.detached),
+        [(row.patch,row.action,row.used,row.before,row.after) for row in control.meter_dynamics.gain_rows],
+        conditions,collect(control.detached),
         [(guard.same,guard.different) for guard in admission.rules],
         [(name,sort!(collect(keys(relation.evidence)))) for (name,relation) in admission.scoped],
         [progress.model]
@@ -105,6 +108,7 @@ function begin_visual_attempt!(control)
     empty!(control.matched)
     empty!(control.detached)
     empty!(control.site_status)
+    empty!(control.site_entries)
     empty!(control.spent)
     control.scene.tick = 0
     control.scene.confirmed_actions = 0
@@ -171,6 +175,7 @@ function bind_visual_fields!(control, spatial, frame, here, event)
         if point in control.detached || isnothing(existing) || existing.value != site.value || existing.field != site.field
             delete!(control.matched,point)
             delete!(control.detached,point)
+            delete!(control.site_entries,point)
             control.targets[point] = site
             control.site_status[point] = event
             modified = true
@@ -196,7 +201,7 @@ function scene_survey(control, spatial, obs, decision)
     motions = Dict(id=>measured_offset(spatial,id) for id in actions)
     charge = isnothing(control.resource) ? typemax(Int) : read_meter(frame,control.resource)
     isnothing(charge) && return nothing
-    rate = isnothing(control.resource) ? 0 : max(1,control.rate)
+    meter_model = fit_meter_dynamics(control.meter_dynamics)
     state = (here,charge,Tuple(sort!(collect(control.spent))))
     agenda = NamedTuple[(state=state,action=0,first_point=here,reads=String[],depth=0)]
     best = nothing
@@ -227,17 +232,14 @@ function scene_survey(control, spatial, obs, decision)
             tile = scene_tile(scene,spatial,frame,q,here)
             isempty(tile.patch) && continue
             haskey(spatial.layouts,q) || 2count(==(floor),tile.patch) >= length(tile.patch) || continue
-            remaining, next_used = max(0,left-rate),used
-            refills = !isnothing(control.resource) && haskey(control.refill,tile.patch) && q ∉ used
-            if refills
-                remaining = meter_length(control.resource.face.box)
-                next_used = extend_visual_set(used,q)
-            end
+            transfer = visual_meter_prediction(control,meter_model,id,tile.patch,left,q in used;moved=p!=q)
+            isnothing(transfer) && continue
+            remaining = transfer.value
+            next_used = remaining > left ? extend_visual_set(used,q) : used
             key = (q,next_used)
             remaining > get(reached,key,-1) || continue
             reached[key] = remaining
-            reads = [row.reads;first(sources);edge.reads;tile.reads]
-            refills && push!(reads,control.refill[tile.patch])
+            reads = [row.reads;first(sources);edge.reads;tile.reads;transfer.reads]
             push!(agenda,(state=(q,remaining,next_used),action=row.action == 0 ? id : row.action,
                 first_point=row.action == 0 ? q : row.first_point,reads=unique(reads),depth=row.depth+1))
         end
@@ -249,8 +251,8 @@ function scene_survey(control, spatial, obs, decision)
         role=here,destination=best.first_point,frontier=best.state[1],expected=nothing)
 end
 
-function autonomous_visual_plan(control,spatial,obs,decision,event)
-    proposed = visual_plan(control,spatial,obs,decision,event)
+function autonomous_visual_plan(control,spatial,obs,decision,event;goal=nothing)
+    proposed = visual_plan(control,spatial,obs,decision,event;goal)
     if !isnothing(proposed) &&
             (proposed.reason in ("learned_visual_contact","experiment_on_contact_relation") ||
             get(proposed,:effect_gain,0) > 0)
@@ -288,12 +290,10 @@ function observe_visual!(control, spatial, before, after, move, effects)
         counter = (field=control.resource.face,binding=control.resource,before=old,after=new)
         if isnothing(old) || isnothing(new)
             control.continuation = nothing
-        elseif moved && new > old > 0
-            control.refill[patch] = effects.event_id
-            push!(control.spent,there)
-        elseif new < old && control.rate == 0
-            control.rate = old-new
-            push!(control.reads,effects.event_id)
+        elseif !isnothing(there)
+            record_meter_transition!(control.meter_dynamics,after.observation.action["id"],patch,
+                there in control.spent,moved,old,new,effects.event_id)
+            moved && new > old && push!(control.spent,there)
         end
     end
 
@@ -356,14 +356,14 @@ function observe_visual_contact!(control, spatial, before, after)
         return nothing
     end
     facts = contact_facts(control,before_obs.action["id"])
-    if outcome != :blocked
-        push!(control.matched,point)
-        control.site_status[point] = after.event["event_id"]
+    if outcome == :entered
+        control.site_entries[point] = after.event["event_id"]
     end
     sample = ContactSample(before_obs.levels_completed,point,context,site,control.field,origin,
         action,outcome,before.event["event_id"],after.event["event_id"],spatial.role,
         first(last(offset)),facts,after_obs.state)
     push!(control.contact_samples,sample)
+    push!(control.goal_samples,goal_sample(sample,before,after))
     return sample
 end
 
@@ -588,7 +588,7 @@ function projected_motion(control, spatial, frame, from, action, delta, here, fl
     return (point=entry,reads=reads)
 end
 
-function visual_plan(control, spatial, obs, decision, event)
+function visual_plan(control, spatial, obs, decision, event;goal=nothing)
     isempty(spatial.role) && return nothing
     frame = last(obs.frames)
     here = locate_role(frame,spatial.role)
@@ -613,11 +613,11 @@ function visual_plan(control, spatial, obs, decision, event)
     motions = Dict(id=>measured_offset(spatial,id) for id in action_ids)
     charge = isnothing(control.resource) ? typemax(Int) : read_meter(frame,control.resource)
     isnothing(charge) && return nothing
-    rate = isnothing(control.resource) ? 0 : max(1,control.rate)
+    meter_model = fit_meter_dynamics(control.meter_dynamics)
     facts = contact_facts(control,obs.action["id"])
     targets = first.(facts.remaining)
     fitted = fit_contact_guards(control.contact_samples)
-    progress = fit_progress_relations(control.contact_samples)
+    progress = isnothing(goal) ? fit_progress_relations(control.contact_samples) : goal.fit
     use_history = any(row->first(row) == :previous_action,progress.models) ||
         !isempty(fitted.scope_samples)
     level = obs.levels_completed
@@ -681,7 +681,8 @@ function visual_plan(control, spatial, obs, decision, event)
                     plan = (point=destination,site=site,context=s.signal,field=control.field,
                         conditions=contact_conditions(fitted,observation.signature,context,id),selected_at=event,
                         progress=completion)
-                    if isnothing(progress.model) || completion.judgment == :progress
+                    if isnothing(progress.model) || completion.judgment == :progress &&
+                            (isnothing(goal) || destination in goal.targets)
                         return route_proposal(control,route,draft,evidence,here;contact_plan=plan)
                     end
                     isnothing(intermediate) && (intermediate=(probe=draft,plan))
@@ -704,7 +705,7 @@ function visual_plan(control, spatial, obs, decision, event)
             prediction = get!(predictions,(patch,s.signal)) do
                 visual_prediction(transitions,patch,s.signal)
             end
-            collectible = haskey(control.refill,patch)
+            collectible = patch in meter_model.gains
             if isnothing(prediction) && (allequal(patch) || collectible || opened)
                 prediction = (value=s.signal,reads=String[])
             end
@@ -726,16 +727,21 @@ function visual_plan(control, spatial, obs, decision, event)
                     continue
                 prediction = (value=s.signal,reads=String[])
             end
-            new_charge, spent = max(0,s.charge-rate),s.spent
-            if collectible && destination ∉ spent && !isnothing(control.resource)
-                new_charge = meter_length(control.resource.face.box)
-                spent = extend_visual_set(spent,destination)
+            transfer = visual_meter_prediction(control,meter_model,id,patch,s.charge,
+                destination in s.spent;moved=destination!=s.point)
+            if isnothing(transfer)
+                if current && isnothing(experiment)
+                    experiment = (index=index,action=id,point=destination,reads,gain=0)
+                    best_score = (0,-row.depth,s.charge)
+                end
+                continue
             end
+            new_charge = transfer.value
+            spent = new_charge > s.charge ? extend_visual_set(s.spent,destination) : s.spent
             key = (destination,prediction.value,spent,phase,use_history ? id : 0)
             new_charge > get(visited,key,-1) || continue
             visited[key] = new_charge
-            append!(reads,prediction.reads)
-            spent != s.spent && push!(reads,control.refill[patch])
+            append!(reads,[prediction.reads;transfer.reads])
             push!(route,VisualRouteLink(VisualRouteState(destination,prediction.value,new_charge,spent,phase),
                 index,id,reads,predicted,row.depth+1))
         end

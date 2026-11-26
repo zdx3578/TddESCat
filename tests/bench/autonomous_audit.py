@@ -8,6 +8,7 @@ import json
 
 COMPARISONS = ("extent", "support", "pigment", "cardinality")
 CONTACT_DOMAIN = "visible-site-obligations-v2"
+OBSERVED_CONTACT_DOMAIN = "observed-site-obligations-v3"
 
 
 def require(condition, reason):
@@ -97,7 +98,14 @@ def audit_site_geometry(point, field, role):
 
 
 def audit_site_facts(
-    facts, receipts, level, role=None, *, domain=None, domain_reads=None
+    facts,
+    receipts,
+    level,
+    role=None,
+    *,
+    domain=None,
+    domain_reads=None,
+    domain_version=None,
 ):
     points = set()
     for point, site in facts["remaining"]:
@@ -112,7 +120,8 @@ def audit_site_facts(
         if role:
             audit_site_geometry(point, site["field"], role)
     if domain is not None:
-        require(facts.get("domain_version") == CONTACT_DOMAIN, "site_domain_version")
+        version = domain_version or CONTACT_DOMAIN
+        require(facts.get("domain_version") == version, "site_domain_version")
         require(
             {tuple(point): site for point, site in facts["remaining"]} == domain,
             "incomplete_or_substituted_site_domain",
@@ -138,6 +147,7 @@ def audit_progress_sample(sample, before, after, receipts, *, site_domain=None):
         sample["role"],
         domain=None if site_domain is None else site_domain.remaining(),
         domain_reads=None if site_domain is None else site_domain.reads(),
+        domain_version=None if site_domain is None else site_domain.version,
     )
     if site_domain is None:
         require(
@@ -170,6 +180,7 @@ def audit_progress_plan(
     action,
     domain=None,
     domain_reads=None,
+    domain_version=None,
 ):
     progress = plan["progress"]
     facts = progress["facts"]
@@ -179,6 +190,7 @@ def audit_progress_plan(
         before["levels_completed"],
         domain=domain,
         domain_reads=domain_reads,
+        domain_version=domain_version,
     )
     require(tuple(plan["point"]) in points, "missing_progress_target")
     require(
@@ -230,8 +242,11 @@ def audit_progress_plan(
                 votes.append(outcomes.get(value))
     require(progress["rules"] == candidates, "progress_rules")
     body = [[row["variable"], row["rows"]] for row in candidates]
-    if body and facts.get("domain_version") == CONTACT_DOMAIN:
-        body = [CONTACT_DOMAIN, body]
+    if body and facts.get("domain_version") in (
+        CONTACT_DOMAIN,
+        OBSERVED_CONTACT_DOMAIN,
+    ):
+        body = [facts["domain_version"], body]
     model = None
     if body:
         model = (
@@ -349,20 +364,25 @@ def contrasting_boundary(frame, field, max_margin):
 class SiteDomain:
     """Replay the observable bound domain and its intervention lifecycle."""
 
-    def __init__(self):
+    def __init__(self, version=CONTACT_DOMAIN):
+        self.version = version
         self.field = None
+        self.role = None
         self.sites = {}
         self.handled = set()
         self.detached = set()
         self.status = {}
+        self.entries = {}
 
     def reset_attempt(self):
         self.handled.clear()
         self.detached.clear()
         self.status.clear()
+        self.entries.clear()
 
     def reset_level(self):
         self.field = None
+        self.role = None
         self.sites.clear()
         self.reset_attempt()
 
@@ -379,10 +399,60 @@ class SiteDomain:
         )
 
     def entered(self, sample):
+        if self.version == OBSERVED_CONTACT_DOMAIN:
+            if sample["outcome"] == "entered":
+                self.entries[tuple(sample["point"])] = sample["event"]
+            return
         if sample["outcome"] != "blocked":
             point = tuple(sample["point"])
             self.handled.add(point)
             self.status[point] = sample["event"]
+
+    def verify_site_transitions(self, ref, response, records):
+        frame = response["frame"][-1]
+        here = locate_role(frame, self.role) if self.role else None
+        expected = []
+        if here is not None:
+            support = {(here[0] + x, here[1] + y) for x, y, _ in self.role}
+            for point, entered in sorted(self.entries.items()):
+                site = self.sites[point]
+                field = site["field"]
+                box = field["box"]
+                x, y, w, h = (box[key] for key in ("x", "y", "width", "height"))
+                if x < 0 or y < 0 or x + w > len(frame[0]) or y + h > len(frame):
+                    continue
+                cells = set(product(range(x, x + w), range(y, y + h)))
+                if not cells.isdisjoint(support):
+                    continue
+                actual = decode_value(frame, field)
+                if actual is None:
+                    if not all(frame[v][u] == field["background"] for u, v in cells):
+                        continue
+                    result = "disappeared"
+                elif actual != site["value"]:
+                    result = "changed"
+                else:
+                    self.entries.pop(point)
+                    if point not in self.handled:
+                        continue
+                    self.handled.remove(point)
+                    result = "reopened"
+                if result != "reopened":
+                    if point in self.handled:
+                        continue
+                    self.handled.add(point)
+                self.status[point] = ref
+                expected.append(
+                    dict(
+                        point=list(point),
+                        entered=entered,
+                        observed=ref,
+                        status=result,
+                        site=site,
+                        role=self.role,
+                    )
+                )
+        require(records == expected, "unproved_or_missing_site_transition")
 
     def observe(self, surveys, receipts, level, *, frame_cache=None):
         for survey in surveys:
@@ -399,6 +469,7 @@ class SiteDomain:
                 and 0 < stride_y <= len(frame),
                 "survey_role_binding",
             )
+            self.role = role
             w = 1 + max(x for x, _, _ in role)
             h = 1 + max(y for _, y, _ in role)
             occupied = {(origin[0] + u, origin[1] + v) for u, v, _ in role}
@@ -469,6 +540,7 @@ class SiteDomain:
                     self.sites[point] = site
                     self.handled.discard(point)
                     self.detached.discard(point)
+                    self.entries.pop(point, None)
                     self.status[point] = ref
 
 

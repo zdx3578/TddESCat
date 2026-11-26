@@ -4,7 +4,7 @@ struct VisualSite
     event::String
 end
 
-const CONTACT_DOMAIN = "visible-site-obligations-v2"
+const CONTACT_DOMAIN = "observed-site-obligations-v3"
 
 struct ContactFacts
     # These candidates were bound in the current instance. Visibility does not

@@ -692,8 +692,11 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             end
             continuation = nothing
         end
+        learned_goal = if relation_goals && !isnothing(visual)
+            learned_advancement(visual,obs.action["id"],rec.before_ref)
+        end
         spatial_choice = if !isnothing(spatial)
-            planned = autonomous_visual_plan(visual,spatial,obs,decision,rec.before_ref)
+            planned = autonomous_visual_plan(visual,spatial,obs,decision,rec.before_ref;goal=learned_goal)
             isnothing(planned) ? spatial_experiment(spatial,obs,decision) : planned
         end
         spatial_baseline = spatial_choice
@@ -813,9 +816,11 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             item = merge(requested,(reason=spatial_choice.reason,))
             policy_note = nothing
         end
+        task = advancement_task(learned_goal,visual,spatial,obs,spatial_choice)
         plan_reads = isnothing(goal_cursor) ? String[] : reduce(vcat,
             (recovery_reads(rec,model) for model in knowledge.active if haskey(goal_cursor.node.dependencies,model.rule.id));
             init=String[])
+        isnothing(task) || append!(plan_reads,task.reads)
         if !isnothing(program_cursor)
             program = program_cursor.program
             append!(plan_reads,program.sources)
@@ -886,6 +891,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 "protocol_points"=>6 in obs.available_actions ? 4096 : 0,
                 "attempted"=>sum(key[1] == 6 for key in keys(attempts);init=0)))
         isnothing(policy_note) || (decision_record["policy"] = policy_note)
+        isnothing(task) || (decision_record["relation_task"] = task)
         isnothing(spatial_choice) || (decision_record["spatial_experiment"] = spatial_choice)
         if !isnothing(spatial_baseline) && spatial_baseline != spatial_choice
             decision_record["spatial_baseline"] = spatial_baseline
@@ -934,11 +940,13 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         visual_feedback = nothing
         contact_feedback = nothing
         visual_observation = nothing
+        site_transitions = NamedTuple[]
         motion_revision = nothing
         if !isnothing(spatial)
             contact_feedback = observe_visual_contact!(visual,spatial,entry,resulting)
             if obs.levels_completed == resulting.observation.levels_completed
                 spatial_feedback = observe_spatial!(spatial,entry,resulting,effects)
+                site_transitions = update_contact_sites!(visual,spatial,resulting)
                 visual_observation = observe_visual!(visual,spatial,entry,resulting,spatial_feedback,effects)
                 if !isnothing(spatial_feedback)
                     origin = locate_role(sample.before,spatial.role)
@@ -1050,8 +1058,10 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 "actual"=>assessment.actual,"assessments"=>assessment.assessments,"revisions"=>revisions,
                 "evidence"=>public_effect_record(effects),"coverage"=>coverage_record(decision,item,effects,assessment),
                 "policy"=>policy_note,"program"=>program_note,"projection"=>projection_feedback,
+                "task_feedback"=>advancement_feedback(task,entry,resulting,contact_feedback),
                 "spatial_feedback"=>spatial_feedback,
                 "visual_feedback"=>visual_feedback,"contact_feedback"=>contact_feedback,
+                "site_transitions"=>site_transitions,
                 "site_surveys"=>isnothing(visual) ? [] : take_site_surveys!(visual),
                 "visual_observation"=>visual_observation,"motion_revision"=>motion_revision))
         attempts[action_key(item.action)] = get(attempts,action_key(item.action),0) + 1

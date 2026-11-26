@@ -33,14 +33,9 @@ end
 function program_establishes_goal(knowledge,goal,obs,history,cursor,coordinates,meters,limit,needs)
     initial = observed_goal_relations(goal,last(obs.frames))
     missing = [key for key in keys(initial) if getproperty(initial,key) == disproven]
-    all(!=(unknown_truth),initial) || return nothing
     width = goal_history_width(knowledge)
     tail = nothing
     certificate = nothing
-    function preserves(_,_,_,frame)
-        facts = observed_goal_relations(goal,frame)
-        return all(key->getproperty(initial,key) != proven || getproperty(facts,key) == proven,keys(initial))
-    end
     function reaches(index,frame,recent)
         facts = observed_goal_relations(goal,frame)
         fulfilled = [key for key in missing if getproperty(facts,key) == proven]
@@ -74,15 +69,67 @@ function program_establishes_goal(knowledge,goal,obs,history,cursor,coordinates,
         index + length(trace) <= limit || return false
         tail = trace
         reads = isnothing(producer) ? String[] : producer.reads
+        reopened = [key for key in keys(initial) if getproperty(initial,key) == proven &&
+            getproperty(facts,key) != proven]
         certificate = (;body=GOAL_REGRESSION_BODY,initial,missing,established=fulfilled,actual=facts,
-            binding,producer,reads)
+            binding,producer,reads,reopened)
         return true
     end
     path = forecast_program(knowledge,obs,history,cursor,coordinates,meters,
-        preserves,reaches,limit)
+        (_,_,_,_)->true,reaches,limit)
     isnothing(path) && return nothing
     return (contract="establishes_goal_relation",target=goal.marker,role=nothing,path,
         continuation=tail,regression=certificate)
+end
+
+"""Record the verified contact producer and the preconditions its route is serving."""
+function advancement_task(goal,control,spatial,observation,choice)
+    (isnothing(goal) || isnothing(choice)) && return nothing
+    contact = get(choice,:contact,nothing)
+    isnothing(contact) && return nothing
+    contact.progress.model == goal.model && contact.progress.judgment == :progress ||
+        return nothing
+    contact.conditions.judgment == :admitted || return nothing
+    contact.point in goal.targets || return nothing
+    continuation = control.continuation
+    next_origin, next_action = if !isnothing(continuation)
+        last(continuation.steps).from,last(continuation.steps).action
+    elseif choice.executes_contact
+        choice.role,choice.id
+    else
+        return nothing
+    end
+    delta, delta_reads = measured_offset(spatial,next_action)
+    frame = last(observation.frames)
+    current = visual_value(frame,control.field)
+    signature = isnothing(current) ? nothing : contact_signature(current,contact.site.value)
+    admission = isnothing(signature) ? :unknown :
+        contact_judgment(fit_contact_guards(control.contact_samples),signature,goal.facts,next_action)
+    requirements = [("approach_contact",choice.role == next_origin ? :proven : :missing),
+        ("admissible_contact",admission == :admitted ? :proven : admission == :blocked ? :missing : :unknown)]
+    producer = (relation=goal.relation,action=next_action,origin=next_origin,target=contact.point,
+        displacement=delta,guard=contact.conditions.rules,advancement=contact.progress.rules,
+        read_events=unique([first(delta_reads);contact.conditions.reads;contact.progress.reads]))
+    reads = unique([goal.reads;producer.read_events;choice.reads])
+    return (goal=learned_goal_record(goal),producer,requirements,
+        intent=any(row->last(row) != :proven,requirements) ? :establish_preconditions : :apply_producer,
+        recheck=choice.executes_contact,reads)
+end
+
+function advancement_feedback(task, before, after, sample)
+    isnothing(task) && return nothing
+    crossed = after.observation.levels_completed > before.observation.levels_completed
+    bound_contact = !isnothing(sample) && sample.point == task.producer.target &&
+        sample.action == task.producer.action
+    outcome = if task.recheck && bound_contact
+        crossed ? :established : sample.outcome
+    elseif crossed || task.recheck
+        :unresolved
+    else
+        :continue
+    end
+    return (;outcome,event=after.event["event_id"],observed=(
+        advanced=crossed, won=after.observation.state == "WIN", contact=bound_contact))
 end
 
 function contact_goal_domain(control,spatial,obs)
@@ -105,7 +152,7 @@ function feasible_contact(domain,frame,previous,event;target=nothing)
     (isnothing(here) || isnothing(signal)) && return nothing
     if !isnothing(control.resource)
         reading = read_meter(frame,control.resource)
-        (isnothing(reading) || reading < max(1,control.rate)) && return nothing
+        (isnothing(reading) || reading <= 0) && return nothing
     end
     candidates = NamedTuple[]
     facts = ContactFacts(domain.facts.remaining,previous,domain.facts.domain_reads)
