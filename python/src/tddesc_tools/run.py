@@ -279,11 +279,21 @@ def worktree_digest(root, *, sources_only=False):
     digest = sha256()
     for name in sorted(set(files.split(b"\0")) - {b""}):
         if sources_only and not (
-            name.startswith((b"julia/TddESCat/", b"python/src/", b"protocol/"))
+            name.startswith(
+                (
+                    b"julia/TddESCat/",
+                    b"python/src/",
+                    b"python/compute/",
+                    b"protocol/",
+                    b"rust/factor-kernel/",
+                )
+            )
             or name
             in (
                 b"scripts/run.jl",
                 b"config/autonomous_public.toml",
+                b"config/v13_public25.toml",
+                b"config/sources.lock.toml",
                 b"config/stitch.toml",
                 b"config/bench_server.toml",
                 b"python/uv.lock",

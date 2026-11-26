@@ -63,7 +63,7 @@ function action_from_request(command)
     path = command["path"]
     action = Dict("id" => (path == RESET_ROUTE ? 0 : parse(Int, last(path, 1))))
     if action["id"] == 6
-        body = JSON.parse(command["request_body"])
+        body = parse_json(command["request_body"])
         for key in ("x", "y")
             expect(coord(get(body, key, nothing)), "invalid_stored_coordinates")
             action[key] = body[key]

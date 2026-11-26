@@ -52,8 +52,10 @@ function capture(config, public_dir; supervised=false, collect_only=false)
                                 "knowledge_sha256"=>TddESCat.frozen_knowledge_digest(knowledge)))
                     end
                     event = TddESCat.read_json(TddESCat.store_path(store, "events", rec.before_ref * ".json"))
-                    learned = TddESCat.run_online!(rec, (event=event, observation=rec.observation), config, ROOT;
-                        knowledge,frozen)
+                    learned = TddESCat.with_compute(config) do backends
+                        TddESCat.run_online!(rec,(event=event,observation=rec.observation),config,ROOT;
+                            knowledge,frozen,backends)
+                    end
                 end
             end
             rec.frozen || isnothing(rec.card_id) || close_scorecard!(rec)

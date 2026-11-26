@@ -51,6 +51,22 @@ def atomic_json(path, payload):
             temporary.unlink(missing_ok=True)
 
 
+def compute_paths(config, data):
+    return {
+        name: Path(os.path.abspath(config.parent / path))
+        for name, path in data.get("compute", {}).items()
+    }
+
+
+def absolute_compute_settings(config, data, text):
+    # These paths must be absolute before relocating the profile beside evidence.
+    for key, path in compute_paths(config, data).items():
+        text = re.sub(
+            rf"(?m)^{re.escape(key)}\s*=.*$", f"{key} = {json.dumps(str(path))}", text
+        )
+    return text
+
+
 def public_settings(root, config, data, *, recovery=False):
     environment = data["environment"]
     paths = [config, *(root / name for name in BUILD_INPUTS)]
@@ -59,6 +75,19 @@ def public_settings(root, config, data, *, recovery=False):
         if not policy.is_file():
             raise FileNotFoundError("Configured learning policy is missing")
         paths.append(policy)
+    for name, path in compute_paths(config, data).items():
+        if not path.is_file() or not os.access(path, os.X_OK):
+            raise FileNotFoundError(f"Configured compute executable is missing: {path}")
+        if name == "solver_python":
+            paths.extend(
+                (
+                    path.parent.parent,
+                    path.resolve().parents[1],
+                    root / "python/compute/src",
+                )
+            )
+        else:
+            paths.append(path)
     if (name := data.get("learning", {}).get("prior_evidence")) is not None:
         previous = (config.parent / name).resolve()
         if not previous.is_dir():

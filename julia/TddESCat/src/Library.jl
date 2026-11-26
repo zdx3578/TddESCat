@@ -210,7 +210,7 @@ function read_published_stitch(directory; publication=nothing)
     path = joinpath(directory, publication * ".json")
     bytes = read(path)
     content_hash(bytes) == publication || error("Published artifact digest mismatch")
-    bundle = JSON.parse(String(bytes))
+    bundle = parse_json(String(bytes))
     verify_published_stitch(bundle)
     state = get(bundle,"global_library",nothing)
     snapshot = isnothing(state) ? LibrarySnapshot(bundle["library_version"],collect(Dict{String,Any},bundle["library"])) :

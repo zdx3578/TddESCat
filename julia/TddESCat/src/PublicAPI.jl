@@ -42,7 +42,7 @@ end
 
 function response_json(bytes)
     try
-        return JSON.parse(String(copy(bytes)))
+        return parse_json(String(copy(bytes)))
     catch error
         error isa InterruptException && rethrow()
         throw(ProtocolError("invalid_json"))

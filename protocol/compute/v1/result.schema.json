@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Compute result envelope",
+  "type": "object",
+  "required": ["protocol", "request_id", "snapshot", "execution", "answer", "coverage", "value", "detail"],
+  "properties": {
+    "protocol": {"const": "compute/v1"},
+    "request_id": {"type": ["integer", "null"], "minimum": 0},
+    "snapshot": {"type": ["string", "null"]},
+    "execution": {"enum": ["completed", "incomplete", "unsupported", "invalid_input", "failed", "invalidated"]},
+    "answer": {"enum": ["value", "unknown"]},
+    "coverage": {"enum": ["complete", "partial", "unavailable"]},
+    "value": true,
+    "detail": {"type": ["string", "null"]}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"execution": {"const": "completed"}}},
+      "then": {
+        "properties": {"request_id": {"type": "integer"}, "snapshot": {"type": "string"}}
+      },
+      "else": {"properties": {"answer": {"const": "unknown"}, "value": {"type": "null"}}}
+    }
+  ],
+  "additionalProperties": false
+}

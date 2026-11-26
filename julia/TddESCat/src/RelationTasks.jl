@@ -440,10 +440,15 @@ function relation_task_record(proposal)
     return (;intent=proposal.intent,action=proposal.action,reads,contracts,obligation=proposal.obligation)
 end
 
-function relation_prediction(rec,item,prediction,task)
+function relation_prediction(rec,item,prediction,task;role_proof=nothing,resource_proof=nothing)
     isempty(task.reads) && return prediction
     reads = sort!(unique([rec.before_ref;task.reads]))
     admitted = length(task.contracts) == 1 && only(task.contracts).scope in (:bound,:replicated)
+    if !isnothing(role_proof)
+        admitted &= role_proof.execution == "completed" && role_proof.answer == "value" &&
+            get(role_proof.value,"entailed",false) === true
+    end
+    admitted &= isnothing(resource_proof) || resource_proof.status == :proven
     values = Dict{String,Any}()
     if admitted
         for (channel,value) in only(task.contracts).expected

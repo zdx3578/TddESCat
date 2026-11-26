@@ -35,7 +35,8 @@ function atomic_write(path, bytes)
 end
 
 atomic_json(path, value) = atomic_write(path, JSON.json(value) * "\n")
-read_json(path) = JSON.parsefile(path)
+parse_json(text) = JSON.parse(text; dicttype=Dict{String,Any}, allownan=false)
+read_json(path) = JSON.parsefile(path; dicttype=Dict{String,Any}, allownan=false)
 
 function with_run(f, public_dir::AbstractString)
     dir = abspath(public_dir)

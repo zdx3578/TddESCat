@@ -191,7 +191,7 @@ function record_program_assessment(job,assessment)
 end
 
 function program_corpus_key(corpus)
-    return semantic_hash(JSON.parse(JSON.json([corpus.programs,corpus.slots,corpus.scopes])))
+    return semantic_hash(parse_json(JSON.json([corpus.programs,corpus.slots,corpus.scopes])))
 end
 
 function program_cohorts(complete)
@@ -382,7 +382,7 @@ function recover_program_jobs!(knowledge,config,store,repo_root,records,availabl
             before = records[step["before_ref"]]
             after = records[step["event_ref"]]
             interpreted = sequence_evidence(before,after,knowledge.observations[step["event_ref"]])
-            canonical_bytes(JSON.parse(JSON.json(interpreted))) == canonical_bytes(step) ||
+            canonical_bytes(parse_json(JSON.json(interpreted))) == canonical_bytes(step) ||
                 error("Recovered sequence differs from the confirmed raw receipts")
         end
         manifest_file = joinpath(job,"input","manifest.json")

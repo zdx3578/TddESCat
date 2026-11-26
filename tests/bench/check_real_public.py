@@ -11,6 +11,7 @@ from pathlib import Path
 
 from tddesc_tools.isolation import environment_server, isolation_probe, solver_sandbox
 from tddesc_tools.public_run import (
+    absolute_compute_settings,
     SUPERVISOR_BLOCKED,
     public_settings,
     solver_command,
@@ -97,6 +98,7 @@ def offline_capture(root, task, run):
             f"policy_file = {json.dumps(str(policy))}",
             projection,
         )
+        projection = absolute_compute_settings(original, values, projection)
         agent.write_text(projection, encoding="utf-8")
         paths = public_settings(root, agent, tomllib.loads(projection))
         probe = isolation_probe(

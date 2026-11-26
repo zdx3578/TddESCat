@@ -9,7 +9,7 @@ import re
 import subprocess
 import tomllib
 
-from tddesc_tools.public_run import atomic_json
+from tddesc_tools.public_run import absolute_compute_settings, atomic_json
 from tddesc_tools.run import read_task, runtime_paths, worktree_digest
 from tddesc_tools.stitch import build_identity
 
@@ -27,6 +27,7 @@ def prepare_cases(output, games, template, suite, bundle):
     engine_path = (template.parent / data["learning"]["engine"]).resolve()
     policy_path = (template.parent / data["learning"]["policy_file"]).resolve()
 
+    settings = absolute_compute_settings(template, data, settings)
     settings = re.sub(
         r"(?m)^engine = .*$", f"engine = {json.dumps(str(engine_path))}", settings
     )

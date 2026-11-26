@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Compute request envelope",
+  "type": "object",
+  "required": ["protocol", "request_id", "snapshot", "operation"],
+  "properties": {
+    "protocol": {"const": "compute/v1"},
+    "request_id": {"type": "integer", "minimum": 0},
+    "snapshot": {"type": "string", "minLength": 1},
+    "operation": {"enum": [
+      "capabilities", "compile_bool", "apply_bool", "negate_bool",
+      "condition_bool", "project_bool", "count_models", "evaluate_bool",
+      "evaluate_bool_batch", "equal_bool", "entails_bool", "rotate_bool",
+      "describe", "export_canonical", "import_canonical", "acquire",
+      "release", "solve", "synthesize_guard"
+    ]},
+    "payload": {"type": "object"}
+  },
+  "additionalProperties": false
+}

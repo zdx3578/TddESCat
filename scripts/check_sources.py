@@ -48,6 +48,11 @@ def main() -> None:
     parser.add_argument("--config", type=Path, required=True)
     args = parser.parse_args()
     python = {item["name"]: item for item in load(ROOT / "python/uv.lock")["package"]}
+    compute = {
+        item["name"]: item
+        for item in load(ROOT / "python/compute/uv.lock")["package"]
+        if item["name"] in ("cvc5", "aalpy", "libcirkit")
+    }
     julia = load(ROOT / "julia/TddESCat/Manifest.toml")["deps"]
     cargo = load(ROOT / "Cargo.lock")
     cargo_packages = {
@@ -77,13 +82,20 @@ def main() -> None:
             bool(re.fullmatch(r"[0-9a-f]{64}", source["archive_sha256"])),
             f"Missing archive digest: {name}",
         )
-        if kind == "pypi":
-            package = python[name]
+        if kind in ("pypi", "compute-pypi"):
+            package = (python if kind == "pypi" else compute)[name]
             require(package["version"] == version, f"Python lock drift: {name}")
-            require(
-                package["sdist"]["hash"] == f"sha256:{source['archive_sha256']}",
-                f"PyPI source digest mismatch: {name}",
-            )
+            archive = package.get("sdist")
+            if archive is not None:
+                require(
+                    archive["hash"] == f"sha256:{source['archive_sha256']}",
+                    f"PyPI source digest mismatch: {name}",
+                )
+            else:
+                require(
+                    source["archive_sha256"] == source["wheel_sha256"],
+                    f"Expected a wheel-only release: {name}",
+                )
             require(
                 any(
                     wheel["hash"] == f"sha256:{source['wheel_sha256']}"
@@ -98,6 +110,14 @@ def main() -> None:
                 and package["git-tree-sha1"] == source["tree_sha1"],
                 f"Julia version or source tree drift: {name}",
             )
+            if name in ("Compose", "Galley"):
+                require(
+                    (package.get("repo-url"), package.get("repo-rev"))
+                    == (source["repository"], source["revision"]),
+                    f"Julia repository revision drift: {name}",
+                )
+            if name == "Galley":
+                require("Finch" not in julia, "Galley includes Finch internally")
         elif kind == "vendored":
             path = ROOT / source["local_path"]
             require(
@@ -111,6 +131,12 @@ def main() -> None:
                 rust_build_digest(path) == source["build_sha256"],
                 f"Rust build input drift: {name}",
             )
+            if "upstream_cargo_lock_sha256" in source:
+                require(
+                    hashlib.sha256((path / "Cargo.lock").read_bytes()).hexdigest()
+                    == source["upstream_cargo_lock_sha256"],
+                    f"Upstream Cargo.lock drift: {name}",
+                )
         else:
             raise SystemExit(f"Unknown source kind: {kind}")
         print(f"{name} {version}: {kind} source lock verified")

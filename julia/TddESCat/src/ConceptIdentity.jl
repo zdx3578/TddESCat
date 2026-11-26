@@ -1,10 +1,35 @@
+# Preserve the v1 canonical bytes independently of the installed JSON writer.
+function canonical_string(io, value)
+    write(io, UInt8('"'))
+    for byte in codeunits(value)
+        if byte == 0x22 || byte == 0x5c
+            write(io, 0x5c, byte)
+        elseif byte == 0x08
+            print(io, "\\b")
+        elseif byte == 0x09
+            print(io, "\\t")
+        elseif byte == 0x0a
+            print(io, "\\n")
+        elseif byte == 0x0c
+            print(io, "\\f")
+        elseif byte == 0x0d
+            print(io, "\\r")
+        elseif byte < 0x20 || byte == 0x7f
+            print(io, "\\u", string(byte; base=16, pad=4))
+        else
+            write(io, byte)
+        end
+    end
+    write(io, UInt8('"'))
+end
+
 function canonical_write(io, value)
     if value isa AbstractDict
         all(key->key isa AbstractString,keys(value)) || error("Canonical keys must be strings")
         print(io,'{')
         for (i,key) in enumerate(sort!(collect(keys(value))))
             i == 1 || print(io,',')
-            JSON.print(io,key)
+            canonical_string(io,key)
             print(io,':')
             canonical_write(io,value[key])
         end
@@ -16,8 +41,12 @@ function canonical_write(io, value)
             canonical_write(io,item)
         end
         print(io,']')
-    elseif isnothing(value) || value isa Bool || strict_integer(value) || value isa AbstractString
-        JSON.print(io,value)
+    elseif value isa AbstractString
+        canonical_string(io,value)
+    elseif isnothing(value)
+        print(io,"null")
+    elseif value isa Bool || strict_integer(value)
+        print(io,value)
     else
         error("Unsupported canonical semantic value")
     end

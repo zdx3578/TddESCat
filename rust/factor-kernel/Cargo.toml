@@ -1,0 +1,16 @@
+[package]
+name = "tddesc-factor-kernel"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+
+[[bin]]
+name = "factor-kernel"
+path = "src/main.rs"
+
+[dependencies]
+atddc = { path = "../../third_party/factor-rank/code" }
+num-bigint = "0.4"
+num-traits = "0.2.19"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

@@ -10,7 +10,7 @@ function freeze_stitch_job(directory, job_id, snapshot_id, library::LibrarySnaps
     upstream = TOML.parsefile(joinpath(repo_root, "third_party", "egg-stitch", "UPSTREAM.toml"))
     if isnothing(engine_identity)
         worker = joinpath(repo_root, "target", "release", "tddesc-stitch")
-        engine_identity = JSON.parse(read(Cmd([worker, "--identity"]), String))
+        engine_identity = parse_json(read(Cmd([worker, "--identity"]), String))
     end
     engine = Dict(
         "upstream_commit" => upstream["revision"],
@@ -112,7 +112,7 @@ function stitch_blob(job_dir, manifest, field)
     return data
 end
 
-stitch_input(job_dir, manifest, field) = JSON.parse(String(stitch_blob(job_dir, manifest, field)))
+stitch_input(job_dir, manifest, field) = parse_json(String(stitch_blob(job_dir, manifest, field)))
 
 function verify_stitch_calls(result, outputs, input_sites, proof_for, sources, definitions)
     positions = Dict{Tuple{Int,Tuple},Any}()
@@ -203,7 +203,7 @@ end
 
 function read_stitch_rounds(job_dir, output_dir)
     manifest_bytes = read(joinpath(job_dir, "manifest.json"))
-    manifest = JSON.parse(String(copy(manifest_bytes)))
+    manifest = parse_json(String(copy(manifest_bytes)))
     input_sha = content_hash(manifest_bytes)
     manifest["protocol_version"] == LEARN_PROTOCOL && manifest["codec_version"] == STITCH_CODEC ||
         error("Job version differs")
@@ -230,11 +230,11 @@ function read_stitch_rounds(job_dir, output_dir)
         folder = joinpath(output_dir, name)
         realpath(folder) == folder || error("Checkpoint path escaped output")
         checkpoint_bytes = read(joinpath(folder, "manifest.json"))
-        checkpoint = JSON.parse(String(copy(checkpoint_bytes)))
+        checkpoint = parse_json(String(copy(checkpoint_bytes)))
         bytes = read(joinpath(folder, "result.json"))
         length(bytes) == checkpoint["result_bytes"] && content_hash(bytes) == checkpoint["result_sha256"] ||
             error("Checkpoint content differs")
-        result = JSON.parse(String(bytes))
+        result = parse_json(String(bytes))
         for object in (checkpoint, result)
             object["round_index"] == index && object["input_sha256"] == input_sha &&
                 object["parent_checkpoint_sha256"] == parent || error("Checkpoint order or parent differs")

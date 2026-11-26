@@ -257,7 +257,8 @@ function replay_effects!(observations, episodes)
             ref = after.event["event_id"]
             result = observed_effects(before,after;meters)
             if haskey(observations,ref)
-                JSON.json(public_effect_record(observations[ref])) == JSON.json(public_effect_record(result)) ||
+                parse_json(JSON.json(public_effect_record(observations[ref]))) ==
+                    parse_json(JSON.json(public_effect_record(result))) ||
                     error("Replayed public observation differs from its earlier interpretation")
             else
                 observations[ref] = result

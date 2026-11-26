@@ -88,6 +88,7 @@ def capture(
     fixture=FIXTURE,
     budget=9,
     background_search=True,
+    compute=False,
 ):
     base, revision = f"u{number:03}", f"{number:08x}"
     game = f"{base}-{revision}"
@@ -113,9 +114,14 @@ def capture(
             batch=8,
             background_search=background_search,
         )
-        agent.write_text(
-            agent.read_text() + "autonomous = true\nrelation_goals = true\n"
-        )
+        additions = "autonomous = true\nrelation_goals = true\n"
+        if compute:
+            additions += (
+                "\n[compute]\n"
+                f'factor_kernel = "{root / "target/release/factor-kernel"}"\n'
+                f'solver_python = "{root / "python/compute/.venv/bin/python"}"\n'
+            )
+        agent.write_text(agent.read_text() + additions)
         assert supervise(root, agent, public) == 0, (public / "solver.log").read_text()
     return public
 
@@ -256,9 +262,28 @@ def main(config, run):
 if __name__ == "__main__":
     if sys.argv[1] == "--case":
         root = Path.cwd()
-        config, directory, mode, number = sys.argv[2:]
-        capture(
-            root, runtime_paths(root), Path(config), Path(directory), mode, int(number)
+        config, directory, mode, number, *extra = sys.argv[2:]
+        if extra not in ([], ["--compute"]):
+            raise ValueError("Expected --compute or no extra option")
+        public = capture(
+            root,
+            runtime_paths(root),
+            Path(config),
+            Path(directory),
+            mode,
+            int(number),
+            compute=bool(extra),
         )
+        if extra:
+            verify(mode, public)
+            proofs = [
+                row["factor_role_proof"]
+                for path in (public / "decisions").glob("*.json")
+                if "factor_role_proof" in (row := read(path))
+            ]
+            assert any(
+                proof["execution"] == "completed" and proof["value"]["entailed"]
+                for proof in proofs
+            ), proofs
         raise SystemExit(0)
     raise SystemExit(main(*(Path(arg) for arg in sys.argv[1:])))

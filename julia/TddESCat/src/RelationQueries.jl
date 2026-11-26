@@ -19,6 +19,13 @@ struct RelationTable
     completion_ref::Union{Nothing,String}
 end
 
+struct RelationRead
+    name::String
+    scope::RelationScope
+    pattern::Tuple
+    digest::String
+end
+
 struct RelationEvaluation
     scope::RelationScope
     sequence_by_event::Dict{String,Int}
@@ -26,9 +33,10 @@ struct RelationEvaluation
     slot::Int
     witnesses::Dict{String,Any}
     atoms::Dict{String,RelationTable}
+    reads::Dict{Tuple{String,Tuple},RelationRead}
 end
 
-RelationEvaluation(scope, sequences, cutoff; slot=0) = RelationEvaluation(scope,sequences,cutoff,slot,Dict(),Dict())
+RelationEvaluation(scope, sequences, cutoff; slot=0) = RelationEvaluation(scope,sequences,cutoff,slot,Dict(),Dict(),Dict())
 
 function relation_witness!(evaluation, kind, refs; detail=nothing, events=String[])
     all(haskey(evaluation.witnesses,ref) for ref in refs) || error("Unknown relation witness parent")
@@ -166,22 +174,19 @@ function exact_relation_join(evaluation, left, right, layout)
     scope_identity(left.scope) == scope_identity(right.scope) || error("Cannot join different relation scopes")
     shared, output, distinct = (layout[key] for key in ("shared","output","distinct"))
     header = joined_columns(left.columns,right.columns,shared,output,distinct)
-    build_left = length(left.rows) <= length(right.rows)
-    build, probe = build_left ? (left,right) : (right,left)
     key(row,side) = Tuple(row[pair[side]+1] for pair in shared)
-    buckets = Dict{Tuple,Vector{Pair{Tuple,String}}}()
-    for pair in pairs(build.rows)
-        push!(get!(Vector{Pair{Tuple,String}},buckets,key(first(pair),build_left ? 1 : 2)),pair)
-    end
+    left_rows, right_rows = collect(left.rows), collect(right.rows)
+    row_pairs = galley_join_pairs([key(row,1) for (row,_) in left_rows],
+        [key(row,2) for (row,_) in right_rows])
     result = Dict{Tuple,Vector{String}}()
-    for (prow,pref) in probe.rows
-        for (brow,bref) in get(buckets,key(prow,build_left ? 2 : 1),Pair{Tuple,String}[])
-            row = build_left ? (brow...,prow...) : (prow...,brow...)
-            all(row[a+1] != row[b+1] for (a,b) in distinct) || continue
-            values = Tuple(row[i+1] for i in output)
-            witness = relation_witness!(evaluation,"and",[bref,pref];detail=[shared,output,distinct,row])
-            push!(get!(Vector{String},result,values),witness)
-        end
+    for (l,r) in row_pairs
+        lrow,lref = left_rows[l]
+        rrow,rref = right_rows[r]
+        row = (lrow...,rrow...)
+        all(row[a+1] != row[b+1] for (a,b) in distinct) || continue
+        values = Tuple(row[i+1] for i in output)
+        witness = relation_witness!(evaluation,"and",[lref,rref];detail=[shared,output,distinct,row])
+        push!(get!(Vector{String},result,values),witness)
     end
     return finite_relation_result(evaluation,"join",header,result,[left,right];detail=layout)
 end
@@ -237,6 +242,28 @@ function apply_relation_operator(evaluation, operation, args, layout)
     return finite_relation_result(evaluation,operation,header,rows,args;detail=layout)
 end
 
+function relation_range_digest(table::RelationTable, pattern::Tuple)
+    length(pattern) == length(table.columns) || throw(ArgumentError("Relation read range arity mismatch"))
+    matching = [(row,witness) for (row,witness) in table.rows if
+        all(isnothing(value) || value == row[position] for (position,value) in enumerate(pattern))]
+    sort!(matching;by=canonical_bytes)
+    return semantic_hash([table.columns,table.enumerated,table.domain_complete,
+        table.witnesses_complete,matching])
+end
+
+function read_relation_range!(evaluation::RelationEvaluation,name,pattern::Tuple)
+    table = evaluation.atoms[name]
+    read = RelationRead(name,table.scope,pattern,relation_range_digest(table,pattern))
+    evaluation.reads[(name,pattern)] = read
+    return table
+end
+
+function relation_read_current(read::RelationRead,evaluation::RelationEvaluation)
+    table = get(evaluation.atoms,read.name,nothing)
+    return !isnothing(table) && scope_identity(read.scope) == scope_identity(table.scope) &&
+        read.digest == relation_range_digest(table,read.pattern)
+end
+
 function evaluate_relation(term, evaluation, signature; slots, library=[])
     registry, definitions = registry_from(signature,library)
     wire = decode_program(term isa AbstractString ? term : render_term(term),registry)
@@ -256,7 +283,10 @@ function evaluate_relation(term, evaluation, signature; slots, library=[])
             slot["kind"] == "Slot" && slot["index"] == evaluation.slot ||
                 error("Atom context must read from the declared scene binding")
             layout["phase"] == evaluation.scope.phase || error("Atom would read from another phase")
-            get(evaluation.atoms,layout["name"],RelationTable(header,evaluation.scope,Dict(),false,false,false,nothing))
+            name = layout["name"]
+            haskey(evaluation.atoms,name) ?
+                read_relation_range!(evaluation,name,ntuple(_ -> nothing,length(header))) :
+                RelationTable(header,evaluation.scope,Dict(),false,false,false,nothing)
         else
             apply_relation_operator(evaluation,operation,evaluate.(node["args"]),layout)
         end

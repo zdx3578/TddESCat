@@ -640,7 +640,7 @@ function collect_online_job!(knowledge,config,rec,job,status,publications,progra
 end
 
 function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(), frozen=false,
-                     visual_state=nothing)
+                     visual_state=nothing, backends=Dict{String,ComputeWorker}())
     attempts = Dict{Tuple{Int,Int,Int},Int}()
     history = [0]
     pairs = []
@@ -955,6 +955,12 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 isempty(tests) ? nothing : (action=item.action,intent=:apply_relation,tests,reads=String[],obligation=nothing)
             end
         end
+        role_proof = if !isnothing(relation_proposal) && haskey(backends,"factor_kernel")
+            role_factor_proof!(backends["factor_kernel"],relation_proposal,obs,rec.before_ref)
+        end
+        resource_proof = if !isnothing(relation_proposal) && haskey(backends,"solver_python")
+            resource_constraint_proof!(backends["solver_python"],relation_proposal,rec.before_ref)
+        end
         relation_task = isnothing(relation_proposal) ? nothing : relation_task_record(relation_proposal)
         task = advancement_task(learned_goal,visual,spatial,obs,spatial_choice)
         policy_task = policy_task_record(selected_policy,learned_goal,spatial_choice,blocked_policies)
@@ -998,7 +1004,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             append!(plan_reads,[projected.training;projected.reads])
         end
         prediction = predict_public(rec,item;plan_reads,intervention_goal)
-        isnothing(relation_task) || (prediction = relation_prediction(rec,item,prediction,relation_task))
+        isnothing(relation_task) || (prediction = relation_prediction(rec,item,prediction,relation_task;role_proof,resource_proof))
         if !isnothing(spatial_choice)
             reads = unique([rec.before_ref;spatial_choice.reads])
             spatial_version = "spatial-" * content_hash(JSON.json(spatial_choice))
@@ -1041,6 +1047,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         if relation_tasks
             decision_record["task_arbitration"] = arbitration
             isnothing(relation_task) || (decision_record["public_relation_task"] = relation_task)
+            isnothing(role_proof) || (decision_record["factor_role_proof"] = role_proof)
+            isnothing(resource_proof) || (decision_record["resource_constraint_proof"] = resource_proof)
             isnothing(policy_withdrawal) || (decision_record["relation_policy_withdrawal"] = policy_withdrawal)
         end
         if !isnothing(relation_policy)

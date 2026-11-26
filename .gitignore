@@ -32,3 +32,4 @@ __pycache__/
 *.egg-info/
 .DS_Store
 /_vendor/
+/python/compute/.venv/

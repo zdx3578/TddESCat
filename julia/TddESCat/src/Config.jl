@@ -7,6 +7,7 @@ struct RunConfig
     learning::Union{Nothing,Dict{String,Any}}
     search::Union{Nothing,Dict{String,Any}}
     planning::Union{Nothing,Dict{String,Any}}
+    compute::Union{Nothing,Dict{String,Any}}
 end
 
 strict_integer(value) = value isa Integer && !(value isa Bool)
@@ -53,7 +54,7 @@ end
 function load_run_config(path::AbstractString)
     path = abspath(path)
     data = require_keys(TOML.parsefile(path), ("schema_version", "run_name", "run_root",
-        "environment", "execution"); optional=("learning", "search", "planning"))
+        "environment", "execution"); optional=("learning", "search", "planning", "compute"))
     strict_integer(data["schema_version"]) && data["schema_version"] == 2 ||
         throw(ArgumentError("Unsupported run config version"))
     valid_id(data["run_name"]) || throw(ArgumentError("Invalid run_name"))
@@ -140,7 +141,16 @@ function load_run_config(path::AbstractString)
             strict_integer(gap) && 0 <= gap <= 3 || throw(ArgumentError("Invalid planning.goal.marker_gap"))
         end
     end
-    return RunConfig(path, data["run_name"], config_path(dir, data["run_root"]), env, exec, learning, search, planning)
+    compute = get(data,"compute",nothing)
+    if !isnothing(compute)
+        isnothing(learning) && throw(ArgumentError("Compute backends require a learning session"))
+        require_keys(compute,();optional=("factor_kernel","solver_python"),at="compute")
+        isempty(compute) && throw(ArgumentError("No compute backend configured"))
+        for field in keys(compute)
+            compute[field] = config_path(dir,compute[field])
+        end
+    end
+    return RunConfig(path,data["run_name"],config_path(dir,data["run_root"]),env,exec,learning,search,planning,compute)
 end
 
 function read_api_key(env)
