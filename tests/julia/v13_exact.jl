@@ -75,6 +75,33 @@ end
     @test TC.relation_member(partial,("actor-b",0)) == TC.unknown_truth
 end
 
+@testset "Relation pages preserve the typed range after recovery" begin
+    header = [("Role","before"),("Integer","timeless")]
+    function observed(rows;complete=true)
+        scope = TC.RelationScope("episode","slot","views","roles","before")
+        evaluation = TC.RelationEvaluation(scope,Dict("source"=>1),2)
+        TC.observe_relation!(evaluation,"observed",header,rows;event_reads=["source"],domain_complete=complete)
+        return evaluation
+    end
+    rows = [("a",1),("a",3),("b",1),("b",2)]
+    first_view = observed(rows)
+    bound = TC.relation_page!(first_view,"observed",("a",1),1)
+    @test bound.coverage == "complete" && first(only(bound.rows)) == ("a",1)
+    first_page = TC.relation_page!(first_view,"observed",("a",nothing),1)
+    @test first_page.coverage == "partial"
+    cursor = TC.parse_json(TC.canonical_bytes(first_page.cursor))
+    second_view = observed(vcat(rows,[("b",4)]))
+    second_page = TC.relation_page!(second_view,"observed",("a",nothing),3;cursor)
+    @test second_page.coverage == "complete" && second_page.cursor === nothing
+    @test [first(only(first_page.rows)),first(only(second_page.rows))] == [("a",1),("a",3)]
+    changed = TC.relation_page!(observed(vcat(rows,[("a",5)])),"observed",("a",nothing),1;cursor)
+    @test changed.execution == "invalidated" && isempty(changed.rows)
+    malformed = TC.relation_page!(first_view,"observed",("a",nothing),1;cursor=true)
+    @test malformed.execution == "invalidated"
+    partial = TC.relation_page!(observed(rows;complete=false),"observed",("a",nothing),9)
+    @test partial.coverage == "unknown" && length(partial.rows) == 2
+end
+
 @testset "An exact count can separate a mechanism guard with the same neighbor colors" begin
     base = fill(UInt8(0),24,24)
     base[10:12,10:12] .= 4
@@ -166,6 +193,25 @@ end
         assignments = [TC.encode_factor_row(tree,(row,)) for row in 0:7]
         @test value("evaluate_bool_batch",(;value=rotated,assignments)) ==
             value("evaluate_bool_batch",(;value=diagram,assignments))
+
+        memo = Dict{Tuple,NamedTuple}()
+        function role_proof(x,y,color,ref)
+            board = zeros(UInt8,64,64)
+            board[y+1,x+1] = color
+            fragments = [(family=:pigment,basis=TC.ColorCell[(x,y,4)])]
+            proposal = (;tests=[(;scope=:bound,fragments)])
+            return TC.role_factor_proof!(worker,proposal,(frames=[board],),ref;memo)
+        end
+        first = role_proof(5,12,4,"role-1")
+        issued = worker.request_id
+        second = role_proof(18,24,4,"role-2")
+        @test !first.reused && second.reused && second.receipt == "role-2"
+        @test second.origin == (18,24) && second.value["entailed"] === true
+        @test second.proved_at == "role-1" && second.proof_origin == (5,12)
+        @test worker.request_id == issued
+        refuted = role_proof(18,24,3,"role-3")
+        @test !refuted.reused && refuted.value["entailed"] === false
+        @test worker.request_id > issued
     end
 end
 

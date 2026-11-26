@@ -685,6 +685,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     history_widths = get(something(config.search,Dict()),"history_lengths",[1,2,4])
     exploration_frontier = isnothing(rec.limit) ? PublicFrontier(history_widths) : nothing
     responses = ResponseLearning()
+    factor_role_memo = Dict{Tuple,NamedTuple}()
     publications = String[]
     count = 0
     continuation = nothing
@@ -1020,7 +1021,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             end
         end
         role_proof = if !isnothing(relation_proposal) && haskey(backends,"factor_kernel")
-            role_factor_proof!(backends["factor_kernel"],relation_proposal,obs,rec.before_ref)
+            role_factor_proof!(backends["factor_kernel"],relation_proposal,obs,rec.before_ref;memo=factor_role_memo)
         end
         resource_proof = if !isnothing(relation_proposal) && haskey(backends,"solver_python")
             resource_constraint_proof!(backends["solver_python"],relation_proposal,rec.before_ref)

@@ -89,14 +89,20 @@ function observed_neighbor_counts(observed,connectivity)
     subject = observed.subjects[connectivity]
     isnothing(subject) && return nothing
     suffix = string(connectivity)
-    edges = observed.context.atoms["adjacent-" * suffix]
     pigments = observed.context.atoms["color-" * suffix]
     colors = Dict(first(row)=>last(row) for row in keys(pigments.rows))
     counts = zeros(Int,16)
-    for (origin,neighbor) in keys(edges.rows)
-        origin == subject && (counts[colors[neighbor]+1] += 1)
+    cursor = nothing
+    while true
+        page = relation_page!(observed.context,"adjacent-" * suffix,(subject,nothing),64;cursor)
+        page.execution == "completed" || return nothing
+        for ((_,neighbor),_) in page.rows
+            counts[colors[neighbor]+1] += 1
+        end
+        page.coverage == "complete" && return counts
+        cursor = page.cursor
+        isnothing(cursor) && return nothing
     end
-    return counts
 end
 
 function relation_definition(program,signature)

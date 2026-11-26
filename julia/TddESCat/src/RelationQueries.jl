@@ -26,6 +26,12 @@ struct RelationRead
     digest::String
 end
 
+struct RelationPostings
+    rows::Vector{Pair{Tuple,String}}
+    columns::Dict{Int,Dict{Any,BitSet}}
+    ranges::Dict{Tuple,NamedTuple}
+end
+
 struct RelationEvaluation
     scope::RelationScope
     sequence_by_event::Dict{String,Int}
@@ -34,9 +40,45 @@ struct RelationEvaluation
     witnesses::Dict{String,Any}
     atoms::Dict{String,RelationTable}
     reads::Dict{Tuple{String,Tuple},RelationRead}
+    postings::IdDict{RelationTable,RelationPostings}
 end
 
-RelationEvaluation(scope, sequences, cutoff; slot=0) = RelationEvaluation(scope,sequences,cutoff,slot,Dict(),Dict(),Dict())
+RelationEvaluation(scope, sequences, cutoff; slot=0) =
+    RelationEvaluation(scope,sequences,cutoff,slot,Dict(),Dict(),Dict(),IdDict())
+
+function table_postings(evaluation,table)
+    scope_identity(table.scope) == scope_identity(evaluation.scope) || error("Relation postings belong to another scope")
+    return get!(evaluation.postings,table) do
+        RelationPostings(collect(table.rows),Dict(),Dict())
+    end
+end
+
+function column_postings(index,column)
+    return get!(index.columns,column) do
+        postings = Dict{Any,BitSet}()
+        for (position,(row,_)) in enumerate(index.rows)
+            push!(get!(BitSet,postings,row[column]),position)
+        end
+        postings
+    end
+end
+
+function relation_matching_rows(evaluation,table,pattern)
+    length(pattern) == length(table.columns) || throw(ArgumentError("Relation range arity mismatch"))
+    bound = findall(!isnothing,pattern)
+    isempty(bound) && return table.rows
+    all(i->relation_value(table.columns[i][1],pattern[i]),bound) ||
+        throw(ArgumentError("Relation range comparison sort mismatch"))
+    index = table_postings(evaluation,table)
+    empty = BitSet()
+    postings = [get(column_postings(index,i),pattern[i],empty) for i in bound]
+    sort!(postings;by=length)
+    found = copy(first(postings))
+    for candidates in Iterators.drop(postings,1)
+        intersect!(found,candidates)
+    end
+    return (index.rows[position] for position in found)
+end
 
 function relation_witness!(evaluation, kind, refs; detail=nothing, events=String[])
     all(haskey(evaluation.witnesses,ref) for ref in refs) || error("Unknown relation witness parent")
@@ -267,8 +309,15 @@ function apply_relation_operator(evaluation, operation, args, layout)
             other += 1
             checkbounds(Bool,header,other) && header[other] == header[column] || error("Comparison column sort mismatch")
         end
-        for (row,ref) in input.rows
-            row[column] == (isnothing(other) ? layout["value"] : row[other]) && (rows[row] = [ref])
+        if isnothing(other)
+            pattern = ntuple(i->i == column ? layout["value"] : nothing,length(header))
+            for (row,ref) in relation_matching_rows(evaluation,input,pattern)
+                rows[row] = [ref]
+            end
+        else
+            for (row,ref) in input.rows
+                row[column] == row[other] && (rows[row] = [ref])
+            end
         end
     elseif operation == "Union"
         for table in args
@@ -294,18 +343,25 @@ function apply_relation_operator(evaluation, operation, args, layout)
     return finite_relation_result(evaluation,operation,header,rows,args;detail=layout)
 end
 
-function relation_range_digest(table::RelationTable, pattern::Tuple)
+function relation_range_digest(table::RelationTable, pattern::Tuple;matching=nothing)
     length(pattern) == length(table.columns) || throw(ArgumentError("Relation read range arity mismatch"))
-    matching = [(row,witness) for (row,witness) in table.rows if
-        all(isnothing(value) || value == row[position] for (position,value) in enumerate(pattern))]
-    sort!(matching;by=canonical_bytes)
-    return semantic_hash([table.columns,table.enumerated,table.domain_complete,
-        table.witnesses_complete,matching])
+    selected = if isnothing(matching)
+        [(row,witness) for (row,witness) in table.rows if
+            all(isnothing(value) || value == row[position] for (position,value) in enumerate(pattern))]
+    else
+        [(row,witness) for (row,witness) in matching]
+    end
+    sort!(selected;by=canonical_bytes)
+    return relation_sorted_range_digest(table,selected)
 end
+
+relation_sorted_range_digest(table,selected) = semantic_hash([table.columns,table.enumerated,
+    table.domain_complete,table.witnesses_complete,selected])
 
 function read_relation_range!(evaluation::RelationEvaluation,name,pattern::Tuple)
     table = evaluation.atoms[name]
-    read = RelationRead(name,table.scope,pattern,relation_range_digest(table,pattern))
+    matching = relation_matching_rows(evaluation,table,pattern)
+    read = RelationRead(name,table.scope,pattern,relation_range_digest(table,pattern;matching))
     evaluation.reads[(name,pattern)] = read
     return table
 end
@@ -314,6 +370,31 @@ function relation_read_current(read::RelationRead,evaluation::RelationEvaluation
     table = get(evaluation.atoms,read.name,nothing)
     return !isnothing(table) && scope_identity(read.scope) == scope_identity(table.scope) &&
         read.digest == relation_range_digest(table,read.pattern)
+end
+
+function relation_page!(evaluation,name,pattern::Tuple,limit;cursor=nothing)
+    positive_integer(limit) || throw(ArgumentError("Invalid relation page size"))
+    table = evaluation.atoms[name]
+    index = table_postings(evaluation,table)
+    range = get!(index.ranges,pattern) do
+        rows = Tuple{Tuple,String}[(row,ref) for (row,ref) in relation_matching_rows(evaluation,table,pattern)]
+        sort!(rows;by=canonical_bytes)
+        digest = relation_sorted_range_digest(table,rows)
+        binding = semantic_hash([name,scope_identity(table.scope),pattern,digest])
+        (;rows,digest,binding)
+    end
+    rows,digest,binding = range.rows,range.digest,range.binding
+    read = RelationRead(name,table.scope,pattern,digest)
+    evaluation.reads[(name,pattern)] = read
+    offset = isnothing(cursor) ? 0 : cursor isa AbstractDict ? get(cursor,"next",nothing) : nothing
+    if !isnothing(cursor) && (!(cursor isa AbstractDict) || get(cursor,"read",nothing) != binding ||
+            !strict_integer(offset) || !(0 <= offset <= length(rows)))
+        return (;execution="invalidated",coverage="unknown",rows=[],cursor=nothing)
+    end
+    stop = offset + min(limit,length(rows)-offset)
+    next = stop < length(rows) ? Dict("read"=>binding,"next"=>stop) : nothing
+    coverage = !isnothing(next) ? "partial" : table.enumerated && table.domain_complete ? "complete" : "unknown"
+    return (;execution="completed",coverage,rows=rows[offset+1:stop],cursor=next)
 end
 
 function evaluate_relation(term, evaluation, signature; slots, library=[])

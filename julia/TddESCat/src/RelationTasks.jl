@@ -700,6 +700,9 @@ end
 function relation_prediction(rec,item,prediction,task;role_proof=nothing,resource_proof=nothing)
     isempty(task.reads) && return prediction
     reads = sort!(unique([rec.before_ref;task.reads]))
+    if !isnothing(role_proof) && get(role_proof,:reused,false)
+        role_proof.proved_at in reads || push!(reads,role_proof.proved_at)
+    end
     admitted = length(task.contracts) == 1 && only(task.contracts).scope in (:bound,:replicated)
     if !isnothing(role_proof)
         admitted &= role_proof.execution == "completed" && role_proof.answer == "value" &&

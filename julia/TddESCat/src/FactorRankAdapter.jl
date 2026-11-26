@@ -102,7 +102,7 @@ function factor_frame_formula(frame,encoding::FiniteEncoding)
     return cells(0,0,1<<length(xbits),1<<length(ybits),Tuple{Int,Bool}[],Tuple{Int,Bool}[])
 end
 
-function role_factor_proof!(worker,proposal,obs,snapshot)
+function role_factor_proof!(worker,proposal,obs,snapshot;memo=nothing)
     tests = proposal.tests
     length(tests) == 1 || return nothing
     test = only(tests)
@@ -118,7 +118,23 @@ function role_factor_proof!(worker,proposal,obs,snapshot)
     all(checkbounds(Bool,before,y+1,x+1) for (x,y,_) in required) ||
         return (;execution="invalid_input",answer="unknown",coverage="unavailable",
             value=nothing,detail="bound role outside the public frame")
-    observed = [(x,y,before[y+1,x+1]) for (x,y,_) in required]
-    encoding = finite_encoding((0:size(before,2)-1,0:size(before,1)-1,UInt8(0):UInt8(15)))
-    return factor_membership_proof!(worker,snapshot,encoding,required,observed)
+    origin = (minimum(first,required),minimum(row->row[2],required))
+    local_required = [(x-origin[1],y-origin[2],c) for (x,y,c) in required]
+    local_observed = [(x-origin[1],y-origin[2],before[y+1,x+1]) for (x,y,_) in required]
+    key = (size(before),Tuple(local_required),Tuple(local_observed))
+    cached = isnothing(memo) || !worker.available ? nothing : get(memo,key,nothing)
+    reused = !isnothing(cached)
+    checked = if reused
+        cached
+    else
+        encoding = finite_encoding((0:size(before,2)-1,0:size(before,1)-1,UInt8(0):UInt8(15)))
+        proof = factor_membership_proof!(worker,snapshot,encoding,local_required,local_observed)
+        result = (;proof,proved_at=snapshot,proof_origin=origin)
+        if !isnothing(memo) && proof.execution == "completed" && proof.answer == "value" && proof.coverage == "complete"
+            memo[key] = result
+        end
+        result
+    end
+    return merge(checked.proof,(;reused,origin,proof_scope="translated_bound_role",receipt=snapshot,
+        checked.proved_at,checked.proof_origin))
 end
