@@ -4,12 +4,11 @@ struct PublicFrontier
     options::Dict{String,Vector{PublicActionKey}}
     outcomes::Dict{FrontierState,Dict{PublicActionKey,Vector{Int}}}
     visits::Dict{String,Vector{Int}}
-    history_widths::Dict{String,Int}
     allowed_widths::Vector{Int}
     unresolved::Set{String}
 end
 
-PublicFrontier(widths=[1,2,4]) = PublicFrontier(Dict(),Dict(),Dict(),Dict(),
+PublicFrontier(widths=[1,2,4]) = PublicFrontier(Dict(),Dict(),Dict(),
     sort!(unique([1;filter(>(1),widths)])),Set())
 
 function frontier_prior(agenda,index,width)
@@ -21,10 +20,12 @@ function frontier_prior(agenda,index,width)
     return reverse!(collected)
 end
 
-function frontier_state(search,agenda,context,index; width=get(search.history_widths,context,1))
+function relation_history_key(agenda,context,index; width=get(agenda.history_widths,context,1))
     prior = frontier_prior(agenda,index,width)
-    return (context,Tuple(action_key(agenda.samples[i].effects.action) for i in prior))
+    return Tuple(action_key(agenda.samples[i].effects.action) for i in prior)
 end
+
+frontier_state(agenda,context,index) = (context,relation_history_key(agenda,context,index))
 
 function frontier_options!(search,context,ranked,intervention)
     candidates = PublicActionKey[action_key(row.action) for row in ranked]
@@ -36,7 +37,7 @@ end
 
 function index_frontier_observation!(search,agenda,index)
     row = agenda.samples[index]
-    node = frontier_state(search,agenda,row.context,row.preceding)
+    node = frontier_state(agenda,row.context,row.preceding)
     outcomes = get!(Dict{PublicActionKey,Vector{Int}},search.outcomes,node)
     return push!(get!(Vector{Int},outcomes,action_key(row.effects.action)),index)
 end
@@ -47,8 +48,8 @@ function compatible_frontier_history(search,agenda,context,width)
     responses = Dict{Tuple,Tuple}()
     for index in search.visits[context]
         row = agenda.samples[index]
-        state = frontier_state(search,agenda,context,row.preceding;width)
-        key = (last(state),action_key(row.effects.action))
+        past = relation_history_key(agenda,context,row.preceding;width)
+        key = (past,action_key(row.effects.action))
         outcome = frontier_outcome(row)
         get!(responses,key,outcome) == outcome || return false
     end
@@ -67,14 +68,14 @@ function frontier_observe!(search,agenda)
     context in search.unresolved && return nothing
     contrasted = first(bucket)
     frontier_outcome(agenda.samples[contrasted]) == frontier_outcome(row) && return nothing
-    old = get(search.history_widths,context,1)
+    old = get(agenda.history_widths,context,1)
     usable = findfirst(width->width > old &&
         compatible_frontier_history(search,agenda,context,width),search.allowed_widths)
     width = isnothing(usable) ? old : search.allowed_widths[usable]
     if isnothing(usable)
         push!(search.unresolved,context)
     else
-        search.history_widths[context] = width
+        agenda.history_widths[context] = width
         filter!(pair->first(first(pair)) != context,search.outcomes)
         for past in all_visits
             index_frontier_observation!(search,agenda,past)
@@ -111,12 +112,12 @@ function frontier_new_configuration(search,node,available)
     return nothing
 end
 
-function frontier_successor(search,agenda,indices)
-    next = frontier_state(search,agenda,agenda.samples[first(indices)].next_context,first(indices))
+function frontier_successor(agenda,indices)
+    next = frontier_state(agenda,agenda.samples[first(indices)].next_context,first(indices))
     for index in indices
         row = agenda.samples[index]
         row.state == "NOT_FINISHED" && !row.advanced &&
-            frontier_state(search,agenda,row.next_context,index) == next || return nothing
+            frontier_state(agenda,row.next_context,index) == next || return nothing
     end
     return next
 end
@@ -142,7 +143,7 @@ function frontier_path(search,agenda,start)
         for key in get(search.options,first(node),PublicActionKey[])
             indices = get(outcomes,key,nothing)
             isnothing(indices) && continue
-            successor = frontier_successor(search,agenda,indices)
+            successor = frontier_successor(agenda,indices)
             (isnothing(successor) || haskey(parents,successor)) && continue
             parents[successor] = (node,last(indices))
             push!(queue,successor)
@@ -153,19 +154,19 @@ end
 
 function frontier_choice(search,agenda,obs,decision,intervention,preferred)
     context = relation_context(obs)
-    node = frontier_state(search,agenda,context,agenda.previous)
+    node = frontier_state(agenda,context,agenda.previous)
     frontier_options!(search,context,decision.ranked,intervention)
     repeated = get(get(search.outcomes,node,Dict()),action_key(preferred),nothing)
     isnothing(repeated) && return nothing
     latest = agenda.samples[last(repeated)]
     # Preserve repeated actions backed by a newly observed transition. Search a
     # different branch when the planned action already led to a known state.
-    successor = frontier_successor(search,agenda,repeated)
+    successor = frontier_successor(agenda,repeated)
     (latest.advanced || !isnothing(successor) && successor != node &&
         !haskey(search.outcomes,successor)) && return nothing
 
     untried = frontier_untried(search,node)
-    live_history = frontier_prior(agenda,agenda.previous,get(search.history_widths,context,1))
+    live_history = frontier_prior(agenda,agenda.previous,get(agenda.history_widths,context,1))
     history_reads = relation_ref.(agenda.samples[live_history])
     if !isempty(untried)
         obligation = (previous=relation_ref(latest),baseline=preferred,context)

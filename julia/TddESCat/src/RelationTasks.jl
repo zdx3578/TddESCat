@@ -30,7 +30,7 @@ mutable struct RelationAgenda
     by_relation::Dict{String,Vector{String}}
     lineages::Dict{MotionShape,String}
     produced_at::Dict{String,Vector{Int}}
-    relation_replays::Set{Tuple{String,PublicActionKey,PublicActionKey}}
+    relation_replays::Set{Tuple{String,Tuple,PublicActionKey}}
     visits::Dict{Tuple{String,PublicActionKey},Vector{Int}}
     pairs::Set{Tuple{String,PublicActionKey,PublicActionKey}}
     failures::Dict{Tuple{String,PublicActionKey,PublicActionKey},Int}
@@ -40,6 +40,7 @@ mutable struct RelationAgenda
     advancement_roles::Dict{Int,Tuple}
     preparation_roles::Dict{Int,Tuple}
     outcomes::Vector{NamedTuple}
+    history_widths::Dict{String,Int}
     preparations::Set{Tuple{Int,String,Int}}
     attempt::Int
     start::Int
@@ -49,7 +50,7 @@ mutable struct RelationAgenda
 end
 
 RelationAgenda() = RelationAgenda(RelationSample[],Dict(),Dict(),Dict(),Dict(),Dict(),Set(),Dict(),Set(),Dict(),Set(),
-    Dict(),Dict(),Dict(),Dict(),NamedTuple[],Set(),1,1,0,nothing,nothing)
+    Dict(),Dict(),Dict(),Dict(),NamedTuple[],Dict(),Set(),1,1,0,nothing,nothing)
 
 relation_context(obs) = semantic_hash([obs.levels_completed,size(last(obs.frames)),
     content_hash(vec(last(obs.frames))),sort(obs.available_actions)])
@@ -59,6 +60,16 @@ relation_refs(row::RelationSample) = [row.effects.before_id,relation_ref(row)]
 previous_key(agenda,index) = index == 0 ? (0,-1,-1) : action_key(agenda.samples[index].effects.action)
 click_profile(support,point) = semantic_hash([6,shape_template(support),Tuple(relative_click(point,support))])
 primitive_profile(id) = string(id)
+
+function observed_failure(agenda,context,action,previous)
+    get(agenda.history_widths,context,1) == 1 &&
+        return haskey(agenda.failures,(context,previous_key(agenda,previous),action))
+    current = relation_history_key(agenda,context,previous)
+    return any(get(agenda.visits,(context,action),Int[])) do index
+        row = agenda.samples[index]
+        row.state == "GAME_OVER" && relation_history_key(agenda,context,row.preceding) == current
+    end
+end
 
 function visible_role_multiset(groups)
     total = sum(length,groups;init=0)
@@ -311,6 +322,7 @@ end
 function advancement_probe(agenda,obs,decision,context)
     isempty(agenda.advancement) && return nothing
     previous = previous_key(agenda,agenda.previous)
+    current_history = relation_history_key(agenda,context,agenda.previous)
     available = Set(obs.available_actions)
     scene = nothing
     choices = NamedTuple[]
@@ -320,7 +332,7 @@ function advancement_probe(agenda,obs,decision,context)
         isnothing(history) && continue
         prior = get(agenda.visits,(context,key),Int[])
         any(index->!agenda.samples[index].advanced &&
-            previous_key(agenda,agenda.samples[index].preceding) == previous,prior) && continue
+            relation_history_key(agenda,context,agenda.samples[index].preceding) == current_history,prior) && continue
         profile = if first(key) == 6
             point = key[2:3]
             support = point_component(decision.groups,point)
@@ -333,6 +345,9 @@ function advancement_probe(agenda,obs,decision,context)
         for index in Iterators.reverse(history)
             row = agenda.samples[index]
             Set(row.available) == available || continue
+            if row.context == context && relation_history_key(agenda,context,row.preceding) != current_history
+                continue
+            end
             matches = first(key) == 6 ? !isnothing(row.binding) && row.binding.appearance == profile :
                 get(agenda.advancement_roles,index,nothing) == profile
             matches || continue
@@ -351,10 +366,11 @@ function advancement_probe(agenda,obs,decision,context)
 end
 
 function verified_instance(agenda,producer,context,action,previous,level)
+    history = relation_history_key(agenda,context,previous)
     exact(index) = begin
         row = agenda.samples[index]
         row.context == context && action_key(row.effects.action) == action &&
-            previous_key(agenda,row.preceding) == previous
+            relation_history_key(agenda,context,row.preceding) == history
     end
     any(exact,producer.refuted) && return :counterexample
     clashes = any(get(agenda.visits,(context,action),Int[])) do index
@@ -362,6 +378,7 @@ function verified_instance(agenda,producer,context,action,previous,level)
     end
     clashes && return :counterexample
     any(exact,producer.support) && return :bound
+    get(agenda.history_widths,context,1) > 1 && return :unverified
     # Both local effects and disagreement remain in the same index.
     # Evidence for visual transfer excludes terminal outcomes.
     witnesses = [row.binding for index in producer.support for row in (agenda.samples[index],)
@@ -369,7 +386,8 @@ function verified_instance(agenda,producer,context,action,previous,level)
     contradicted = any(index->agenda.samples[index].level == level,producer.refuted)
     if action[1] != 6
         contexts = Set(row.context for index in producer.support for row in (agenda.samples[index],)
-            if row.level == level && row.state == "NOT_FINISHED" && previous_key(agenda,row.preceding)[1] == previous[1])
+            if row.level == level && row.state == "NOT_FINISHED" &&
+                first(previous_key(agenda,row.preceding)) == first(previous_key(agenda,previous)))
         return length(contexts) >= 2 && !contradicted ? :replicated : :unverified
     end
     return length(unique(row.point for row in witnesses)) >= 2 &&
@@ -385,7 +403,7 @@ function prepare_relation_tests(agenda,context,obs,groups,action;meters=(),condi
     isempty(ids) && return NamedTuple[]
     frame = last(obs.frames)
     enclosure = enclosure_pairs(groups)
-    previous = previous_key(agenda,agenda.previous)
+    previous = agenda.previous
     tests = NamedTuple[]
     for key in ids
         producer = agenda.producers[key]
@@ -419,6 +437,10 @@ function prepare_relation_tests(agenda,context,obs,groups,action;meters=(),condi
         for condition in conditions
             append!(reads,condition.reads)
         end
+        width = get(agenda.history_widths,context,1)
+        if width > 1
+            append!(reads,relation_ref.(agenda.samples[frontier_prior(agenda,previous,width)]))
+        end
         push!(tests,(;key,rule,scope,expected,eval.fragments,reads=unique!(reads),conditions,relations=producer.relations))
     end
     if any(test->test.scope == :bound,tests)
@@ -441,8 +463,8 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
             bound = context == row.context && row.level == obs.levels_completed &&
                 action["id"] in obs.available_actions
             if bound && !isnothing(frontier)
-                bound = frontier_state(frontier,agenda,context,previous) ==
-                    frontier_state(frontier,agenda,row.context,row.preceding)
+                bound = frontier_state(agenda,context,previous) ==
+                    frontier_state(agenda,row.context,row.preceding)
             end
             if bound
                 obligation = (;failure=failure.event,source=relation_ref(row),
@@ -461,7 +483,7 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
             push!(rows,(action=intervention.action,rank=(0,0)))
         end
         if !isnothing(frontier)
-            node = frontier_state(frontier,agenda,context,previous)
+            node = frontier_state(agenda,context,previous)
             tried = get(frontier.outcomes,node,nothing)
             if !isnothing(tried)
                 filter!(row->!haskey(tried,action_key(row.action)),rows)
@@ -478,8 +500,7 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
                 key = action_key(row.action)
                 support = key[1] == 6 ? point_component(decision.groups,key[2:3]) : nothing
                 role = isnothing(support) ? nothing : click_profile(support,key[2:3])
-                prior = previous_key(agenda,previous)
-                return (haskey(agenda.failures,(context,prior,key)),
+                return (observed_failure(agenda,context,key,previous),
                     !isnothing(failure.role) && role != failure.role,
                     length(get(agenda.visits,(context,key),Int[])),row.rank)
             end
@@ -564,7 +585,8 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
 end
 
 function observed_relation_task(agenda,obs,decision,context;meters)
-    previous = previous_key(agenda,agenda.previous)
+    previous = agenda.previous
+    history = relation_history_key(agenda,context,previous)
     condition_view = get(decision,:condition_view,nothing)
     examined = Set{PublicActionKey}()
     candidates = NamedTuple[]
@@ -574,8 +596,8 @@ function observed_relation_task(agenda,obs,decision,context;meters)
         key = action_key(action)
         key in examined && continue
         push!(examined,key)
-        route = (context,previous,key)
-        (route in agenda.relation_replays || haskey(agenda.failures,route)) && continue
+        route = (context,history,key)
+        (route in agenda.relation_replays || observed_failure(agenda,context,key,previous)) && continue
         action["id"] in obs.available_actions || continue
         tests = prepare_relation_tests(agenda,context,obs,decision.groups,action;meters,condition_view)
         isempty(tests) && continue
@@ -720,7 +742,7 @@ function failure_retry!(agenda;frontier=nothing)
         scope in agenda.reopened && return nothing
         length(first_sample.available) > 1 || 6 in first_sample.available || return nothing
     else
-        origin = frontier_state(frontier,agenda,first_sample.context,first_sample.preceding)
+        origin = frontier_state(agenda,first_sample.context,first_sample.preceding)
         if isempty(frontier_untried(frontier,origin))
             reachable = frontier_path(frontier,agenda,origin)
             if !isnothing(reachable)

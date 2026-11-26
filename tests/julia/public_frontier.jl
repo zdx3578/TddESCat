@@ -47,7 +47,7 @@ end
     alternative = copy(left)
     alternative[1,1] = 0x07
     observe!(alternative,[2,3],1;state="GAME_OVER")
-    initial = TC.frontier_state(search,agenda,TC.relation_context(recorded("bound",nothing,left,2,[1]).observation),2)
+    initial = TC.frontier_state(agenda,TC.relation_context(recorded("bound",nothing,left,2,[1]).observation),2)
     @test TC.frontier_path(search,agenda,initial) === nothing
 end
 
@@ -66,7 +66,8 @@ end
         rendering[2,2] = UInt8(trial)
         for (position,(id,frame,available)) in enumerate(
                 ((preparation,origin,[5]),(5,shared,[7]),(7,rendering,[7])))
-            after = recorded("trial-$trial-$position",previous.event["event_id"],frame,id,available)
+            state = trial == 1 && position == 3 ? "GAME_OVER" : "NOT_FINISHED"
+            after = recorded("trial-$trial-$position",previous.event["event_id"],frame,id,available;state)
             position == 3 && (context = TC.relation_context(previous.observation))
             TC.observe_relations!(agenda,previous,after,TC.observed_effects(previous,after),
                 nothing,NamedTuple[],nothing)
@@ -77,13 +78,22 @@ end
     @test refined.width == 2 && refined.before_width == 1
     @test refined.evidence == ["trial-1-3","trial-2-3"]
     @test refined.history_reads == [["trial-1-1","trial-1-2"],["trial-2-1","trial-2-2"]]
-    left = TC.frontier_state(search,agenda,context,2)
-    right = TC.frontier_state(search,agenda,context,5)
+    left = TC.frontier_state(agenda,context,2)
+    right = TC.frontier_state(agenda,context,5)
     @test left != right
     histories = [search.outcomes[node][(7,-1,-1)] for node in (left,right)]
     @test histories == [[3],[6]]
-    successors = [TC.frontier_successor(search,agenda,group) for group in histories]
-    @test first(successors[1]) != first(successors[2])
+    successors = [TC.frontier_successor(agenda,group) for group in histories]
+    @test isnothing(successors[1]) && !isnothing(successors[2])
+    action = (7,-1,-1)
+    @test TC.observed_failure(agenda,context,action,2)
+    @test !TC.observed_failure(agenda,context,action,5)
+    rule = first(values(agenda.producers)).rule
+    producer = TC.RelationProducer(rule,["confirmed"],[6],Int[])
+    @test TC.verified_instance(agenda,producer,context,action,5,0) == :bound
+    @test TC.verified_instance(agenda,producer,context,action,2,0) == :unverified
+    push!(producer.refuted,3)
+    @test TC.verified_instance(agenda,producer,context,action,2,0) == :counterexample
     history = TC.response_history_task(agenda,0)
     @test length(history.episodes) == 2
     @test only(unique(episode.origin for episode in history.episodes)) == first(agenda.samples).context

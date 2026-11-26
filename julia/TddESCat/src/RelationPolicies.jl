@@ -363,7 +363,8 @@ function trajectory_reads(corpus,agenda)
         row = agenda.samples[index]
         (;event=relation_ref(row),context=row.context,action=action_key(row.effects.action),
             previous=previous_key(agenda,row.preceding),after=row.next_context,
-            state=row.state,advanced=row.advanced)
+            state=row.state,advanced=row.advanced,history_width=get(agenda.history_widths,row.context,1),
+            history=relation_history_key(agenda,row.context,row.preceding))
     end for index in indices]
 end
 
@@ -372,7 +373,10 @@ function trajectory_counterexamples(reads,cutoff,agenda)
     for read in reads, index in get(agenda.visits,(read.context,read.action),Int[])
         index > cutoff || continue
         row = agenda.samples[index]
-        previous_key(agenda,row.preceding) == read.previous || continue
+        same_history = hasproperty(read,:history) ?
+            relation_history_key(agenda,row.context,row.preceding;width=read.history_width) == read.history :
+            previous_key(agenda,row.preceding) == read.previous
+        same_history || continue
         (row.next_context,row.state,row.advanced) == (read.after,read.state,read.advanced) && continue
         push!(conflicts,relation_ref(row))
     end
@@ -388,8 +392,7 @@ function policy_task_options(agenda,instruction,obs,decision;meters=())
     condition_view = get(decision,:condition_view,nothing)
     options = NamedTuple[]
     for action in actions
-        prior = previous_key(agenda,agenda.previous)
-        haskey(agenda.failures,(context,prior,action_key(action))) && continue
+        observed_failure(agenda,context,action_key(action),agenda.previous) && continue
         if id == 6
             point = action_key(action)[2:3]
             support = point_component(decision.groups,point)
