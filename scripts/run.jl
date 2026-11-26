@@ -25,10 +25,12 @@ function capture(config, public_dir; supervised=false, collect_only=false)
         end
         if !isempty(prior.trials)
             append!(knowledge.trials,prior.trials)
-            prepared = TddESCat.online_learn!(knowledge,config,store,prior.pairs,ROOT)
+            prepared = Base.invokelatest(TddESCat.online_learn!,knowledge,config,store,prior.pairs,ROOT)
             frozen && isnothing(prepared) && error("Frozen evaluation has no proved publication")
-            get(config.learning,"association",false) && TddESCat.train_prior_relations!(knowledge,config,store,ROOT)
-            get(config.learning,"sequences",false) && TddESCat.train_prior_programs!(knowledge,config,store,ROOT)
+            get(config.learning,"association",false) &&
+                Base.invokelatest(TddESCat.train_prior_relations!,knowledge,config,store,ROOT)
+            get(config.learning,"sequences",false) &&
+                Base.invokelatest(TddESCat.train_prior_programs!,knowledge,config,store,ROOT)
         end
         games = list_games(rec.client)
         requested = get(config.environment, "game_id", nothing)
@@ -53,7 +55,11 @@ function capture(config, public_dir; supervised=false, collect_only=false)
                     end
                     event = TddESCat.read_json(TddESCat.store_path(store, "events", rec.before_ref * ".json"))
                     learned = TddESCat.with_compute(config) do backends
-                        TddESCat.run_online!(rec,(event=event,observation=rec.observation),config,ROOT;
+                        isempty(backends) || TddESCat.atomic_json(
+                            TddESCat.store_path(store,"learning","backends.json"),
+                            Dict(name=>worker.capabilities for (name,worker) in backends))
+                        Base.invokelatest(TddESCat.run_online!,rec,
+                            (event=event,observation=rec.observation),config,ROOT;
                             knowledge,frozen,backends)
                     end
                 end
@@ -132,7 +138,8 @@ function main(args)
         mkpath(cfg.run_root)
         joinpath(mktempdir(cfg.run_root; prefix=cfg.run_name * "-", cleanup=false), "public")
     end
-    result = capture(cfg, public_dir; supervised)
+    # Give replay and cold protocol startup their own compilation boundary.
+    result = Base.invokelatest(capture,cfg,public_dir;supervised)
     println(JSON.json(result))
     return result.quarantined || result.recorded == 0 ? 1 : 0
 end

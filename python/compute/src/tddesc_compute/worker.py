@@ -1,6 +1,7 @@
 """Execute compute/v1 requests over a private line-delimited channel."""
 
 import json
+from importlib.metadata import PackageNotFoundError, version
 import sys
 
 from . import solver_adapter
@@ -8,9 +9,42 @@ from . import solver_adapter
 PROTOCOL = "compute/v1"
 
 
+def capabilities():
+    supported = {
+        "backend": "cvc5",
+        "version": version("cvc5"),
+        "algebra": "typed_scalar_ast",
+        "numeric": "exact",
+        "operations": ["capabilities", "solve", "synthesize_guard"],
+    }
+    try:
+        supported["cirkit"] = {
+            "version": version("libcirkit"),
+            "runtime": version("torch"),
+            "domain": "finite_categorical_partial_observations",
+            "numeric": "normalized_float",
+            "artifact": "categorical-product-mixture-v1",
+        }
+    except PackageNotFoundError:
+        pass
+    else:
+        supported["operations"].extend(("train_circuit", "query_circuit"))
+    try:
+        supported["aalpy"] = {
+            "version": version("aalpy"),
+            "domain": "confirmed_mealy_prefixes",
+            "unseen_edges": "unknown",
+        }
+    except PackageNotFoundError:
+        pass
+    else:
+        supported["operations"].append("learn_history")
+    return supported
+
+
 def dispatch(operation, payload):
     if operation == "capabilities":
-        return {"backend": "cvc5", "algebra": "typed_scalar_ast", "numeric": "exact"}
+        return capabilities()
     if operation == "solve":
         return solver_adapter.solve(payload)
     if operation == "synthesize_guard":

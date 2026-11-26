@@ -6,14 +6,19 @@ mutable struct ComputeWorker
     request_id::Int
     lock::ReentrantLock
     available::Bool
+    capabilities::Union{Nothing,Dict{String,Any}}
 end
 
-ComputeWorker(command::Cmd) = ComputeWorker(open(command,"r+"),0,ReentrantLock(),true)
+ComputeWorker(command::Cmd) = ComputeWorker(open(command,"r+"),0,ReentrantLock(),true,nothing)
 
 function compute_request!(worker::ComputeWorker, snapshot::String, operation::String, payload=nothing)
     return lock(worker.lock) do
         worker.available || return (;execution="invalidated",answer="unknown",coverage="unavailable",
             value=nothing,detail="worker generation is closed")
+        if !isnothing(worker.capabilities) && operation ∉ worker.capabilities["operations"]
+            return (;execution="unsupported",answer="unknown",coverage="unavailable",
+                value=nothing,detail="operation is outside the declared backend capabilities")
+        end
         worker.request_id += 1
         id = worker.request_id
         body = Dict{String,Any}("protocol"=>COMPUTE_PROTOCOL,"request_id"=>id,
@@ -47,6 +52,17 @@ function Base.close(worker::ComputeWorker)
     end
 end
 
+function declare_compute_backend!(worker,entry,expected,required)
+    capabilities = require_compute_value(compute_request!(worker,"bootstrap","capabilities"))
+    operations = get(capabilities,"operations",nothing)
+    capabilities["backend"] == expected && nonempty_string(get(capabilities,"version",nothing)) &&
+        operations isa AbstractVector && all(nonempty_string,operations) && allunique(operations) ||
+        error("Invalid compute capabilities for " * entry)
+    issubset(required,operations) || error("Compute backend is missing required operations for " * entry)
+    worker.capabilities = capabilities
+    return worker
+end
+
 function with_compute(f,config)
     backends = Dict{String,ComputeWorker}()
     try
@@ -55,13 +71,20 @@ function with_compute(f,config)
                 command = endswith(name,"_python") ? Cmd([path,"-m","tddesc_compute.worker"]) : Cmd([path])
                 worker = ComputeWorker(command)
                 backends[name] = worker
-                expected = endswith(name,"_python") ? "cvc5" : "atddc"
-                capabilities = require_compute_value(compute_request!(worker,"bootstrap","capabilities"))
-                capabilities["backend"] == expected || error("Unexpected compute backend")
+                if name == "circuit_python"
+                    declare_compute_backend!(worker,name,"cvc5",["train_circuit","query_circuit"])
+                elseif name == "solver_python"
+                    declare_compute_backend!(worker,name,"cvc5",["solve","synthesize_guard"])
+                else
+                    declare_compute_backend!(worker,name,"atddc",["compile_bool","entails_bool","release"])
+                end
             end
-            if haskey(config.compute,"solver_python") && get(config.learning,"sequences",false)
+            if haskey(config.compute,"solver_python") && !isnothing(config.learning) &&
+                    get(config.learning,"sequences",false)
                 command = Cmd([config.compute["solver_python"],"-m","tddesc_compute.worker"])
-                backends["policy_synthesis"] = ComputeWorker(command)
+                worker = ComputeWorker(command)
+                backends["policy_synthesis"] = worker
+                declare_compute_backend!(worker,"policy_synthesis","cvc5",["synthesize_guard"])
             end
         end
         return f(backends)

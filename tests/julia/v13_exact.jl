@@ -17,6 +17,10 @@ end
     @test Set(TC.galley_join_pairs(a,b)) == Set((i,j) for i in eachindex(a), j in eachindex(b) if a[i] == b[j])
     @test isempty(TC.galley_join_pairs(a,Tuple{Int,Int}[]))
     @test isempty(TC.galley_join_pairs([(1,)],[(2,)]))
+    @test Set(TC.exact_join_pairs(a,b)) == Set(TC.galley_join_pairs(a,b))
+    large = [(i%7,i%3) for i in 1:65]
+    @test Set(TC.exact_join_pairs(large,reverse(large))) ==
+        Set(TC.indexed_join_pairs(large,reverse(large)))
 
     header = [("Integer","before")]
     function evaluation(event,rows;view="public")
@@ -39,6 +43,19 @@ function with_worker(f,path,args...)
         f(worker)
     finally
         close(worker)
+    end
+end
+
+@testset "Runtime backend capabilities restrict dispatch" begin
+    config = load_run_config(joinpath(ROOT,"config","v13_public25.toml"))
+    TC.with_compute(config) do workers
+        factor = workers["factor_kernel"]
+        @test factor.capabilities["numeric"] == "exact_rational"
+        count = factor.request_id
+        @test TC.compute_request!(factor,"scope","query_circuit").execution == "unsupported"
+        @test factor.request_id == count
+        @test workers["circuit_python"].capabilities["cirkit"]["version"] == "0.3.1"
+        @test "synthesize_guard" in workers["policy_synthesis"].capabilities["operations"]
     end
 end
 

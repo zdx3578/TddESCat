@@ -36,6 +36,8 @@ mutable struct RelationAgenda
     failures::Dict{Tuple{String,PublicActionKey,PublicActionKey},Int}
     reopened::Set{Tuple{String,PublicActionKey,PublicActionKey}}
     delayed::Dict{String,Vector{Tuple{Int,String}}}
+    advancement::Dict{Tuple{Int,Int},Vector{Int}}
+    advancement_roles::Dict{Int,Tuple}
     preparations::Set{Tuple{Int,String,Int}}
     attempt::Int
     start::Int
@@ -45,7 +47,7 @@ mutable struct RelationAgenda
 end
 
 RelationAgenda() = RelationAgenda(RelationSample[],Dict(),Dict(),Dict(),Dict(),Dict(),Set(),Dict(),Set(),Dict(),Set(),
-    Dict(),Set(),1,1,0,nothing,nothing)
+    Dict(),Dict(),Dict(),Set(),1,1,0,nothing,nothing)
 
 relation_context(obs) = semantic_hash([obs.levels_completed,size(last(obs.frames)),
     content_hash(vec(last(obs.frames))),sort(obs.available_actions)])
@@ -55,6 +57,11 @@ relation_refs(row::RelationSample) = [row.effects.before_id,relation_ref(row)]
 previous_key(agenda,index) = index == 0 ? (0,-1,-1) : action_key(agenda.samples[index].effects.action)
 click_profile(support,point) = semantic_hash([6,shape_template(support),Tuple(relative_click(point,support))])
 primitive_profile(id) = string(id)
+
+function visible_role_multiset(groups)
+    total = sum(length,groups;init=0)
+    return Tuple(sort!([semantic_hash(shape_template(group)) for group in groups if 4length(group) <= total]))
+end
 
 function effect_relation(family,prototype,values)
     return string(family) * "-" * semantic_hash([prototype,values])
@@ -160,6 +167,8 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
         observed = sample.next_context == proposal.obligation.expected &&
             sample.advanced == proposal.obligation.advanced && sample.state == "NOT_FINISHED"
         feedback = merge(feedback,(result=observed ? :established : :refuted,))
+    elseif !isnothing(proposal) && proposal.intent == :probe_observed_advancement
+        feedback = merge(feedback,(result=sample.advanced ? :established : :refuted,))
     end
     if !isnothing(feedback)
         for row in feedback.tests
@@ -177,6 +186,12 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
         end
     end
     if advanced
+        state = (first(action),first(previous))
+        push!(get!(Vector{Int},agenda.advancement,state),index)
+        if first(action) != 6
+            before_groups = isnothing(groups) ? public_components(last(prev.frames)) : groups
+            agenda.advancement_roles[index] = visible_role_multiset(before_groups)
+        end
         empty!(agenda.lineages)
     else
         links = [(effect.before,effect.after,agenda.lineages[effect.before]) for effect in effects.effects
@@ -203,6 +218,48 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
         attempt=sample.attempt,prior=sample.preceding == 0 ? nothing : relation_ref(agenda.samples[sample.preceding]),
         reached=(;advanced,state=next.state),binding,contact=isnothing(contact) ? nothing : contact.event,
         site_transitions=[row.observed for row in site_changes],producer=contract,feedback,failure,unresolved)
+end
+
+function advancement_probe(agenda,obs,decision,context)
+    isempty(agenda.advancement) && return nothing
+    previous = previous_key(agenda,agenda.previous)
+    available = Set(obs.available_actions)
+    scene = nothing
+    choices = NamedTuple[]
+    for item in decision.ranked
+        key = action_key(item.action)
+        history = get(agenda.advancement,(first(key),first(previous)),nothing)
+        isnothing(history) && continue
+        prior = get(agenda.visits,(context,key),Int[])
+        any(index->!agenda.samples[index].advanced &&
+            previous_key(agenda,agenda.samples[index].preceding) == previous,prior) && continue
+        profile = if first(key) == 6
+            point = key[2:3]
+            support = point_component(decision.groups,point)
+            isnothing(support) && continue
+            click_profile(support,point)
+        else
+            isnothing(scene) && (scene = visible_role_multiset(decision.groups))
+            scene
+        end
+        for index in Iterators.reverse(history)
+            row = agenda.samples[index]
+            Set(row.available) == available || continue
+            matches = first(key) == 6 ? !isnothing(row.binding) && row.binding.appearance == profile :
+                get(agenda.advancement_roles,index,nothing) == profile
+            matches || continue
+            push!(choices,(;action=item.action,row,unverified_instance=row.context != context,
+                prior=length(prior),rank=item.rank))
+            break
+        end
+    end
+    isempty(choices) && return nothing
+    best = argmin(item->(item.unverified_instance,item.prior,item.rank),choices)
+    obligation = (;source=relation_ref(best.row),expected="public_advancement",
+        scope=best.unverified_instance ? "new_instance" : "observed_instance",
+        source_level=best.row.level)
+    return (;action=best.action,intent=:probe_observed_advancement,tests=NamedTuple[],
+        reads=relation_refs(best.row),obligation)
 end
 
 function verified_instance(agenda,producer,context,action,previous,level)
@@ -350,6 +407,8 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
     end
     sought = observed_relation_task(agenda,obs,decision,context;meters)
     isnothing(sought) || return sought
+    progress = advancement_probe(agenda,obs,decision,context)
+    isnothing(progress) || return progress
     if !isnothing(prior) && prior.unchanged
         first_action = action_key(prior.effects.action)
         rows = filter(decision.ranked) do row
@@ -428,7 +487,7 @@ function task_arbitration(item,spatial,intervention,relation,experiment;
         priority = relation.intent in (:recover_confirmed_progress,:restore_failure_experiment_context) ? -1 :
             relation.intent in (:revise_failed_trace,:complete_preparation) ? 1 :
             relation.intent in (:test_concrete_effect,:distinguish_changed_context,:test_delayed_effect,
-                :establish_preparation,:establish_observed_relation) ? 3 : 5
+                :establish_preparation,:establish_observed_relation,:probe_observed_advancement) ? 3 : 5
         reason = !isnothing(intervention) && relation.action == intervention.action &&
             relation.intent in (:test_concrete_effect,:test_delayed_effect) ?
             intervention.reason : string(relation.intent)

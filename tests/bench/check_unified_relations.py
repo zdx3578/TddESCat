@@ -27,10 +27,16 @@ class Fixture(ARCBaseGame):
             frame[10:13, 38:41] = 4
         else:
             frame[40:42, 44:46] = 2
-        actions = {"delayed": [5, 7], "remote": [5, 6], "directions": [6], "restart": [6], "progress-restart": [6], "restart-choices": [6]}
+        actions = {"delayed": [5, 7], "remote": [5, 6], "directions": [6],
+            "restart": [6], "progress-restart": [6], "restart-choices": [6],
+            "advancement-transfer": [6]}
         levels = [Level(sprites=[Sprite(frame.copy(), name="board")])]
         if MODE == "progress-restart":
             frame[10:13, 23:26] = 4
+            frame[10:13, 38:41] = 4
+            levels.append(Level(sprites=[Sprite(frame, name="board")]))
+        if MODE == "advancement-transfer":
+            frame[10:13, 8:11] = 3
             frame[10:13, 38:41] = 4
             levels.append(Level(sprites=[Sprite(frame, name="board")]))
         super().__init__(GAME, levels,
@@ -90,6 +96,8 @@ class Fixture(ARCBaseGame):
                     self.lose()
                 elif tile == 38:
                     self.next_level()
+            if MODE == "advancement-transfer" and tile in (8, 38) and pixels[y, x] == 4:
+                self.next_level()
         self.complete_action()
 """
 
@@ -179,6 +187,14 @@ def observed_steps(public):
         decision = read(public / "decisions" / command)
         feedback = read(public / "checks" / command)["public_relation_feedback"]
         parent = trace[event["before_ref"]][1]
+        if grounded := decision.get("grounding_read"):
+            origin = trace[event["before_ref"]][0]
+            assert grounded == {
+                "event": origin["event_id"],
+                "response_blob": origin["response_blob"],
+            }
+            source = read(public / "grounding" / (origin["event_id"] + ".json"))
+            assert source["response_blob"] == origin["response_blob"]
         assert (
             feedback["event"] == event["event_id"]
             and feedback["before"] == event["before_ref"]
@@ -198,6 +214,16 @@ def observed_steps(public):
 
 def verify(mode, public):
     rows = list(observed_steps(public))
+    if mode == "advancement-transfer":
+        first, second = rows
+        assert first[2]["levels_completed"] == 1
+        assert second[3]["intent"] == "probe_observed_advancement"
+        assert second[3]["obligation"]["source"] == first[0]["event_id"]
+        assert second[3]["obligation"]["scope"] == "new_instance"
+        assert second[0]["action"]["x"] != first[0]["action"]["x"]
+        assert second[4]["feedback"]["result"] == "established"
+        assert second[2]["state"] == "WIN"
+        return [row[0]["event_id"] for row in rows]
     if mode == "restart-choices":
         assert [row[2]["state"] for row in rows] == ["GAME_OVER", "GAME_OVER", "WIN"]
         assert len({row[0]["action"]["x"] for row in rows}) == 3
@@ -301,6 +327,7 @@ def main(config, run):
         "restart",
         "progress-restart",
         "restart-choices",
+        "advancement-transfer",
     )
     with ThreadPoolExecutor(max_workers=len(modes)) as pool:
         cases = {

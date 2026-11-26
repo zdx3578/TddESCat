@@ -3,6 +3,24 @@ import Galley
 const GALLEY_QUERY_LOCK = ReentrantLock()
 const GALLEY_JOIN_SCHEDULER = Galley.galley_scheduler(;cache=true)
 
+function indexed_join_pairs(left_keys,right_keys)
+    postings = Dict{Tuple,Vector{Int}}()
+    for (index,key) in enumerate(right_keys)
+        push!(get!(Vector{Int},postings,key),index)
+    end
+    absent = Int[]
+    return [(i,j) for (i,key) in enumerate(left_keys) for j in get(postings,key,absent)]
+end
+
+function exact_join_pairs(left_keys,right_keys)
+    # Tiny relations can stay in their ordered logical columns without
+    # constructing and lowering sparse tensors for an equality join.
+    if max(length(left_keys),length(right_keys)) <= 32
+        return indexed_join_pairs(left_keys,right_keys)
+    end
+    return galley_join_pairs(left_keys,right_keys)
+end
+
 """Return exact row pairs for an equality join over externally encoded keys."""
 function galley_join_pairs(left_keys::AbstractVector{<:Tuple}, right_keys::AbstractVector{<:Tuple})
     (isempty(left_keys) || isempty(right_keys)) && return Tuple{Int,Int}[]

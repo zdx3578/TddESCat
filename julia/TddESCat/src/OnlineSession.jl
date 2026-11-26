@@ -33,13 +33,15 @@ end
 OnlineKnowledge() = OnlineKnowledge(JointMechanism[],ActiveMechanism[],PublicTrial[],0,Dict{String,Int}(),
     Any[],Dict(),Any[],Dict{String,PublicEffects}(),ProjectionMemory(),nothing)
 
-function publish_receipt_regions!(knowledge,store,entry;previous=nothing)
-    view = receipt_regions(entry;previous)
+function publish_receipt_regions!(knowledge,store,entry,view=receipt_regions(entry))
+    event = entry.event
+    view.event == event["event_id"] || error("Grounding belongs to a different public receipt")
     frames = [(frame=index-1,shape=size(regions.owner),regions=length(regions.groups),
         shared_boundaries=length(regions.boundaries),changed_pixels=view.differences[index])
         for (index,regions) in enumerate(view.frames)]
     atomic_json(store_path(store,"grounding",view.event * ".json"),
-        (;schema_version=1,event=view.event,before=entry.event["before_ref"],frames))
+        (;schema_version=1,event=view.event,before=event["before_ref"],frames,
+            response_blob=event["response_blob"]))
     knowledge.receipt = view
     return view
 end
@@ -716,7 +718,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             event = read_json(store_path(rec.store,"events",rec.before_ref * ".json"))
             reset_entry = (;event,observation=rec.observation)
             register_evidence_obligation!(rec.store,reset_entry;frozen)
-            relation_tasks && publish_receipt_regions!(knowledge,rec.store,reset_entry;previous=entry)
+            reset_regions = relation_tasks ? receipt_regions(reset_entry;previous=entry) : nothing
             entry = reset_entry
             sequence_enabled && push!(sequence_events,entry)
             continuation = nothing
@@ -745,6 +747,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 event=rec.before_ref,prior=event["before_ref"],attempt=relations.attempt,revision=relations.restart,
                 previous_level=obs.levels_completed,level=rec.observation.levels_completed,
                 full_reset=rec.observation.full_reset,session=rec.observation.guid,rebound=fresh_binding))
+            isnothing(reset_regions) || publish_receipt_regions!(knowledge,rec.store,reset_entry,reset_regions)
             history = [0]
             ready_at = time_ns()
             continue
@@ -755,6 +758,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         !isnothing(goal) && goal_truth(goal,last(obs.frames)) == proven && break
         programs_pending = !isempty(knowledge.programs)
         object_probes = !isnothing(visual) && !composing && 6 in obs.available_actions
+        relation_tasks && knowledge.receipt.event != rec.before_ref &&
+            error("Decision would consume a different grounded receipt")
         decision = ranked_public_actions(knowledge,obs,history,attempts,coordinates;
             composing,programs_pending,program_cursor,meters,object_probes,regions=knowledge.receipt)
         click_scene = object_probes ? intervention_scene(last(obs.frames),decision.groups) : NamedTuple[]
@@ -1065,6 +1070,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         isnothing(policy_note) || (decision_record["policy"] = policy_note)
         isnothing(task) || (decision_record["relation_task"] = task)
         if relation_tasks
+            decision_record["grounding_read"] = (event=knowledge.receipt.event,
+                response_blob=entry.event["response_blob"])
             decision_record["task_arbitration"] = arbitration
             isnothing(relation_task) || (decision_record["public_relation_task"] = relation_task)
             isnothing(role_proof) || (decision_record["factor_role_proof"] = role_proof)
@@ -1133,7 +1140,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         isnothing(experiment) || record_experiment_service!(experiments,rec.store,experiment,event)
         sample = motion_example(entry,resulting;history)
         before_regions = knowledge.receipt
-        after_regions = relation_tasks ? publish_receipt_regions!(knowledge,rec.store,resulting;previous=entry) : nothing
+        after_regions = relation_tasks ? receipt_regions(resulting;previous=entry) : nothing
         effects = observed_effects(entry,resulting;meters=measurement,before_regions,after_regions)
         intervention_feedback = observe_intervention!(intervention_memory,intervention,entry,resulting,effects;
             learn=!frozen,ordinal=count+1)
@@ -1306,6 +1313,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 "site_transitions"=>site_transitions,
                 "site_surveys"=>isnothing(visual) ? [] : take_site_surveys!(visual),
                 "visual_observation"=>visual_observation,"motion_revision"=>motion_revision))
+        isnothing(after_regions) || publish_receipt_regions!(knowledge,rec.store,resulting,after_regions)
         attempts[action_key(item.action)] = get(attempts,action_key(item.action),0) + 1
         push!(history,item.action["id"])
         frozen || push!(pairs,(entry,resulting))

@@ -179,6 +179,14 @@ def evaluate_one(task_dir):
                 "state": response["state"],
             }
             assert decision["task_arbitration"]["choice"]["action"] == event["action"]
+            if grounded := decision.get("grounding_read"):
+                source = trace[event["before_ref"]][0]
+                assert grounded == {
+                    "event": source["event_id"],
+                    "response_blob": source["response_blob"],
+                }
+                recorded = load(public / "grounding" / (source["event_id"] + ".json"))
+                assert recorded["response_blob"] == source["response_blob"]
             relation_results["confirmed_transitions"] += 1
             if operation := decision.get("public_relation_task"):
                 relation_results[operation["intent"]] += 1

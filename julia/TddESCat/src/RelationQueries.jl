@@ -176,7 +176,7 @@ function exact_relation_join(evaluation, left, right, layout)
     header = joined_columns(left.columns,right.columns,shared,output,distinct)
     key(row,side) = Tuple(row[pair[side]+1] for pair in shared)
     left_rows, right_rows = collect(left.rows), collect(right.rows)
-    row_pairs = galley_join_pairs([key(row,1) for (row,_) in left_rows],
+    row_pairs = exact_join_pairs([key(row,1) for (row,_) in left_rows],
         [key(row,2) for (row,_) in right_rows])
     result = Dict{Tuple,Vector{String}}()
     for (l,r) in row_pairs

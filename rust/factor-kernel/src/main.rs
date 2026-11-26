@@ -164,8 +164,15 @@ impl Session {
         Ok(match operation {
             Capabilities => json!({
                 "session":self.name, "backend":"atddc",
+                "version":"0.1.0", "adapter_version":env!("CARGO_PKG_VERSION"),
                 "algebra":"finite_complete_bool", "numeric":"exact_rational",
                 "tree_conversion":"checked_local_rotation",
+                "operations":[
+                    "capabilities","compile_bool","apply_bool","negate_bool",
+                    "condition_bool","project_bool","count_models","evaluate_bool",
+                    "evaluate_bool_batch","equal_bool","entails_bool","rotate_bool",
+                    "describe","export_canonical","import_canonical","acquire","release"
+                ],
                 "artifact_schema":1
             }),
             CompileBool { layout, formula } => {
