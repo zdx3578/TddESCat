@@ -67,14 +67,36 @@ function observed_relation_context(frame,binding,event; slot=0)
     return (; context,subjects)
 end
 
-function relation_condition!(signature,connectivity,pigment;slot=0)
+function relation_condition!(signature,connectivity,pigment;slot=0,neighbor_count=nothing)
     edges = relation_atom!(signature,"adjacent-" * string(connectivity),[BEFORE_ROLE_COLUMN,BEFORE_ROLE_COLUMN];slot)
     colors = relation_atom!(signature,"color-" * string(connectivity),[BEFORE_ROLE_COLUMN,BEFORE_COLOR_COLUMN];slot)
     selected = relation_operator!(signature,"SelectEqual",[colors.sort],colors.sort;
         layout=Dict("left"=>1,"value"=>pigment))
     filtered = (; term=Call(selected,colors.term),sort=colors.sort)
     joined = relation_join!(signature,edges,filtered;shared=[(1,0)],output=[0,1,3])
+    if !isnothing(neighbor_count)
+        domain = relation_project!(signature,colors,[0])
+        counts = relation_count_distinct!(signature,joined,domain;groups=[0],distinct=[1])
+        matches = relation_operator!(signature,"SelectEqual",[counts.sort],counts.sort;
+            layout=Dict("left"=>1,"value"=>neighbor_count))
+        matched = (;term=Call(matches,counts.term),sort=counts.sort)
+        return relation_project!(signature,matched,[0])
+    end
     return relation_project!(signature,joined,[0])
+end
+
+function observed_neighbor_counts(observed,connectivity)
+    subject = observed.subjects[connectivity]
+    isnothing(subject) && return nothing
+    suffix = string(connectivity)
+    edges = observed.context.atoms["adjacent-" * suffix]
+    pigments = observed.context.atoms["color-" * suffix]
+    colors = Dict(first(row)=>last(row) for row in keys(pigments.rows))
+    counts = zeros(Int,16)
+    for (origin,neighbor) in keys(edges.rows)
+        origin == subject && (counts[colors[neighbor]+1] += 1)
+    end
+    return counts
 end
 
 function relation_definition(program,signature)
@@ -116,13 +138,30 @@ function construct_relation(examples)
     signature = Dict{String,Any}("schema_version"=>3,"signature_id"=>"observed-guard-v1",
         "sorts"=>Dict{String,Any}[],"operators"=>Dict{String,Any}[])
     candidates = []
-    for connectivity in (4,8), pigment in 0:15
-        query = relation_condition!(signature,connectivity,pigment)
+    function test_candidate(connectivity,pigment;neighbor_count=nothing)
+        query = relation_condition!(signature,connectivity,pigment;neighbor_count)
         term = render_term(query.term)
         judged = [relation_truth(term,signature,observed,connectivity) for observed in contexts]
-        all(result.verdict == example.verdict for (result,example) in zip(judged,recalled)) || continue
+        all(result.verdict == example.verdict for (result,example) in zip(judged,recalled)) || return
         entry = relation_definition(term,signature)
-        push!(candidates,(; term,entry,connectivity,pigment,judged))
+        push!(candidates,(;term,entry,connectivity,pigment,judged,neighbor_count))
+    end
+    for connectivity in (4,8), pigment in 0:15
+        test_candidate(connectivity,pigment)
+    end
+    if isempty(candidates)
+        for connectivity in (4,8)
+            observations = [observed_neighbor_counts(context,connectivity) for context in contexts]
+            any(isnothing,observations) && continue
+            for pigment in 0:15
+                counts = [row[pigment+1] for row in observations]
+                supported = unique(counts[i] for i in eachindex(counts) if recalled[i].verdict == proven)
+                length(supported) == 1 || continue
+                neighbor_count = only(supported)
+                all(counts[i] != neighbor_count for i in eachindex(counts) if recalled[i].verdict == disproven) || continue
+                test_candidate(connectivity,pigment;neighbor_count)
+            end
+        end
     end
     isempty(candidates) && return nothing
     certificate = Dict("kind"=>"constructed-query",
@@ -131,8 +170,12 @@ function construct_relation(examples)
         "comparison"=>[Dict("event_ref"=>entry.sample.event_id,"before_ref"=>entry.sample.before_id,
             "verdict"=>string(entry.verdict),"witnesses"=>[candidate.judged[i].witness for candidate in candidates],
             "dag"=>contexts[i].context.witnesses) for (i,entry) in enumerate(recalled)],
-        "candidates"=>[Dict("program"=>candidate.term,"entry"=>candidate.entry,
-            "connectivity"=>candidate.connectivity,"pigment"=>candidate.pigment) for candidate in candidates])
+        "candidates"=>[begin
+            certificate = Dict("program"=>candidate.term,"entry"=>candidate.entry,
+                "connectivity"=>candidate.connectivity,"pigment"=>candidate.pigment)
+            isnothing(candidate.neighbor_count) || (certificate["neighbor_count"] = candidate.neighbor_count)
+            certificate
+        end for candidate in candidates])
     return RelationPredicate([candidate.entry["stable_id"] for candidate in candidates],
         [candidate.term for candidate in candidates],signature,certificate,semantic_hash(certificate),
         Dict{String,Any}[],String[])

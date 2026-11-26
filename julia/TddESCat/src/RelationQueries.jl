@@ -158,6 +158,24 @@ function relation_project!(signature, operand, columns)
     return (; term=Call(head,operand.term),sort)
 end
 
+function distinct_count_columns(header,domain,groups,distinct)
+    for columns in (groups,distinct)
+        allunique(columns) && all(i->checkbounds(Bool,header,i+1),columns) ||
+            error("Invalid count projection columns")
+    end
+    header[groups .+ 1] == domain || error("Count grouping domain differs in sort or phase")
+    return [domain; [("Integer","timeless")]]
+end
+
+function relation_count_distinct!(signature, operand, domain; groups, distinct)
+    columns = distinct_count_columns(query_columns(signature,operand.sort),query_columns(signature,domain.sort),
+        groups,distinct)
+    sort = query_sort!(signature,columns)
+    head = relation_operator!(signature,"CountDistinct",[operand.sort,domain.sort],sort;
+        layout=Dict("groups"=>groups,"distinct"=>distinct))
+    return (;term=Call(head,operand.term,domain.term),sort)
+end
+
 function finite_relation_result(evaluation, kind, header, rows, tables; detail=nothing)
     all(table->scope_identity(table.scope) == scope_identity(evaluation.scope),tables) ||
         error("Cannot mix relation evaluation scopes")
@@ -191,8 +209,42 @@ function exact_relation_join(evaluation, left, right, layout)
     return finite_relation_result(evaluation,"join",header,result,[left,right];detail=layout)
 end
 
+function exact_count_distinct(evaluation,input,domain,layout)
+    groups, distinct = layout["groups"],layout["distinct"]
+    header = distinct_count_columns(input.columns,domain.columns,groups,distinct)
+    all(table->scope_identity(table.scope) == scope_identity(evaluation.scope),(input,domain)) ||
+        error("Cannot count across different relation scopes")
+    if isnothing(input.completion_ref) || isnothing(domain.completion_ref)
+        return RelationTable(header,evaluation.scope,Dict(),false,false,false,nothing)
+    end
+    grouped = Dict{Tuple,Dict{Tuple,Vector{String}}}()
+    for (row,ref) in input.rows
+        key = Tuple(row[i+1] for i in groups)
+        haskey(domain.rows,key) || error("Count input escaped its declared group domain")
+        value = Tuple(row[i+1] for i in distinct)
+        classes = get!(Dict{Tuple,Vector{String}},grouped,key)
+        push!(get!(Vector{String},classes,value),ref)
+    end
+    rows = Dict{Tuple,Vector{String}}()
+    for (key,ref) in domain.rows
+        classes = get(grouped,key,nothing)
+        count = isnothing(classes) ? 0 : length(classes)
+        parents = String[ref,input.completion_ref]
+        if !isnothing(classes)
+            for (value,witnesses) in classes
+                related = relation_witness!(evaluation,"distinct_member",witnesses;detail=[key,value])
+                push!(parents,related)
+            end
+        end
+        proof = relation_witness!(evaluation,"distinct_count",parents;detail=[key,count])
+        rows[(key...,count)] = [proof]
+    end
+    return finite_relation_result(evaluation,"count_distinct",header,rows,[input,domain];detail=layout)
+end
+
 function apply_relation_operator(evaluation, operation, args, layout)
     operation == "Join" && return exact_relation_join(evaluation,args...,layout)
+    operation == "CountDistinct" && return exact_count_distinct(evaluation,args...,layout)
     input = first(args)
     header = input.columns
     rows = Dict{Tuple,Vector{String}}()

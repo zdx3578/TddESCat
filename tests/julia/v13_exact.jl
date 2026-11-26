@@ -46,6 +46,56 @@ function with_worker(f,path,args...)
     end
 end
 
+@testset "Distinct observations count once per declared role" begin
+    role = ("Role","before")
+    item = ("Member","before")
+    event = ("Event","timeless")
+    signature = Dict{String,Any}("schema_version"=>3,"signature_id"=>"distinct-count-test",
+        "sorts"=>Dict{String,Any}[],"operators"=>Dict{String,Any}[])
+    observation = TC.relation_atom!(signature,"membership",[role,item,event])
+    roles = TC.relation_atom!(signature,"observed-roles",[role])
+    count = TC.relation_count_distinct!(signature,observation,roles;groups=[0],distinct=[1])
+    reports = [("actor-a","member-x","event-1"),("actor-a","member-x","event-2"),
+        ("actor-a","member-y","event-2")]
+    function run_count(;closed=true)
+        scope = TC.RelationScope("episode","fresh","observed","roles","before")
+        context = TC.RelationEvaluation(scope,Dict("event-1"=>1,"event-2"=>2),3)
+        TC.observe_relation!(context,"membership",[role,item,event],reports;
+            event_reads=["event-1","event-2"],domain_complete=closed)
+        TC.observe_relation!(context,"observed-roles",[role],[("actor-a",),("actor-b",)];
+            event_reads=["event-1"],domain_complete=true)
+        return TC.evaluate_relation(count.term,context,signature;slots=["SceneBefore"]),context
+    end
+    exact,context = run_count()
+    @test Set(keys(exact.rows)) == Set([("actor-a",2),("actor-b",0)])
+    @test TC.relation_member(exact,("actor-a",3)) == TC.disproven
+    @test context.witnesses[exact.rows[("actor-a",2)]]["kind"] == "distinct_count"
+    partial,_ = run_count(;closed=false)
+    @test isempty(partial.rows)
+    @test TC.relation_member(partial,("actor-b",0)) == TC.unknown_truth
+end
+
+@testset "An exact count can separate a mechanism guard with the same neighbor colors" begin
+    base = fill(UInt8(0),24,24)
+    base[10:12,10:12] .= 4
+    base[9,11] = 2
+    two = copy(base)
+    two[13,11] = 2
+    function witness(frame,id,truth)
+        support = TC.point_component(TC.public_components(frame),(10,10))
+        sample = TC.MotionExample(id,"before-" * id,1,frame,frame,[0])
+        return TC.AssociationExample(sample,TC.MotionBinding(support,TC.anchor(support)),truth)
+    end
+    negative = witness(base,"one",TC.disproven)
+    positive = witness(two,"two",TC.proven)
+    predicate = TC.construct_relation([negative,positive])
+    @test !isnothing(predicate)
+    @test all(candidate["neighbor_count"] == 2 && candidate["pigment"] == 2
+        for candidate in predicate.certificate["candidates"])
+    @test TC.evaluate_predicate(predicate,two,positive.binding,(0,0),[0]) == TC.proven
+    @test TC.evaluate_predicate(predicate,base,negative.binding,(0,0),[0]) == TC.disproven
+end
+
 @testset "Runtime backend capabilities restrict dispatch" begin
     config = load_run_config(joinpath(ROOT,"config","v13_public25.toml"))
     TC.with_compute(config) do workers
