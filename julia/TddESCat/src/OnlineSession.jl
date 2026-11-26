@@ -472,8 +472,8 @@ function recovery_reads(rec, model)
     own_sources = [model.rule.training_event; model.condition.support; model.counterexamples]
     count = maximum((atom isa HistorySuffix ? length(atom.actions) : atom isa RecentAction ? 1 : 0
         for atom in model.condition.atoms);init=0)
-    all_events = sort!([pair for pair in rec.sequence_by_event if last(pair) > 0];by=last)
-    tail = count == 0 ? String[] : first.(last(all_events,min(count,length(all_events))))
+    recent = min(count,length(rec.confirmed_refs))
+    tail = @view rec.confirmed_refs[end-recent+1:end]
     return sort!(unique([rec.before_ref; own_sources; tail]))
 end
 

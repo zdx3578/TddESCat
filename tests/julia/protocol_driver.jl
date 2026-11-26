@@ -47,7 +47,17 @@ else
                     error("Invalid test operation")
                 end
             end
-            recover_run(store)
+            trace = recover_run(store)
+            refs = [row.event["event_id"] for row in trace]
+            rec.confirmed_refs == refs || error("Live confirmed order differs from replay")
+            if !isempty(refs)
+                reference = first(refs)
+                probe = (rule=(training_event=reference,),
+                    condition=(support=String[],atoms=[TddESCat.HistorySuffix([1,2])]),
+                    counterexamples=String[])
+                expected = sort!(unique([last(refs);reference;last(refs,min(length(refs),2))]))
+                TddESCat.recovery_reads(rec,probe) == expected || error("History reads differ from replay")
+            end
         end
     end
 end

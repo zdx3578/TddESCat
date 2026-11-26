@@ -10,6 +10,7 @@ mutable struct Recorder
     frozen::Bool
     mutex::ReentrantLock
     sequence_by_event::Dict{String,Int}
+    confirmed_refs::Vector{String}
 end
 
 function Recorder(store::RunStore, config::RunConfig)
@@ -17,7 +18,7 @@ function Recorder(store::RunStore, config::RunConfig)
     budget = config.execution["max_public_commands"]
     limit = budget == "unlimited" ? nothing : Int(budget)
     return Recorder(store, open_client(config), 1, 0, limit,
-        nothing, nothing, nothing, false, ReentrantLock(), Dict{String,Int}())
+        nothing, nothing, nothing, false, ReentrantLock(), Dict{String,Int}(), String[])
 end
 
 public_budget_available(rec::Recorder) = isnothing(rec.limit) || rec.sent_count < rec.limit
@@ -196,6 +197,7 @@ function transact!(rec::Recorder, command; rejection=nothing, hook=(_...) -> not
             rec.observation = value
             rec.before_ref = event["event_id"]
             rec.sequence_by_event[rec.before_ref] = event["sequence"]
+            push!(rec.confirmed_refs,rec.before_ref)
         elseif command["kind"] == "open_scorecard"
             rec.card_id = value
         elseif command["kind"] == "close_scorecard"
