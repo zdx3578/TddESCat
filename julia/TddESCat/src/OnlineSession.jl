@@ -1248,7 +1248,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         relation_feedback = if relation_tasks
             observation = observe_relations!(relations,entry,resulting,effects,contact_feedback,site_transitions,
                 relation_proposal;groups=decision.groups)
-            finish_relation_dispatch!(relations,relation_proposal)
+            finish_relation_dispatch!(relations,relation_proposal;feedback=observation.feedback)
             if !isnothing(exploration_frontier)
                 refined = frontier_observe!(exploration_frontier,relations)
                 isnothing(refined) || (observation = merge(observation,(history_refinement=refined,)))

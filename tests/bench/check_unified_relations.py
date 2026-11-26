@@ -37,7 +37,7 @@ class Fixture(ARCBaseGame):
             "restart": [6], "progress-restart": [6], "restart-choices": [6],
             "advancement-transfer": [6], "history-refinement": [1, 4],
             "history-continuation": [1, 4], "history-matrix": [1, 4], "history-receipt": [1, 4],
-            "outcome-preparation": [5, 7], "outcome-chain": [5, 7],
+            "outcome-preparation": [5, 7], "outcome-chain": [5, 7], "role-outcome": [5, 6],
             "bridge-partition": [5], "frontier-dispatch": [1, 2], "frontier-route": [2],
             "sequence-experiment": [1, 2, 3]}
         levels = [Level(sprites=[Sprite(frame.copy(), name="board")])]
@@ -49,7 +49,7 @@ class Fixture(ARCBaseGame):
             frame[10:13, 8:11] = 3
             frame[10:13, 38:41] = 4
             levels.append(Level(sprites=[Sprite(frame, name="board")]))
-        if MODE in ("outcome-preparation", "outcome-chain"):
+        if MODE in ("outcome-preparation", "outcome-chain", "role-outcome"):
             frame[10:13, 8:11] = 0
             frame[10:13, 38:41] = 4
             levels.append(Level(sprites=[Sprite(frame, name="board")]))
@@ -106,6 +106,11 @@ class Fixture(ARCBaseGame):
                 self._available_actions = [6]
             elif pixels[self.action.data["y"], self.action.data["x"]] == 4:
                 pixels[20, 18] = 4
+                self.next_level()
+        elif MODE == "role-outcome":
+            if action == 5:
+                pixels[40:42, 44:46] = 7
+            elif pixels[40, 44] == 7 and pixels[self.action.data["y"], self.action.data["x"]] == 4:
                 self.next_level()
         elif MODE in ("outcome-preparation", "outcome-chain"):
             if action == 5:
@@ -227,6 +232,7 @@ def capture(
     extended_timeout = compute_enabled or mode in (
         "outcome-preparation",
         "outcome-chain",
+        "role-outcome",
         "bridge-partition",
         "frontier-dispatch",
         "frontier-route",
@@ -277,6 +283,7 @@ def capture(
             "frontier-route": "frontier_route_public.jl",
             "history-matrix": "history_matrix_public.jl",
             "history-receipt": "history_matrix_public.jl",
+            "role-outcome": "outcome_relation_public.jl",
             "sequence-experiment": "sequence_experiment_public.jl",
         }
         if mode in direct_tests:
@@ -359,6 +366,35 @@ def observed_steps(public):
 
 
 def verify(mode, public):
+    if mode == "role-outcome":
+        record = read(public / "role-outcome.json")
+        trace = receipts(public)
+        comparison, preparation, original = (record[key]["event"] for key in ("comparison", "preparation", "progress"))
+        setup, follow = record["setup"], record["follow"]
+        proof = record["progress"]["public_outcome"]["relationship"]
+        effect, win = setup["effect"]["event"], follow["win"]["event"]
+        assert proof["status"] == "hypothesis"
+        assert proof["comparison"] == comparison and proof["preparation"] == preparation
+        assert trace[comparison][0]["action"] == trace[original][0]["action"]
+        before = [trace[trace[ref][0]["before_ref"]][1]["frame"][-1] for ref in (comparison, preparation)]
+        assert before[0] == before[1] and trace[comparison][1]["levels_completed"] == 0
+        assert setup["task"]["obligation"]["producer"] == proof["producer"]
+        assert setup["task"]["obligation"]["outcome"] == original
+        assert setup["baseline"]["id"] == 6 and trace[effect][0]["action"] == {"id": 5}
+        start = trace[trace[effect][0]["before_ref"]][1]
+        changed = trace[effect][1]
+        assert start["available_actions"] == changed["available_actions"] == [5, 6]
+        assert start["frame"][-1][40][44] == 2 and changed["frame"][-1][40][44] == 7
+        assert setup["effect"]["feedback"]["result"] == "established"
+        assert follow["task"]["obligation"]["established"] == effect
+        assert trace[win][0]["action"]["x"] != trace[original][0]["action"]["x"]
+        assert trace[win][1]["levels_completed"] == 2 and trace[win][1]["state"] == "WIN"
+        for ref, task in ((effect,setup["task"]),(win,follow["task"])):
+            command = trace[ref][0]
+            prediction = read(public / "predictions" / (command["command_ref"] + ".json"))
+            assert set(task["reads"]) <= set(prediction["event_reads"])
+            assert all(trace[source][0]["sequence"] < command["sequence"] for source in task["reads"])
+        return [comparison, preparation, original, effect, win]
     if mode == "sequence-experiment":
         record = read(public / "sequence-experiment.json")
         trace = receipts(public)
@@ -694,6 +730,7 @@ def main(config, run):
         "advancement-transfer",
         "outcome-preparation",
         "outcome-chain",
+        "role-outcome",
         "history-refinement",
         "history-dispatch",
         "bridge-partition",
@@ -738,6 +775,7 @@ if __name__ == "__main__":
                 "history-continuation",
                 "outcome-preparation",
                 "outcome-chain",
+                "role-outcome",
                 "frontier-dispatch",
                 "frontier-route",
                 "history-matrix",

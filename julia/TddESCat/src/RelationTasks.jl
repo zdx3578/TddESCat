@@ -24,6 +24,13 @@ mutable struct RelationProducer
     refuted::Vector{Int}
 end
 
+struct OutcomeRelationWitness
+    preparation::Int
+    comparison::Int
+    outcome::Int
+    producer::String
+end
+
 mutable struct RelationAgenda
     samples::Vector{RelationSample}
     producers::Dict{String,RelationProducer}
@@ -41,6 +48,7 @@ mutable struct RelationAgenda
     advancement_roles::Dict{Int,Tuple}
     preparation_roles::Dict{Int,Tuple}
     outcomes::Vector{NamedTuple}
+    outcome_relations::Vector{OutcomeRelationWitness}
     history_scopes::Dict{String,RelationHistoryScope}
     preparations::Set{Tuple{Int,String,Int}}
     attempt::Int
@@ -51,7 +59,7 @@ mutable struct RelationAgenda
 end
 
 RelationAgenda() = RelationAgenda(RelationSample[],Dict(),Dict(),Dict(),Dict(),Dict(),Set(),Dict(),Set(),Dict(),Set(),
-    Dict(),Dict(),Dict(),Dict(),NamedTuple[],Dict(),Set(),1,1,0,nothing,nothing)
+    Dict(),Dict(),Dict(),Dict(),NamedTuple[],OutcomeRelationWitness[],Dict(),Set(),1,1,0,nothing,nothing)
 
 relation_context(obs) = semantic_hash([obs.levels_completed,size(last(obs.frames)),
     content_hash(vec(last(obs.frames))),sort(obs.available_actions)])
@@ -98,6 +106,30 @@ function witnessed_outcome_requirements(agenda,index)
     return reverse!(requirements)
 end
 
+function witnessed_outcome_relation(agenda,index)
+    outcome = agenda.samples[index]
+    (outcome.preceding == 0 || isnothing(outcome.binding)) && return nothing
+    preparation = agenda.samples[outcome.preceding]
+    if preparation.state != "NOT_FINISHED" || preparation.advanced || preparation.next_context != outcome.context ||
+            Set(preparation.available) != Set(outcome.available) || !preparation.effects.complete ||
+            !isempty(preparation.effects.residual)
+        return nothing
+    end
+    action = action_key(outcome.effects.action)
+    comparisons = get(agenda.visits,(preparation.context,action),Int[])
+    comparison = findlast(comparisons) do compared
+        row = agenda.samples[compared]
+        compared < outcome.preceding && row.state == "NOT_FINISHED" && !row.advanced &&
+            !isnothing(row.binding) && row.binding.appearance == outcome.binding.appearance
+    end
+    isnothing(comparison) && return nothing
+    for (key,producer) in agenda.producers
+        outcome.preceding in producer.support || continue
+        return OutcomeRelationWitness(outcome.preceding,comparisons[comparison],index,key)
+    end
+    return nothing
+end
+
 function record_public_outcome!(agenda,index)
     row = agenda.samples[index]
     result = row.state == "WIN" ? :win : row.state == "GAME_OVER" ? :failure :
@@ -105,8 +137,13 @@ function record_public_outcome!(agenda,index)
     isnothing(result) && return nothing
     requirements = witnessed_outcome_requirements(agenda,index)
     preparation = isempty(requirements) ? nothing : last(requirements)
+    witness = result == :failure ? nothing : witnessed_outcome_relation(agenda,index)
+    isnothing(witness) || push!(agenda.outcome_relations,witness)
     outcome = (;index,result,event=relation_ref(row),before=row.effects.before_id,
         attempt=row.attempt,level=row.level,preparation,requirements,dependency=row.dependency,
+        relationship=isnothing(witness) ? nothing : (;producer=witness.producer,
+            preparation=relation_ref(agenda.samples[witness.preparation]),
+            comparison=relation_ref(agenda.samples[witness.comparison]),status=:hypothesis),
         local_effects_complete=row.effects.complete && isempty(row.effects.residual))
     push!(agenda.outcomes,outcome)
     return outcome
@@ -197,7 +234,8 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
     end
     prior = agenda.previous == 0 ? nothing : agenda.samples[agenda.previous]
     dependency = !isnothing(prior) && !isnothing(proposal) &&
-        proposal.intent in (:distinguish_changed_context,:test_delayed_effect,:test_history_response,:complete_preparation) ?
+        proposal.intent in (:distinguish_changed_context,:test_delayed_effect,:test_history_response,
+            :complete_preparation,:continue_outcome_relation) ?
         relation_ref(prior) : nothing
     next_context = relation_context(next)
     sample = RelationSample(effects,prev.levels_completed,agenda.attempt,relation_context(prev),
@@ -222,7 +260,7 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
         observed = sample.next_context == proposal.obligation.expected &&
             sample.advanced == proposal.obligation.advanced && sample.state == "NOT_FINISHED"
         feedback = merge(feedback,(result=observed ? :established : :refuted,))
-    elseif !isnothing(proposal) && proposal.intent == :probe_observed_advancement
+    elseif !isnothing(proposal) && proposal.intent in (:probe_observed_advancement,:continue_outcome_relation)
         feedback = merge(feedback,(result=sample.advanced ? :established : :refuted,))
     elseif !isnothing(proposal) && proposal.intent == :prepare_public_outcome
         legal = proposal.obligation.action in next.available_actions
@@ -341,6 +379,50 @@ function partition_experiment(agenda,scene,obs,context,regions)
         obligation = (;source=regions.event,response_frame=index-1,region=label,
             binding=candidate.instance,status="unresolved")
         return (;action,intent=:probe_partition_binding,tests=NamedTuple[],reads=[regions.event],obligation)
+    end
+    return nothing
+end
+
+function matches_outcome_binding(row,action,groups)
+    id,x,y = action_key(action)
+    id == 6 || return false
+    support = point_component(groups,(x,y))
+    return !isnothing(support) && click_profile(support,(x,y)) == row.binding.appearance
+end
+
+function rebound_outcome_action(row,decision)
+    candidate = findfirst(item->matches_outcome_binding(row,item.action,decision.groups),decision.ranked)
+    return isnothing(candidate) ? nothing : decision.ranked[candidate].action
+end
+
+function prepare_outcome_relation(agenda,obs,decision,context;meters,condition_view)
+    6 in obs.available_actions || return nothing
+    for witness in Iterators.reverse(agenda.outcome_relations)
+        source,comparison,outcome = agenda.samples[[witness.preparation,witness.comparison,witness.outcome]]
+        Set(source.available) == Set(obs.available_actions) || continue
+        target = rebound_outcome_action(outcome,decision)
+        isnothing(target) && continue
+        history = relation_history_key(agenda,context,agenda.previous)
+        for item in decision.ranked
+            action = item.action
+            action["id"] == source.effects.action["id"] || continue
+            key = action_key(action)
+            if any(index->relation_history_key(agenda,context,agenda.samples[index].preceding) == history,
+                    get(agenda.visits,(context,key),Int[]))
+                continue
+            end
+            observed_failure(agenda,context,action_key(target),agenda.previous) && continue
+            tests = prepare_relation_tests(agenda,context,obs,decision.groups,action;meters,condition_view)
+            matching = findfirst(test->test.key == witness.producer,tests)
+            isnothing(matching) && continue
+            expected = tests[matching].expected
+            all(test->test.expected == expected,tests) || continue
+            obligation = (;producer=witness.producer,target,comparison=relation_ref(comparison),
+                preparation=relation_ref(source),outcome=relation_ref(outcome),index=witness.outcome,
+                sought=tests[matching].relations,scope=:hypothesis)
+            reads = unique([relation_refs(source);relation_refs(comparison);relation_refs(outcome)])
+            return (;action,intent=:establish_outcome_relation,tests=[tests[matching]],reads,obligation)
+        end
     end
     return nothing
 end
@@ -537,7 +619,16 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
     end
     if !isnothing(agenda.preparing)
         plan = agenda.preparing
-        if !isnothing(prior) && prior.unchanged && context == plan.context &&
+        if get(plan,:kind,nothing) == :outcome_relation
+            target = plan.obligation.target
+            outcome = agenda.samples[plan.obligation.index]
+            if !isnothing(prior) && relation_ref(prior) == plan.event && context == plan.context &&
+                    6 in obs.available_actions && matches_outcome_binding(outcome,target,decision.groups) &&
+                    !observed_failure(agenda,context,action_key(target),previous)
+                return (;action=target,intent=:continue_outcome_relation,tests=NamedTuple[],
+                    reads=plan.reads,obligation=merge(plan.obligation,(;established=plan.event)))
+            end
+        elseif !isnothing(prior) && prior.unchanged && context == plan.context &&
                 prior.effects.action == plan.first && plan.next["id"] in obs.available_actions
             tests = prepare_relation_tests(agenda,context,obs,decision.groups,plan.next;meters,condition_view)
             if any(test->test.key == plan.producer && test.scope == :bound,tests)
@@ -559,6 +650,8 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
         return (;action=prefix.effects.action,intent=:establish_preparation,tests=NamedTuple[],
             reads,obligation)
     end
+    outcome_relation = prepare_outcome_relation(agenda,obs,decision,context;meters,condition_view)
+    isnothing(outcome_relation) || return outcome_relation
     sought = observed_relation_task(agenda,obs,decision,context;meters)
     isnothing(sought) || return sought
     progress = advancement_probe(agenda,obs,decision,context)
@@ -659,10 +752,10 @@ function task_arbitration(item,spatial,intervention,relation,experiment;
     end
     if !isnothing(relation)
         priority = relation.intent in (:recover_confirmed_progress,:restore_failure_experiment_context) ? -1 :
-            relation.intent in (:revise_failed_trace,:complete_preparation) ? 1 :
+            relation.intent in (:revise_failed_trace,:complete_preparation,:continue_outcome_relation) ? 1 :
             relation.intent in (:test_concrete_effect,:distinguish_changed_context,:test_delayed_effect,
                 :test_history_response,:establish_preparation,:establish_observed_relation,:probe_observed_advancement,
-                :prepare_public_outcome) ? 3 : 5
+                :prepare_public_outcome,:establish_outcome_relation) ? 3 : 5
         reason = !isnothing(intervention) && relation.action == intervention.action &&
             relation.intent in (:test_concrete_effect,:test_delayed_effect) ?
             intervention.reason : string(relation.intent)
@@ -680,7 +773,7 @@ function task_arbitration(item,spatial,intervention,relation,experiment;
             continuing_policy
         elseif choice.source == :relation
             choice.priority <= 2 || relation.intent in
-                (:establish_preparation,:probe_observed_advancement,:prepare_public_outcome)
+                (:establish_preparation,:probe_observed_advancement,:prepare_public_outcome,:establish_outcome_relation)
         else
             choice.priority <= 2
         end
@@ -849,7 +942,7 @@ function begin_relation_attempt!(agenda,restart;observation=nothing)
     empty!(agenda.lineages)
 end
 
-function finish_relation_dispatch!(agenda,proposal)
+function finish_relation_dispatch!(agenda,proposal;feedback=nothing)
     restart = agenda.restart
     agenda.restart = nothing
     agenda.preparing = nothing
@@ -865,6 +958,12 @@ function finish_relation_dispatch!(agenda,proposal)
         plan = proposal.obligation
         push!(agenda.preparations,(agenda.attempt,plan.context,plan.index))
         agenda.preparing = plan
+    elseif proposal.intent == :establish_outcome_relation && !isnothing(feedback) && feedback.result == :established
+        row = last(agenda.samples)
+        if row.state == "NOT_FINISHED" && !row.advanced
+            agenda.preparing = (;kind=:outcome_relation,event=relation_ref(row),context=row.next_context,
+                proposal.obligation,reads=unique([proposal.reads;relation_refs(row)]))
+        end
     elseif proposal.intent == :establish_observed_relation
         push!(agenda.relation_replays,proposal.obligation.route)
     end
