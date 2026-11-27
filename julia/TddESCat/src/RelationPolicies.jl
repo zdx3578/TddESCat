@@ -602,6 +602,56 @@ function policy_comparison_purpose(proposal,relation,agenda,obs,context)
     return (;purpose,reads=String[])
 end
 
+function policy_entry_actions(node)
+    kind,children = node["kind"],node["children"]
+    if kind == "RelationTask"
+        return [node["layout"]["id"]]
+    elseif kind == "RelationSequence"
+        return policy_entry_actions(first(children))
+    elseif kind == "RelationBranch"
+        return union(policy_entry_actions(children[2]),policy_entry_actions(children[3]))
+    elseif kind == "RelationRepeat"
+        return policy_entry_actions(last(children))
+    end
+    return Int[]
+end
+
+function policy_action_precondition(candidate,agenda,obs)
+    cursor = candidate.cursor
+    isempty(cursor.pending) && return nothing
+    needed = setdiff(policy_entry_actions(last(cursor.pending).node),obs.available_actions)
+    isempty(needed) && return nothing
+    training = Set(cursor.policy.training)
+    available = Set(obs.available_actions)
+    context = candidate.context
+    history = relation_history_key(agenda,context,agenda.previous)
+    contradicted = Set{Int}()
+    for index in get(agenda.visits,(context,action_key(candidate.proposal.action)),Int[])
+        row = agenda.samples[index]
+        row.state == "NOT_FINISHED" && !row.advanced || continue
+        relation_history_key(agenda,context,row.preceding) == history || continue
+        delta = get(row.effects.public_delta,"available_actions",nothing)
+        exposed = isnothing(delta) ? row.available : delta["after"]
+        union!(contradicted,(action for action in needed if action ∉ exposed))
+    end
+    for test in candidate.proposal.tests, index in Iterators.reverse(agenda.producers[test.key].support)
+        index < length(agenda.samples) || continue
+        source,following = agenda.samples[index],agenda.samples[index+1]
+        following.preceding == index && !source.advanced || continue
+        relation_ref(source) in training && relation_ref(following) in training || continue
+        Set(source.available) == available || continue
+        action = following.effects.action["id"]
+        action in needed && action ∉ contradicted || continue
+        delta = get(source.effects.public_delta,"available_actions",nothing)
+        isnothing(delta) && continue
+        action ∉ delta["before"] && action in delta["after"] || continue
+        purpose = (;kind=:enable_policy_action,action,source=relation_ref(source),
+            consumer=relation_ref(following),producer=test.key)
+        return (;purpose,reads=unique([relation_refs(source);relation_refs(following)]))
+    end
+    return nothing
+end
+
 function assign_policy_purpose(candidate,purpose,reads=get(purpose,:reads,String[]))
     purpose = merge(purpose,(;reads))
     candidate.cursor.purpose = purpose
@@ -649,22 +699,27 @@ function relation_policy_choice(policies,cursor,attempted,agenda,obs,decision;me
         return current
     end
     sort!(choices;by=policy->policy.body["structure"] == "sequence")
+    preparation = nothing
     comparison = nothing
     for policy in choices
         ends = get(() -> policy_outcome_steps(policy.body["tree"]),policy.body,"public_outcomes")
-        isempty(ends) && !isnothing(comparison) && continue
+        isempty(ends) && !isnothing(preparation) && continue
         next = ready(RelationPolicyCursor(policy))
         isnothing(next) && continue
         if !isempty(ends)
             goal = policy_advancement_purpose(next,ends,agenda,obs,decision,context)
             isnothing(goal) || return assign_policy_purpose(next,goal.purpose,goal.reads)
         end
-        if isnothing(comparison)
+        if isnothing(preparation)
+            precondition = policy_action_precondition(next,agenda,obs)
+            isnothing(precondition) || (preparation = assign_policy_purpose(next,precondition.purpose,precondition.reads))
+        end
+        if isnothing(preparation) && isnothing(comparison)
             trial = policy_comparison_purpose(next.proposal,relation,agenda,obs,context)
             isnothing(trial) || (comparison = assign_policy_purpose(next,trial.purpose,trial.reads))
         end
     end
-    return comparison
+    return isnothing(preparation) ? comparison : preparation
 end
 
 function observed_policy_port(effects,fragment)
@@ -676,6 +731,8 @@ end
 function confirm_relation_policy!(selection,agenda,feedback,after)
     cursor = selection.cursor
     row = last(agenda.samples)
+    check_precondition = isempty(cursor.observed) && !isnothing(cursor.purpose) &&
+        cursor.purpose.kind == :enable_policy_action
     push!(cursor.observed,relation_ref(row))
     task = selection.proposal
     success = if get(task.obligation,:public_outcome,nothing) == "advancement"
@@ -684,6 +741,9 @@ function confirm_relation_policy!(selection,agenda,feedback,after)
         row.unchanged
     else
         !isnothing(feedback.feedback) && feedback.feedback.result == :established
+    end
+    if check_precondition && !row.advanced
+        success &= cursor.purpose.action in after.observation.available_actions
     end
     experiment_after = row.state == "NOT_FINISHED" && !row.advanced ? relation_ref(row) : nothing
     if !success || row.state == "GAME_OVER"

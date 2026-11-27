@@ -100,6 +100,46 @@ end
     @test cursor.pending == TC.RelationPolicyCursor(serial).pending
 end
 
+@testset "A policy prerequisite checks actual availability beyond its local effect" begin
+    agenda = TC.RelationAgenda()
+    frame = fill(0x00,64,64)
+    frame[12:14,10:12] .= 0x04
+    initial = recorded_frame("permission-initial",nothing,frame,Dict("id"=>0),[1])
+    prepared_frame = copy(frame)
+    prepared_frame[12:14,10:12] .= 0x09
+    prepared = recorded_frame("permission-granted",initial.event["event_id"],prepared_frame,Dict("id"=>1),[7])
+    completed_frame = copy(prepared_frame)
+    completed_frame[12:14,10:12] .= 0x08
+    completed = recorded_frame("permission-consumed",prepared.event["event_id"],completed_frame,Dict("id"=>7),[1])
+    first_effect = TC.observe_relations!(agenda,initial,prepared,TC.observed_effects(initial,prepared),
+        nothing,NamedTuple[],nothing)
+    second_effect = TC.observe_relations!(agenda,prepared,completed,TC.observed_effects(prepared,completed),
+        nothing,NamedTuple[],nothing)
+    first_step = TC.policy_expr("RelationTask";layout=TC.policy_step(agenda.samples[1],first_effect.producer.relations))
+    second_step = TC.policy_expr("RelationTask";layout=TC.policy_step(agenda.samples[2],second_effect.producer.relations))
+    program = TC.policy_expr("RelationSequence",first_step,second_step;layout=Dict("shared"=>[[1,1]]))
+    policy = TC.LearnedPolicy("checked-publication","permission-program",1,"policy",
+        Dict("tree"=>program,"structure"=>"sequence","scope"=>"permission-program"),
+        [first_effect.event,second_effect.event],second_effect.event)
+    TC.begin_relation_attempt!(agenda,nothing)
+    restarted = recorded_frame("permission-restart",nothing,frame,Dict("id"=>0),[1])
+    decision = (ranked=[(action=Dict("id"=>1),)],groups=TC.public_components(frame))
+    choose() = TC.relation_policy_choice([policy],nothing,Set(),agenda,restarted.observation,decision)
+    picked = choose()
+    purpose = picked.proposal.obligation.purpose
+    @test purpose.kind == :enable_policy_action && purpose.action == 7
+    @test purpose.source == first_effect.event && purpose.consumer == second_effect.event
+    @test all(in(picked.proposal.reads),(purpose.source,purpose.consumer))
+    absent = recorded_frame("permission-missing",restarted.event["event_id"],prepared_frame,Dict("id"=>1),[1])
+    feedback = TC.observe_relations!(agenda,restarted,absent,TC.observed_effects(restarted,absent),
+        nothing,NamedTuple[],picked.proposal)
+    @test feedback.feedback.result == :established
+    checked = TC.confirm_relation_policy!(picked,agenda,feedback,absent)
+    @test isnothing(checked.cursor) && checked.result == :withdrawn
+    TC.begin_relation_attempt!(agenda,nothing)
+    @test isnothing(choose())
+end
+
 @testset "Repeated relation tasks use a witnessed exit condition" begin
     agenda = TC.RelationAgenda()
     entries = Any[]

@@ -885,7 +885,7 @@ function task_arbitration(item,spatial,intervention,relation,experiment;
     baseline = argmin(row->row.priority,candidates)
     if !isnothing(policy)
         purpose = get(policy.obligation,:purpose,nothing)
-        directed = !isnothing(purpose) && purpose.kind == :establish_public_outcome
+        directed = !isnothing(purpose) && purpose.kind in (:establish_public_outcome,:enable_policy_action)
         priority = continuing_policy ? 0 : policy_yield ? baseline.priority+1 : directed ? 2 : 4
         add(:relation_policy,policy.action,"execute_relation_policy",priority)
     end
