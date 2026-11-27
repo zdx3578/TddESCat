@@ -615,7 +615,7 @@ function policy_outcome_steps(node)
     return policy_outcome_steps(last(node["children"]))
 end
 
-function policy_advancement_purpose(candidate,ends,agenda,obs,decision,context)
+function policy_advancement_purpose(candidate,ends,agenda,obs,decision)
     training = Set(candidate.cursor.policy.training)
     available = Set(obs.available_actions)
     for witness in Iterators.reverse(agenda.outcome_relations)
@@ -632,7 +632,6 @@ function policy_advancement_purpose(candidate,ends,agenda,obs,decision,context)
         all(row->relation_ref(row) in training,sources) || continue
         target = rebound_outcome_action(outcome,decision)
         isnothing(target) && continue
-        observed_failure(agenda,context,action_key(target),agenda.previous) && continue
         comparison = agenda.samples[witness.comparison]
         purpose = (;kind=:establish_public_outcome,scope=:hypothesis,target,producer,
             sought=candidate.proposal.tests[matched].relations,
@@ -781,7 +780,7 @@ function relation_policy_choice(policies,cursor,attempted,agenda,obs,decision;me
         next = ready(RelationPolicyCursor(policy))
         isnothing(next) && continue
         if !isempty(ends)
-            goal = policy_advancement_purpose(next,ends,agenda,obs,decision,context)
+            goal = policy_advancement_purpose(next,ends,agenda,obs,decision)
             isnothing(goal) || return assign_policy_purpose(next,goal.purpose,goal.reads)
         end
         if isnothing(preparation)

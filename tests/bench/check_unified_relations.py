@@ -70,6 +70,7 @@ class Fixture(ARCBaseGame):
             "history-continuation": [1, 4], "history-matrix": [1, 4], "history-receipt": [1, 4], "long-history": [1, 4],
             "outcome-preparation": [5, 7], "outcome-chain": [5, 7], "role-outcome": [5, 6],
             "outcome-role-equivalence": [5, 6],
+            "outcome-failure-contrast": [5, 6],
             "outcome-policy": [1, 2, 5, 6, 7], "outcome-policy-failure": [1, 2, 5, 6, 7],
             "outcome-availability-policy": [5],
             "primitive-outcome": [2, 5], "outcome-relation-chain": [2, 5, 7],
@@ -102,7 +103,8 @@ class Fixture(ARCBaseGame):
             frame[10:13, 8:11] = 0
             frame[10:13, 38:41] = 4
             levels.append(Level(sprites=[Sprite(frame, name="board")]))
-        if MODE in ("outcome-preparation", "outcome-chain", "role-outcome", "primitive-outcome", "outcome-relation-chain"):
+        if MODE in ("outcome-preparation", "outcome-chain", "role-outcome", "primitive-outcome",
+                    "outcome-relation-chain", "outcome-failure-contrast"):
             frame[10:13, 8:11] = 0
             frame[10:13, 38:41] = 4
             levels.append(Level(sprites=[Sprite(frame, name="board")]))
@@ -221,11 +223,14 @@ class Fixture(ARCBaseGame):
                         pixels[24:26, left+1+dx:left+3+dx] = 9
                         if self.hits >= 4 and left == selectors[-1]:
                             self.next_level()
-        elif MODE == "role-outcome":
+        elif MODE in ("role-outcome", "outcome-failure-contrast"):
             if action == 5:
                 pixels[40:42, 44:46] = 7
-            elif pixels[40, 44] == 7 and pixels[self.action.data["y"], self.action.data["x"]] == 4:
-                self.next_level()
+            elif pixels[self.action.data["y"], self.action.data["x"]] == 4:
+                if pixels[40, 44] == 7:
+                    self.next_level()
+                elif MODE == "outcome-failure-contrast":
+                    self.lose()
         elif MODE == "outcome-role-equivalence":
             selectors = (8,) if self.level_index == 0 else (8, 23, 38)
             if action == 6:
@@ -407,6 +412,7 @@ def capture(
         "outcome-chain",
         "role-outcome",
         "outcome-role-equivalence",
+        "outcome-failure-contrast",
         "primitive-outcome",
         "outcome-relation-chain",
         "bridge-partition",
@@ -481,6 +487,7 @@ def capture(
             "long-history": "history_matrix_public.jl",
             "role-outcome": "outcome_relation_public.jl",
             "outcome-role-equivalence": "outcome_relation_public.jl",
+            "outcome-failure-contrast": "outcome_relation_public.jl",
             "primitive-outcome": "outcome_relation_public.jl",
             "outcome-relation-chain": "outcome_relation_public.jl",
             "sequence-experiment": "sequence_experiment_public.jl",
@@ -519,7 +526,7 @@ def capture(
                 public,
                 str(agent),
                 *([mode] if mode in ("long-history", "primitive-outcome", "outcome-relation-chain",
-                    "outcome-role-equivalence", "mixed-sequence") else []),
+                    "outcome-role-equivalence", "outcome-failure-contrast", "mixed-sequence") else []),
                 str(public),
                 script=script,
                 extra_read=paths,
@@ -591,6 +598,31 @@ def observed_steps(public):
 
 
 def verify(mode, public):
+    if mode == "outcome-failure-contrast":
+        report = read(public / (mode + ".json"))
+        trace = receipts(public)
+        initial = trace[report["comparison"]["event"]]
+        positive = trace[report["progress"]["event"]]
+        negative = trace[report["omitted_live"]]
+        setup = trace[report["setup"]["effect"]["event"]]
+        terminal = trace[report["follow"]["win"]["event"]]
+        for failed, prepared, advanced in (
+            (initial, trace[report["preparation"]["event"]], positive),
+            (negative, setup, terminal),
+        ):
+            initial_scope = trace[failed[0]["before_ref"]][1]
+            current_scope = trace[prepared[0]["before_ref"]][1]
+            assert initial_scope["frame"][-1] == current_scope["frame"][-1]
+            assert initial_scope["available_actions"] == current_scope["available_actions"]
+            assert failed[0]["action"] == advanced[0]["action"]
+            assert failed[1]["state"] == "GAME_OVER"
+            assert prepared[0]["action"] == {"id": 5} and prepared[1]["frame"][-1][40][44] == 7
+            assert advanced[0]["before_ref"] == prepared[0]["event_id"]
+            assert advanced[1]["levels_completed"] == current_scope["levels_completed"] + 1
+        obligation = report["setup"]["task"]["obligation"]
+        assert obligation["comparison"] == initial[0]["event_id"] and obligation["scope"] == "hypothesis"
+        assert terminal[1]["state"] == "WIN"
+        return [initial[0]["event_id"], negative[0]["event_id"], setup[0]["event_id"], terminal[0]["event_id"]]
     if mode == "outcome-availability-policy":
         report = read(public / (mode + ".json"))
         trace = receipts(public)
@@ -1247,6 +1279,7 @@ def main(config, run):
         "outcome-chain",
         "role-outcome",
         "outcome-role-equivalence",
+        "outcome-failure-contrast",
         "primitive-outcome",
         "outcome-relation-chain",
         *OUTCOME_POLICY_MODES,
@@ -1306,6 +1339,7 @@ if __name__ == "__main__":
                 "outcome-chain",
                 "role-outcome",
                 "outcome-role-equivalence",
+                "outcome-failure-contrast",
                 "effect-condition-contrast",
                 "frontier-dispatch",
                 "frontier-route",

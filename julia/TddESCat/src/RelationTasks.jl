@@ -140,9 +140,12 @@ function witnessed_outcome_relation(agenda,index)
         isnothing(producer) && break
         push!(steps,at=>keys[producer])
         comparisons = get(agenda.visits,(preparation.context,action),Int[])
+        history = relation_history_key(agenda,preparation.context,preparation.preceding)
         comparison = findlast(comparisons) do compared
             row = agenda.samples[compared]
-            compared < at && row.state == "NOT_FINISHED" && !row.advanced &&
+            unsuccessful = row.state == "NOT_FINISHED" || row.state == "GAME_OVER" &&
+                relation_history_key(agenda,preparation.context,row.preceding) == history
+            compared < at && !row.advanced && unsuccessful &&
                 (first(action) != 6 || !isnothing(row.binding) && row.binding.appearance == outcome.binding.appearance)
         end
         if !isnothing(comparison)
@@ -500,7 +503,6 @@ function prepare_outcome_relation(agenda,obs,decision,context;meters,condition_v
     for witness in Iterators.reverse(agenda.outcome_relations)
         target = rebound_outcome_action(agenda.samples[witness.outcome],decision)
         isnothing(target) && continue
-        observed_failure(agenda,context,action_key(target),agenda.previous) && continue
         next = outcome_preparation_step(agenda,witness,1,obs,decision,context,target;meters,condition_view)
         isnothing(next) || return next
     end
@@ -733,17 +735,20 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
                 if target["id"] ∉ obs.available_actions || !matches_outcome_binding(outcome,target,decision.groups)
                     target = rebound_outcome_action(outcome,decision)
                 end
-                if !isnothing(target) && !observed_failure(agenda,context,action_key(target),previous)
+                if !isnothing(target)
                     step = plan.obligation.step + 1
                     confirmed = plan.confirmed
                     if step > length(plan.witness.steps)
-                        obligation = merge(plan.obligation,(;target,confirmed,established=plan.event))
-                        return (;action=target,intent=:continue_outcome_relation,tests=NamedTuple[],
-                            reads=plan.reads,obligation)
+                        if !observed_failure(agenda,context,action_key(target),previous)
+                            obligation = merge(plan.obligation,(;target,confirmed,established=plan.event))
+                            return (;action=target,intent=:continue_outcome_relation,tests=NamedTuple[],
+                                reads=plan.reads,obligation)
+                        end
+                    else
+                        next = outcome_preparation_step(agenda,plan.witness,step,obs,decision,context,target;
+                            meters,condition_view,confirmed)
+                        isnothing(next) || return next
                     end
-                    next = outcome_preparation_step(agenda,plan.witness,step,obs,decision,context,target;
-                        meters,condition_view,confirmed)
-                    isnothing(next) || return next
                 end
             end
         elseif !isnothing(prior) && prior.unchanged && context == plan.context &&

@@ -4,6 +4,8 @@ const TC = TddESCat
 const CONFIG = load_run_config(first(ARGS))
 const MODE = length(ARGS) == 3 ? ARGS[2] : "role-outcome"
 const REBOUND_EFFECT = MODE == "outcome-role-equivalence"
+const FAILED_COMPARISON = MODE == "outcome-failure-contrast"
+const CLICK_TARGET = MODE == "role-outcome" || FAILED_COMPARISON
 
 @testset "A witnessed visual prerequisite controls a new outcome instance" begin
     with_run(last(ARGS)) do store
@@ -24,9 +26,17 @@ const REBOUND_EFFECT = MODE == "outcome-role-equivalence"
             TC.finish_relation_dispatch!(agenda,proposal;feedback=result.feedback)
             return result
         end
-        target = MODE == "role-outcome" ? TC.click_action((9,11)) : Dict("id"=>(REBOUND_EFFECT ? 5 : 2))
+        function reopen()
+            TC.begin_relation_attempt!(agenda,nothing)
+            @test reset!(rec,CONFIG.environment["game_id"])["completion"] == "confirmed"
+        end
+        target = CLICK_TARGET ? TC.click_action((9,11)) : Dict("id"=>(REBOUND_EFFECT ? 5 : 2))
         comparison = dispatch(target)
         @test rec.observation.levels_completed == 0
+        if FAILED_COMPARISON
+            @test comparison.public_outcome.result == :failure
+            reopen()
+        end
         initial_action = REBOUND_EFFECT ? TC.click_action((9,11)) : Dict("id"=>5)
         preparation = dispatch(initial_action)
         second_source = MODE == "outcome-relation-chain" ? dispatch(Dict("id"=>7)) : nothing
@@ -34,6 +44,21 @@ const REBOUND_EFFECT = MODE == "outcome-role-equivalence"
         @test rec.observation.levels_completed == 1
         @test progress.public_outcome.relationship.comparison == comparison.event
         @test progress.public_outcome.relationship.preparation == preparation.event
+        omitted_live = nothing
+        rebound = CLICK_TARGET ? TC.click_action((39,11)) : target
+        if FAILED_COMPARISON
+            failed = dispatch(rebound)
+            @test failed.public_outcome.result == :failure
+            omitted_live = failed.event
+            reopen()
+            if rec.observation.levels_completed == 0
+                dispatch(initial_action)
+                @test dispatch(target).reached.advanced
+            end
+            @test rec.observation.levels_completed == 1
+            @test TC.observed_failure(agenda,TC.relation_context(rec.observation),
+                TC.action_key(rebound),agenda.previous)
+        end
         appearance_witnesses = String[]
         live_action = initial_action
         if REBOUND_EFFECT
@@ -88,7 +113,6 @@ const REBOUND_EFFECT = MODE == "outcome-role-equivalence"
         end
         follow = propose()
         @test follow.proposal.intent == :continue_outcome_relation
-        rebound = MODE == "role-outcome" ? TC.click_action((39,11)) : target
         @test follow.proposal.action == rebound
         win = dispatch(follow.proposal.action;follow.proposal,follow.task)
         @test win.public_outcome.dependency == last_effect.event
@@ -96,7 +120,7 @@ const REBOUND_EFFECT = MODE == "outcome-role-equivalence"
         @test close_scorecard!(rec)["completion"] == "confirmed"
         TC.atomic_json(TC.store_path(store,MODE * ".json"),
             (;comparison,preparation,second_source,progress,setup=(;setup.task,setup.baseline,effect),
-                additional,appearance_witnesses,follow=(;follow.task,win)))
+                additional,appearance_witnesses,omitted_live,follow=(;follow.task,win)))
         @test last(recover_run(store)).event["event_id"] == win.event
     end
 end
