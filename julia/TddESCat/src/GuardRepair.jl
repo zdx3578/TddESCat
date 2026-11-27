@@ -6,6 +6,12 @@ struct ComponentColor <: MotionPredicate
     pigment::UInt8
 end
 
+struct RelativeComponentColor <: MotionPredicate
+    offset::Pixel
+    offsets::Vector{Pixel}
+    pigment::UInt8
+end
+
 struct DestinationColor <: MotionPredicate
     pigment::UInt8
 end
@@ -24,6 +30,8 @@ end
 
 predicate_record(p::ComponentColor) = Dict("kind"=>"component_color", "position"=>p.at,
     "offsets"=>p.offsets, "color"=>Int(p.pigment))
+predicate_record(p::RelativeComponentColor) = Dict("kind"=>"relative_component_color", "offset"=>p.offset,
+    "offsets"=>p.offsets, "color"=>Int(p.pigment))
 predicate_record(p::DestinationColor) = Dict("kind"=>"destination_entry_color", "color"=>Int(p.pigment))
 predicate_record(p::TransientColor) = Dict("kind"=>"previous_response_transient_color", "color"=>Int(p.pigment))
 predicate_record(p::RecentAction) = Dict("kind"=>"previous_public_action", "id"=>p.id)
@@ -32,12 +40,21 @@ predicate_key(p) = JSON.json(predicate_record(p))
 
 position_offsets(shape) = [(x, y) for (x, y, _) in shape_template(shape)]
 
-function evaluate_predicate(p::ComponentColor, frame, binding, delta, history, parts=color_components(frame))
-    x, y = p.at
+function component_color_at(frame,parts,at,offsets,pigment)
+    x, y = at
     checkbounds(Bool, frame, y + 1, x + 1) || return unknown_truth
     shape = parts.groups[parts.owner[y + 1, x + 1]]
-    anchor(shape) == p.at && position_offsets(shape) == p.offsets || return unknown_truth
-    return frame[y + 1, x + 1] == p.pigment ? proven : disproven
+    anchor(shape) == at && position_offsets(shape) == offsets || return unknown_truth
+    return frame[y + 1, x + 1] == pigment ? proven : disproven
+end
+
+function evaluate_predicate(p::ComponentColor, frame, binding, delta, history, parts=color_components(frame))
+    return component_color_at(frame,parts,p.at,p.offsets,p.pigment)
+end
+
+function evaluate_predicate(p::RelativeComponentColor, frame, binding, delta, history, parts=color_components(frame))
+    isnothing(binding) && return unknown_truth
+    return component_color_at(frame,parts,binding.anchor .+ p.offset,p.offsets,p.pigment)
 end
 
 evaluate_predicate(p::MotionPredicate, frame, binding, delta, history, parts) =
@@ -92,8 +109,10 @@ function in_context(shape, binding, radius)
 end
 
 function predicate_pool(samples, template, delta; max_atoms=nothing, context_radii=(1, 2, 4),
-                        allow_full_frame=true, history_lengths=(1,))
+                        allow_full_frame=true, history_lengths=(1,),bindings=nothing,relative_support=())
     predicates = Dict{String,MotionPredicate}()
+    relative_trials = BitSet(relative_support)
+    relative_witnesses = Dict{Tuple{Pixel,UInt8,Vector{Pixel}},Pixel}()
     function add!(predicate)
         key = predicate_key(predicate)
         haskey(predicates, key) && return true
@@ -101,8 +120,8 @@ function predicate_pool(samples, template, delta; max_atoms=nothing, context_rad
         predicates[key] = predicate
         return true
     end
-    for sample in samples
-        bound = bind_motion(sample.before, template)
+    for (index,sample) in enumerate(samples)
+        bound = isnothing(bindings) ? bind_motion(sample.before,template) : bindings[index]
         colors = destination_entry(sample.before, bound, delta)
         if !isnothing(colors) && length(colors) == 1
             add!(DestinationColor(only(colors))) ||
@@ -120,8 +139,17 @@ function predicate_pool(samples, template, delta; max_atoms=nothing, context_rad
         end
         for shape in color_components(sample.before).groups
             allow_full_frame || any(r -> in_context(shape, bound, r), context_radii) || continue
-            add!(ComponentColor(anchor(shape), position_offsets(shape), first(shape)[3])) ||
+            at,offsets,color = anchor(shape),position_offsets(shape),first(shape)[3]
+            add!(ComponentColor(at,offsets,color)) ||
                 return (pool=collect(values(predicates)), complete=false)
+            if index in relative_trials && !isnothing(bound) && at != bound.anchor
+                offset = at .- bound.anchor
+                first_role = get!(relative_witnesses,(offset,color,offsets),bound.anchor)
+                if first_role != bound.anchor
+                    add!(RelativeComponentColor(offset,offsets,color)) ||
+                        return (pool=collect(values(predicates)),complete=false)
+                end
+            end
         end
     end
     return (pool=collect(values(predicates)), complete=true)

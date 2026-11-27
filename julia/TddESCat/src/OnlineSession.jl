@@ -169,7 +169,8 @@ function fit_joint_condition(rule, trials, limits)
     pool = predicate_pool(rows,effect.template,delta;
         context_radii=get(limits,:context_radii,(1,2,4)),
         allow_full_frame=get(limits,:allow_full_frame,true),
-        history_lengths=get(limits,:history_lengths,(1,)))
+        history_lengths=get(limits,:history_lengths,(1,)),bindings,
+        relative_support=support)
     components = [color_components(row.before) for row in rows]
     test = (atom,i)->evaluate_predicate(atom,rows[i].before,bindings[i],delta,rows[i].previous_actions,
         components[i],rows[i].previous_transients)

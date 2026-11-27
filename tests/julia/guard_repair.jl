@@ -80,3 +80,50 @@ end
     @test trial.event_id ∉ controller.seen_events
     @test_throws ErrorException TC.assess_motion!(controller, sample, old)
 end
+
+@testset "The condition follows the affected role across concrete bindings" begin
+    origins = (7,19,31)
+    function board(colors)
+        scene = fill(0x00,28,44)
+        for (x,color) in zip(origins,colors)
+            scene[15:16,x+1:x+2] .= 0x02
+            scene[7:8,x+3:x+4] .= color
+        end
+        return scene
+    end
+    function trial(name,scene,x,dx)
+        post = copy(scene)
+        post[15:16,x+1:x+2] .= 0x00
+        post[15:16,x+1+dx:x+2+dx] .= 0x02
+        action = TC.click_action((x,14))
+        source = "$(name)-before"
+        origin = (event=Dict("event_id"=>source,"before_ref"=>nothing),
+            observation=TC.PublicObservation("test","guid",[scene],"NOT_FINISHED",0,1,Dict("id"=>5),[5,6],false))
+        response = (event=Dict("event_id"=>name,"before_ref"=>source),
+            observation=TC.PublicObservation("test","guid",[post],"NOT_FINISHED",0,1,action,[5,6],false))
+        return TC.PublicTrial(TC.motion_example(origin,response;history=[0,5]),action,TC.observed_effects(origin,response))
+    end
+    left = board((0x03,0x08,0x08))
+    right = board((0x08,0x03,0x08))
+    known = [trial("left-good",left,origins[1],3),trial("left-bad",left,origins[2],-3),
+        trial("right-good",right,origins[2],3),trial("right-bad",right,origins[1],-3)]
+    actual = first(known)
+    rule = TC.observed_joint_model(actual.effects,actual.sample.before,actual.sample.after)
+    outcomes = [TC.evaluate_joint_trial(rule,row).verdict for row in known]
+    @test outcomes == [TC.proven,TC.disproven,TC.proven,TC.disproven]
+    fitted = TC.fit_joint_condition(rule,known,(;allow_full_frame=true,history_lengths=(1,2)))
+    @test fitted.condition.feasible
+    @test fitted.condition.support == ["left-good","right-good"]
+    @test fitted.condition.excluded == ["left-bad","right-bad"]
+    guard = only(fitted.condition.atoms)
+    @test guard isa TC.RelativeComponentColor
+    @test guard.offset == (2,-8) && guard.pigment == 0x03
+    check(frame) = begin
+        groups = TC.public_components(frame)
+        TC.candidate_evaluation(fitted,frame,groups,TC.enclosure_pairs(groups),
+            TC.click_action((last(origins),14)),[0,5];relative_transfer=true)
+    end
+    @test check(board((0x08,0x08,0x03))).truth == TC.proven
+    @test check(board((0x03,0x03,0x08))).truth == TC.disproven
+    @test check(board((0x03,0x03,0x00))).truth == TC.unknown_truth
+end
