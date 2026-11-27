@@ -190,6 +190,18 @@ end
     continued = TS.observe_spatial!(state,r,s,TS.observed_effects(r,s))
     @test continued.after == (6,5) && continued.orientation_before == continued.orientation_after == 2
     @test length(state.orientations) == 1
+    start = last(r.observation.frames)
+    recovered = TS.rebind_spatial(state,start,"public-reset";retain_motion=true)
+    @test TS.locate_role(start,recovered) == (4,5)
+    @test recovered.orientations == state.orientations && last(recovered.role_reads) == "public-reset"
+    @test TS.measured_offset(recovered,2) == TS.measured_offset(state,2)
+    @test recovered.offsets !== state.offsets
+    @test isempty(recovered.visits) && isempty(recovered.layouts)
+    @test TS.motion_evidence(recovered,(4,5),3,start,2;current=true).status == :untested
+    other = TS.rebind_spatial(state,start,"advanced")
+    @test !isempty(other.role) && isempty(other.offsets)
+    ambiguous = TS.rebind_spatial(state,last(duplicate.observation.frames),"ambiguous-reset";retain_motion=true)
+    @test isempty(ambiguous.role) && isempty(ambiguous.offsets)
 
     @testset "A same-position preparation reaches another spatial experiment" begin
         blocked = picture_entry("blocked","translated",2,scene(sprite,4,3))

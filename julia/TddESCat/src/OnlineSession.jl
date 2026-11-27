@@ -812,6 +812,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     composing = !isnothing(config.planning) && haskey(config.planning,"goal")
     relation_goals = !isnothing(config.planning) && get(config.planning,"relation_goals",false)
     spatial = !isnothing(config.planning) && get(config.planning,"autonomous",false) ? SpatialLearning() : nothing
+    spatial_origin = isnothing(spatial) ? nothing : relation_context(rec.observation)
     visual = isnothing(spatial) ? nothing : isnothing(visual_state) ? VisualControl() : visual_state
     relation_tasks = !frozen && !isnothing(visual) && relation_goals
     goal = composing ? bind_observed_goal(last(rec.observation.frames),config.planning["goal"]) : nothing
@@ -863,9 +864,11 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             relation_policy_cursor = nothing
             policy_experiment_after = nothing
             fresh_binding = failed || rec.observation.levels_completed != obs.levels_completed
+            reset_context = relation_context(rec.observation)
             if fresh_binding
                 begin_visual_level!(visual,spatial)
-                spatial = SpatialLearning()
+                retain_motion = rec.observation.state == "NOT_FINISHED" && reset_context == spatial_origin
+                spatial = rebind_spatial(spatial,last(rec.observation.frames),rec.before_ref;retain_motion)
                 measurement = MeterContext()
                 empty!(attempts)
                 empty!(program_attempts)
@@ -876,12 +879,15 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 begin_visual_attempt!(visual)
                 intervention_memory.prior_observation = nothing
             end
+            spatial_origin = reset_context
             begin_relation_attempt!(relations,retry;observation=rec.observation)
             isnothing(exploration_frontier) || (exploration_frontier.route = nothing)
             atomic_json(store_path(rec.store,"attempts",reset["command_id"] * ".json"),(;
                 event=rec.before_ref,prior=event["before_ref"],attempt=relations.attempt,revision=relations.restart,
                 previous_level=obs.levels_completed,level=rec.observation.levels_completed,
-                full_reset=rec.observation.full_reset,session=rec.observation.guid,rebound=fresh_binding))
+                full_reset=rec.observation.full_reset,session=rec.observation.guid,rebound=fresh_binding,
+                spatial_role_rebound=fresh_binding && !isempty(spatial.role),
+                spatial_offset_hypotheses=fresh_binding ? length(spatial.offsets) : 0))
             isnothing(reset_regions) || publish_receipt_regions!(knowledge,rec.store,reset_entry,reset_regions)
             history = [0]
             ready_at = time_ns()
@@ -1376,13 +1382,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 end
             else
                 begin_visual_level!(visual,spatial)
-                previous = spatial
-                spatial = SpatialLearning()
-                if !isnothing(locate_role(last(resulting.observation.frames),previous))
-                    spatial.role = copy(previous.role)
-                    spatial.orientations = copy(previous.orientations)
-                    spatial.role_reads = unique([previous.role_reads;effects.event_id])
-                end
+                spatial = rebind_spatial(spatial,last(resulting.observation.frames),effects.event_id)
+                spatial_origin = relation_context(resulting.observation)
             end
         end
         assessment = isnothing(item.chosen) ? (actual=Dict(),assessments=Dict()) :

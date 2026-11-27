@@ -74,6 +74,19 @@ function locate_role(frame,model::SpatialLearning)
     return found isa NamedTuple ? found.point : nothing
 end
 
+function rebind_spatial(previous,frame,event;retain_motion=false)
+    rebound = SpatialLearning()
+    isnothing(locate_role(frame,previous)) && return rebound
+    rebound.role = copy(previous.role)
+    rebound.orientations = copy(previous.orientations)
+    rebound.role_reads = unique([previous.role_reads;event])
+    if retain_motion
+        rebound.offsets = deepcopy(previous.offsets)
+        rebound.floors = copy(previous.floors)
+    end
+    return rebound
+end
+
 function same_footprint_rotations(role)
     rotations = MotionShape[]
     points = effect_points(role)
