@@ -1325,6 +1325,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         sample = motion_example(entry,resulting;history)
         before_regions = knowledge.receipt
         after_regions = relation_tasks ? receipt_regions(resulting;previous=entry,previous_regions=knowledge.receipt) : nothing
+        after_groups = isnothing(after_regions) ? nothing : last(after_regions.frames).groups
         effects = observed_effects(entry,resulting;meters=measurement,before_regions,after_regions)
         intervention_feedback = observe_intervention!(intervention_memory,intervention,entry,resulting,effects;
             learn=!frozen,ordinal=count+1)
@@ -1387,10 +1388,11 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             end
         end
         assessment = isnothing(item.chosen) ? (actual=Dict(),assessments=Dict()) :
-            measure_joint((model=item.chosen.model.rule,fragments=item.chosen.fragments),sample.after;effects)
+            measure_joint((model=item.chosen.model.rule,fragments=item.chosen.fragments),sample.after;
+                effects,groups=after_groups)
         relation_feedback = if relation_tasks
             observation = observe_relations!(relations,entry,resulting,effects,contact_feedback,site_transitions,
-                relation_proposal;groups=decision.groups)
+                relation_proposal;groups=decision.groups,after_groups)
             finish_relation_dispatch!(relations,relation_proposal;feedback=observation.feedback)
             if !isnothing(exploration_frontier)
                 refined = frontier_observe!(exploration_frontier,relations)
@@ -1418,7 +1420,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         end
         projection_feedback = if !isnothing(projected)
             local_feedback = projection_choice === item.chosen ? assessment :
-                measure_joint((model=projection_choice.model.rule,fragments=projection_choice.fragments),sample.after;effects)
+                measure_joint((model=projection_choice.model.rule,fragments=projection_choice.fragments),sample.after;
+                    effects,groups=after_groups)
             check_projection!(knowledge.projections,projected,sample.before,sample.after,effects,
                 local_feedback,limits.history_lengths;frozen)
         end

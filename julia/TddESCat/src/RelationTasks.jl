@@ -190,10 +190,10 @@ function producer_relations(rule)
         for model in rule.effects]
 end
 
-function observed_producer!(agenda,sample,before,after)
+function observed_producer!(agenda,sample,before,after;groups=nothing)
     output = sample.effects
     (sample.advanced || isempty(output.effects) || !endpoint_effects_observed(output)) && return nothing
-    rule = observed_joint_model(output,before,after)
+    rule = observed_joint_model(output,before,after;before_groups=groups)
     action = rule.action_id
     action == 6 && isnothing(rule.click) && return nothing
     relations = producer_relations(rule)
@@ -220,11 +220,12 @@ function observed_producer!(agenda,sample,before,after)
     return (;key,relations,scope=evidence_scope)
 end
 
-function relation_checks(proposal,after,effects)
+function relation_checks(proposal,after,effects;groups=nothing)
     isnothing(proposal) && return nothing
+    isnothing(groups) && !isempty(proposal.tests) && (groups = public_components(after))
     results = NamedTuple[]
     for test in proposal.tests
-        verdict = measure_joint((model=test.rule,fragments=test.fragments),after;effects)
+        verdict = measure_joint((model=test.rule,fragments=test.fragments),after;effects,groups)
         status = "refuted" in values(verdict.assessments) ? :refuted :
             all(==("supported"),values(verdict.assessments)) ? :established : :unresolved
         push!(results,(producer=test.key,scope=test.scope,status,expected=test.expected,
@@ -241,7 +242,8 @@ function relation_checks(proposal,after,effects)
     return (;intent=proposal.intent,result,tests=results)
 end
 
-function observe_relations!(agenda,before,after,effects,contact,site_changes,proposal;groups=nothing)
+function observe_relations!(agenda,before,after,effects,contact,site_changes,proposal;
+                            groups=nothing,after_groups=nothing)
     prev,next = before.observation,after.observation
     advanced = next.levels_completed > prev.levels_completed
     nothing_visible = same_intervention_context(prev,next) && all(==(last(prev.frames)),next.frames)
@@ -276,7 +278,7 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
     if sample.preceding != 0 && agenda.samples[sample.preceding].unchanged
         push!(agenda.pairs,(sample.context,previous,action))
     end
-    feedback = relation_checks(proposal,last(next.frames),effects)
+    feedback = relation_checks(proposal,last(next.frames),effects;groups=after_groups)
     if !isnothing(proposal) && proposal.intent in
             (:recover_confirmed_progress,:restore_failure_experiment_context,:explore_observed_frontier_path)
         observed = sample.next_context == proposal.obligation.expected &&
@@ -321,7 +323,7 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
             end
         end
     end
-    contract = observed_producer!(agenda,sample,last(prev.frames),last(next.frames))
+    contract = observed_producer!(agenda,sample,last(prev.frames),last(next.frames);groups)
     if !isnothing(contract) && !isnothing(prior) && prior.unchanged && next.state == "NOT_FINISHED"
         contrasted = any(get(agenda.visits,(sample.context,action),Int[])) do at
             row = agenda.samples[at]

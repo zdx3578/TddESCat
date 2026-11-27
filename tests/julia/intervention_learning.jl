@@ -77,6 +77,15 @@ end
     TC.begin_relation_attempt!(agenda,nothing;observation=initial.observation)
     seen = TC.prepare_relation_tests(agenda,TC.relation_context(initial.observation),initial.observation,groups,action)
     @test only(seen).scope == :bound
+    before_view, after_view = TC.frame_regions(before), TC.frame_regions(after)
+    @test TC.measure_joint(choice,after;effects,groups=after_view.groups) ==
+        TC.measure_joint(choice,after;effects)
+    contract = (intent=:apply_relation,tests=seen)
+    @test TC.relation_checks(contract,after,effects;groups=after_view.groups) ==
+        TC.relation_checks(contract,after,effects)
+    reused = TC.observe_relations!(TC.RelationAgenda(),initial,next,effects,nothing,NamedTuple[],nothing;
+        groups=before_view.groups,after_groups=after_view.groups)
+    @test reused.producer == learned.producer
     elsewhere = scene(;origin=(13,17),unit=3)
     other = intervention_entry("other",Dict("id"=>0),elsewhere,[2])
     other_groups = TC.public_components(elsewhere)

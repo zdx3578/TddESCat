@@ -144,9 +144,10 @@ function joint_model(compiled, program, original, definitions, calls, occurrence
 end
 
 """Compile specific public effects with the same binding and feedback semantics as a published definition."""
-function observed_joint_model(output,before,after;id="observed-" * output.event_id,references=String[])
+function observed_joint_model(output,before,after;id="observed-" * output.event_id,references=String[],
+                              before_groups=nothing)
     effects = output.effects
-    before_groups = public_components(before)
+    isnothing(before_groups) && (before_groups = public_components(before))
     enclosed = enclosure_pairs(before_groups)
     enclosed_targets = [item.target for item in enclosed]
     models = EffectModel[]
@@ -488,8 +489,8 @@ function judge_joint(models, denied, before, action)
     return (choice=first(choices),reason="published_joint_effects")
 end
 
-function measure_joint(choice, after;effects=nothing)
-    groups = public_components(after)
+function measure_joint(choice, after;effects=nothing,groups=nothing)
+    isnothing(groups) && (groups = public_components(after))
     enclosure = enclosure_pairs(groups)
     actual = Dict{String,Any}()
     assessments = Dict{String,String}()
