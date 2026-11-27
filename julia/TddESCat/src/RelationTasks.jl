@@ -41,6 +41,7 @@ mutable struct RelationAgenda
     relation_replays::Set{Tuple{String,Tuple,PublicActionKey}}
     visits::Dict{Tuple{String,PublicActionKey},Vector{Int}}
     context_comparisons::Dict{Tuple{Int,PublicActionKey,String},Vector{Int}}
+    checked_effects::Set{Tuple}
     pairs::Set{Tuple{String,PublicActionKey,PublicActionKey}}
     failures::Dict{Tuple{String,PublicActionKey,PublicActionKey},Int}
     reopened::Set{Tuple{String,PublicActionKey,PublicActionKey}}
@@ -60,7 +61,7 @@ mutable struct RelationAgenda
     preparing::Union{Nothing,NamedTuple}
 end
 
-RelationAgenda() = RelationAgenda(RelationSample[],Dict(),Dict(),Dict(),Dict(),Dict(),Set(),Dict(),Dict(),Set(),Dict(),Set(),
+RelationAgenda() = RelationAgenda(RelationSample[],Dict(),Dict(),Dict(),Dict(),Dict(),Set(),Dict(),Dict(),Set(),Set(),Dict(),Set(),
     Dict(),Dict(),Dict(),Dict(),Dict(),NamedTuple[],OutcomeRelationWitness[],Dict(),Set(),1,1,0,nothing,nothing)
 
 relation_context(obs) = semantic_hash([obs.levels_completed,size(last(obs.frames)),
@@ -76,6 +77,11 @@ relation_refs(row::RelationSample) = [row.effects.before_id,relation_ref(row)]
 previous_key(agenda,index) = index == 0 ? (0,-1,-1) : action_key(agenda.samples[index].effects.action)
 click_profile(support,point) = semantic_hash([6,shape_template(support),Tuple(relative_click(point,support))])
 primitive_profile(id) = string(id)
+
+function effect_experiment_scope(level,action,history,test)
+    conditions = Tuple(sort!(unique([model.version for model in get(test,:conditions,NamedTuple[])])))
+    return (level,action,history,test.key,conditions,String(canonical_bytes(test.expected)))
+end
 
 function observed_failure(agenda,context,action,previous)
     !refined_history(history_scope(agenda,context)) &&
@@ -302,8 +308,14 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
         feedback = merge(feedback,(;comparison))
     end
     if !isnothing(feedback)
-        for row in feedback.tests
+        history = action[1] == 6 && !isempty(proposal.tests) ?
+            relation_history_key(agenda,sample.context,sample.preceding) : nothing
+        for (row,test) in zip(feedback.tests,proposal.tests)
             row.status == :refuted && push!(agenda.producers[row.producer].refuted,index)
+            if !isnothing(history) && row.status in (:established,:refuted)
+                scope = effect_experiment_scope(sample.level,action,history,test)
+                push!(agenda.checked_effects,scope)
+            end
         end
     end
     contract = observed_producer!(agenda,sample,last(prev.frames),last(next.frames))
@@ -784,7 +796,8 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
             obligation=intervention.changed_context)
     end
     isempty(tests) && return nothing
-    return (;action,intent=:test_concrete_effect,tests,reads=String[],obligation=nothing)
+    obligation = get(intervention,:effect_experiment,nothing)
+    return (;action,intent=:test_concrete_effect,tests,reads=String[],obligation)
 end
 
 function observed_relation_task(agenda,obs,decision,context;meters)
@@ -916,7 +929,7 @@ function changed_context_probe(agenda,obs,scene)
         changed_context=obligation,reason="distinguish_changed_object_context")
 end
 
-"""Dispatch a rebound role only through the producer that will check the actual receipt."""
+"""Offer an experiment for a concrete effect whose current scope still needs a comparison."""
 function object_effect_followup(agenda::RelationAgenda,obs,context,candidates;
                                 groups=nothing,meters=(),condition_view=nothing)
     options = NamedTuple[]
@@ -942,15 +955,21 @@ function object_effect_followup(agenda::RelationAgenda,obs,context,candidates;
     sort!(options;by=row->(haskey(agenda.lineages,row.candidate.support),
         -row.witnesses,row.distance,row.candidate.point))
     examined = Set{Tuple{Int,Int}}()
+    history = relation_history_key(agenda,context,agenda.previous)
     for row in options
         candidate = row.candidate
         candidate.point in examined && continue
         push!(examined,candidate.point)
-        tests = prepare_relation_tests(agenda,context,obs,groups,click_action(candidate.point);
+        action = click_action(candidate.point)
+        tests = prepare_relation_tests(agenda,context,obs,groups,action;
             meters,condition_view,enclosure,role_index)
         isempty(tests) && continue
         all(test->test.expected == first(tests).expected,tests) || continue
-        return (;candidate,tests)
+        pending = [test.key for test in tests if
+            effect_experiment_scope(level,action_key(action),history,test) ∉ agenda.checked_effects]
+        isempty(pending) && continue
+        purpose = (;comparison=:effect_at_bound_condition,producers=pending,history)
+        return (;candidate,tests,purpose)
     end
     return nothing
 end

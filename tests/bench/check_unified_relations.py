@@ -54,8 +54,11 @@ class Fixture(ARCBaseGame):
             frame[40:42, 44:46] = 2
         if MODE == "context-reprobe":
             frame[10:13, 23:26] = 4
+        if MODE == "effect-scope-exploration":
+            frame[10:13, 38:41] = 4
         actions = {"delayed": [5, 7], "remote": [5, 6], "directions": [6],
             "context-reprobe": [5, 6],
+            "effect-scope-exploration": [5, 6],
             "restart": [6], "progress-restart": [6], "restart-choices": [6],
             "advancement-transfer": [6], "advancement-refutation": [5, 6], "history-refinement": [1, 4],
             "history-continuation": [1, 4], "history-matrix": [1, 4], "history-receipt": [1, 4], "long-history": [1, 4],
@@ -170,6 +173,16 @@ class Fixture(ARCBaseGame):
                 self.hits += 1
                 pixels[40:42, 44:46] = (7, 2, 8)[self.hits - 1]
             elif pixels[40, 44] == 8 and self.action.data["x"] == 24:
+                self.next_level()
+        elif MODE == "effect-scope-exploration":
+            if action == 5:
+                self.hits += 1
+                pixels[10:13, 8:11] = 4
+                pixels[40, 44] = 5 + self.hits
+            elif (self.action.data["x"], self.action.data["y"]) == (9, 11):
+                pixels[10:13, 8:11] = 9
+            elif self.hits >= 3 and (self.action.data["x"], self.action.data["y"]) == (39, 11):
+                pixels[10:13, 38:41] = 9
                 self.next_level()
         elif MODE == "role-outcome":
             if action == 5:
@@ -342,6 +355,7 @@ def capture(
         "outcome-relation-chain",
         "bridge-partition",
         "context-reprobe",
+        "effect-scope-exploration",
         "frontier-dispatch",
         "policy-yield",
         "frontier-route",
@@ -399,6 +413,7 @@ def capture(
             "circuit-role": "circuit_role_public.jl",
             "coordinate-restart": "coordinate_restart_public.jl",
             "context-reprobe": "context_reprobe_public.jl",
+            "effect-scope-exploration": "effect_scope_exploration_public.jl",
             "frontier-dispatch": "frontier_dispatch.jl",
             "policy-yield": "policy_yield_public.jl",
             "frontier-route": "frontier_route_public.jl",
@@ -516,6 +531,20 @@ def observed_steps(public):
 
 
 def verify(mode, public):
+    if mode == "effect-scope-exploration":
+        report = read(public / "effect-scope-exploration.json")
+        trace = receipts(public)
+        measured, prior_effect = trace[report["measured"]]
+        selected, outcome = trace[report["selected"]]
+        before_measured = trace[measured["before_ref"]][1]["frame"][-1]
+        before_selected = trace[selected["before_ref"]][1]["frame"][-1]
+        assert measured["action"] == {"id": 6, "x": 9, "y": 11}
+        assert selected["action"] == {"id": 6, "x": 39, "y": 11}
+        assert before_measured[11][9] == before_selected[11][9] == 4
+        assert prior_effect["frame"][-1][11][9] == 9
+        assert before_measured[40][44] != before_selected[40][44]
+        assert outcome["state"] == "WIN"
+        return [report["measured"], report["selected"]]
     if mode in OUTCOME_POLICY_MODES:
         record = read(public / "outcome-policy.json")
         trace = receipts(public)
@@ -1070,6 +1099,7 @@ def main(config, run):
         "coordinate-restart",
         "bridge-partition",
         "context-reprobe",
+        "effect-scope-exploration",
         "frontier-dispatch",
         "policy-yield",
         "frontier-route",

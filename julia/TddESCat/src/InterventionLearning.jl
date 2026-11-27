@@ -177,7 +177,7 @@ function choose_intervention(memory,scene,obs,ranked,attempts;
         if !isnothing(followup)
             return (action=click_action(followup.candidate.point),probe=:representative,
                 candidate=followup.candidate,tests=followup.tests,goal=nothing,fallback=nothing,
-                reason="extend_observed_object_effect")
+                effect_experiment=followup.purpose,reason="extend_observed_object_effect")
         end
         candidate = argmin(c->(c.broad,(level,c.point) in memory.points,c.features.shape_multiplicity,
             -length(c.support),c.point),role)
