@@ -29,6 +29,16 @@ end
     @test selected.id == 1 && selected.destination == (1,0)
     @test selected.frontier == (62,63)
     @test selected.reads == ["role","occlusion","offset-1","offset-2"]
+    @test !selected.survey.witnessed_first
+    shifted = fill(0x00,64,64)
+    shifted[1,2:3] .= 0x04
+    start = picture_entry("survey",nothing,0,frame)
+    step = picture_entry("known-step","survey",1,shifted)
+    TS.observe_spatial!(spatial,start,step,TS.observed_effects(start,step))
+    informed = TS.scene_survey(control,spatial,obs,decision)
+    @test informed.survey.witnessed_first
+    @test informed.survey.step == (1,0) && informed.survey.viewpoint == (62,63)
+    @test "known-step" in informed.reads
 end
 
 @testset "Click movement does not establish a controlled spatial role" begin

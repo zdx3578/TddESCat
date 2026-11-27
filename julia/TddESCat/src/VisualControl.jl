@@ -263,9 +263,13 @@ function scene_survey(control, spatial, obs, decision)
         append!(reads,agenda[index].reads)
     end
     selected = agenda[best]
+    first_motion = motion_evidence(spatial,here,selected.action,frame,obs.action["id"];current=true)
+    witnessed_first = first_motion.point == selected.first_point &&
+        !isnothing(get(first_motion,:orientation,nothing))
+    survey = (viewpoint=selected.state[1],step=selected.first_point,witnessed_first)
     control.continuation = nothing
     return (id=selected.action,reason="inspect_unseen_neighborhood",reads=unique!(reads),
-        role=here,destination=selected.first_point,frontier=selected.state[1],expected=nothing)
+        role=here,destination=selected.first_point,frontier=selected.state[1],expected=nothing,survey)
 end
 
 function autonomous_visual_plan(control,spatial,obs,decision,event;goal=nothing,relationship=nothing,refuted=nothing)

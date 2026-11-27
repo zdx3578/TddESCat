@@ -182,6 +182,38 @@ end
     @test isnothing(kept.frontier_task)
 end
 
+@testset "A witnessed survey step can reach an unexplored viewpoint" begin
+    agenda, search = TC.RelationAgenda(), TC.PublicFrontier()
+    board, shifted = zeros(UInt8,8,8), zeros(UInt8,8,8)
+    board[3:4,2:3] .= 0x04
+    shifted[3:4,4:5] .= 0x04
+    available = [1,2]
+    origin = recorded("initial-view",nothing,board,0,available)
+    witnessed = recorded("path-witness",origin.event["event_id"],shifted,1,available)
+    TC.observe_relations!(agenda,origin,witnessed,TC.observed_effects(origin,witnessed),
+        nothing,NamedTuple[],nothing)
+    TC.frontier_observe!(search,agenda)
+    TC.begin_relation_attempt!(agenda,nothing;observation=origin.observation)
+    obs = origin.observation
+    context = TC.relation_context(obs)
+    options = [(action=Dict("id"=>id),reason="ordinary") for id in available]
+    decision = (;ranked=options)
+    # A previously visited immediate successor still leads to another viewpoint.
+    successor = TC.frontier_state(agenda,TC.relation_context(witnessed.observation),1)
+    search.outcomes[successor] = Dict()
+    frontier = (;search,agenda,observation=obs,decision,context)
+    survey = (viewpoint=(5,2),step=(3,2),witnessed_first=true)
+    task = (id=1,reason="inspect_unseen_neighborhood",survey)
+    choose(proposal) = TC.task_arbitration(options[2],proposal,nothing,nothing,nothing;
+        program=false,continuing_contact=false,conditional=false,object_probes=false,frontier)
+    @test choose((id=1,reason=task.reason)).choice.action == Dict("id"=>2)
+    @test choose(task).choice.source == :spatial
+    @test choose(task).choice.action == Dict("id"=>1)
+    @test isnothing(choose(task).frontier_task)
+    agenda.failures[(context,(0,-1,-1),(1,-1,-1))] = 1
+    @test choose(task).choice.action == Dict("id"=>2)
+end
+
 @testset "A recovery task and a program can propose the same primitive" begin
     action = Dict("id"=>2)
     item = (;action,reason="revalidated_learned_program")

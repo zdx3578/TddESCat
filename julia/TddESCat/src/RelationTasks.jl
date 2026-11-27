@@ -875,12 +875,14 @@ function task_arbitration(item,spatial,intervention,relation,experiment;
         contact = get(spatial,:contact,nothing)
         contact_ready = continuing_contact || !isnothing(contact) && contact.conditions.judgment == :admitted
         pose = get(spatial,:pose,nothing)
+        survey = get(spatial,:survey,nothing)
+        witnessed_survey = !isnothing(survey) && survey.witnessed_first
         action = Dict("id"=>spatial.id)
-        admissible_pose = isnothing(pose) || isnothing(frontier) ||
+        admissible = (isnothing(pose) && isnothing(survey)) || isnothing(frontier) ||
             !observed_failure(frontier.agenda,frontier.context,action_key(action),frontier.agenda.previous)
-        if admissible_pose
-            spatial_ready = contact_ready || !isnothing(pose)
-            grounded = spatial_ready || get(spatial,:effect_gain,0) > 0
+        if admissible
+            grounded = contact_ready || !isnothing(pose) || get(spatial,:effect_gain,0) > 0
+            spatial_ready = contact_ready || !isnothing(pose) || witnessed_survey
             priority = grounded ? 1 : object_probes ? 7 : get(spatial,:unlocated_before,0) > 0 ? 5 : 4
             add(:spatial,action,spatial.reason,priority)
         end
