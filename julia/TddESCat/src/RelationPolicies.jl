@@ -16,36 +16,35 @@ function witnessed_relation_steps(agenda,entries)
         i = row.preceding
         i == 0 && continue
         left = agenda.samples[i]
-        isempty(left.effects.residual) || continue
+        enabled = row.effects.action["id"] in observed_action_gain(left)
+        isempty(left.effects.residual) || enabled || continue
         earlier = get(by_sample,i,nothing)
         same_stage = !left.advanced && left.attempt == row.attempt && left.level == row.level
         same_stage || continue
         if row.advanced
-            isnothing(earlier) && continue
+            isnothing(earlier) && !enabled && continue
             left.next_context == row.context || continue
             row.effects.action["id"] == 6 && isnothing(row.binding) && continue
             haskey(by_ref,relation_ref(row)) || continue
             descriptors[index] = policy_step(row,String[])
-            descriptors[i] = policy_step(left,agenda.producers[earlier].relations)
+            descriptors[i] = policy_step(left,isnothing(earlier) ? String[] : agenda.producers[earlier].relations)
             neighbors[index] = (;before=i,shared=Tuple{Int,Int}[])
             continue
         end
-        isempty(row.effects.residual) || continue
+        gained = observed_action_gain(row)
         key = get(by_sample,index,nothing)
-        isnothing(key) && continue
-        sharing = public_role_links(left.effects,row.effects)
+        isnothing(key) && isempty(gained) && continue
+        sharing = isnothing(earlier) || isnothing(key) ? Tuple{Int,Int}[] :
+            public_role_links(left.effects,row.effects)
         inferred_history = any(pair->first(pair) == index,get(agenda.delayed,left.context,[]))
-        law = get(left.effects.public_delta,"available_actions",nothing)
-        enabled = !isnothing(law) && row.effects.action["id"] ∉ law["before"] &&
-            row.effects.action["id"] in law["after"]
         # A positive delayed-effect witness needs a contrasting unchanged trial.
         connected = inferred_history || enabled || !isempty(sharing) || row.dependency == relation_ref(left)
         connected || continue
-        (isnothing(earlier) && !inferred_history) && continue
+        (isnothing(earlier) && !inferred_history && !enabled) && continue
         only_meter = all(effect->effect.family == :measurement,row.effects.effects) &&
             all(effect->effect.family == :measurement,left.effects.effects)
-        only_meter && continue
-        descriptors[index] = policy_step(row,agenda.producers[key].relations)
+        only_meter && !enabled && isempty(gained) && continue
+        descriptors[index] = policy_step(row,isnothing(key) ? String[] : agenda.producers[key].relations)
         descriptors[i] = policy_step(left,isnothing(earlier) ? [] : agenda.producers[earlier].relations)
         neighbors[index] = (;before=i,shared=sharing)
     end
@@ -63,6 +62,10 @@ function policy_step(row,relations)
     descriptor = Dict{String,Any}("id"=>row.effects.action["id"],"role"=>role,
         "relations"=>relations,"wait"=>row.unchanged)
     row.advanced && (descriptor["public_outcome"] = "advancement")
+    if !row.advanced && isempty(relations)
+        granted = observed_action_gain(row)
+        isempty(granted) || (descriptor["public_available"] = granted)
+    end
     return descriptor
 end
 
@@ -454,6 +457,66 @@ function policy_task_options(agenda,instruction,obs,decision;meters=())
     return options
 end
 
+function bind_policy_availability(cursor,op,obs,decision,agenda)
+    required = op["public_available"]
+    all(in(obs.available_actions),required) && return nothing
+    training = Set(cursor.policy.training)
+    domain = Set(obs.available_actions)
+    context = relation_context(obs)
+    history = relation_history_key(agenda,context,agenda.previous)
+    scene = op["id"] == 6 ? nothing : visible_role_multiset(decision.groups)
+    for item in decision.ranked
+        action = item.action
+        key = action_key(action)
+        first(key) == op["id"] && first(key) in domain || continue
+        observed_failure(agenda,context,key,agenda.previous) && continue
+        seen = get(agenda.visits,(context,key),Int[])
+        disproven = any(seen) do index
+            row = agenda.samples[index]
+            row.state == "NOT_FINISHED" && !row.advanced &&
+                relation_history_key(agenda,context,row.preceding) == history &&
+                !all(in(observed_action_gain(row)),required)
+        end
+        disproven && continue
+        for index in sort!(collect(keys(agenda.preparation_roles));rev=true)
+            row = agenda.samples[index]
+            relation_ref(row) in training && Set(row.available) == domain || continue
+            all(in(observed_action_gain(row)),required) || continue
+            matches_outcome_binding(row,action,decision.groups) || continue
+            if row.context == context
+                relation_history_key(agenda,context,row.preceding) == history || continue
+            elseif !isnothing(scene)
+                agenda.preparation_roles[index] == scene || continue
+            end
+            source = relation_ref(row)
+            reads = unique([cursor.policy.training;cursor.policy.available_after;cursor.observed;relation_refs(row)])
+            obligation = (;definition=cursor.policy.definition,wait=false,sought=String[],shared=[],
+                public_available=required,source,source_index=index,
+                scope=row.context == context ? :observed_instance : :hypothesis)
+            return (;action,intent=:execute_relation_policy,tests=NamedTuple[],reads,obligation)
+        end
+    end
+    return nothing
+end
+
+function witnessed_policy_availability(cursor,agenda,training,matches,action)
+    for result in Iterators.reverse(agenda.outcomes)
+        result.result in (:advancement,:win) && result.event in training || continue
+        observed = agenda.samples[result.index]
+        matches(observed,action) && !isempty(result.requirements) || continue
+        live = frontier_prior(agenda,agenda.previous,length(result.requirements))
+        length(live) == length(result.requirements) <= length(cursor.observed) || continue
+        relation_ref.(agenda.samples[live]) == cursor.observed[end-length(live)+1:end] || continue
+        matched = all(zip(live,result.requirements)) do (index,required)
+            row,source = agenda.samples[index],agenda.samples[required.index]
+            row.effects.action["id"] == source.effects.action["id"] &&
+                Set(row.available) == Set(source.available) && required.action in observed_action_gain(row)
+        end
+        matched && return observed
+    end
+    return nothing
+end
+
 function bind_policy_outcome(cursor,op,obs,decision,agenda)
     op["public_outcome"] == "advancement" || return nothing
     op["id"] in obs.available_actions || return nothing
@@ -493,10 +556,15 @@ function bind_policy_outcome(cursor,op,obs,decision,agenda)
                 return all(index in agenda.producers[producer].support
                     for (index,(_,producer)) in zip(live,witness.steps))
             end
-            isnothing(match) && continue
-            witness = agenda.outcome_relations[match]
             scope = :hypothesis
-            outcome, comparison = agenda.samples[[witness.outcome,witness.comparison]]
+            if isnothing(match)
+                outcome = witnessed_policy_availability(cursor,agenda,training,matches,action)
+                isnothing(outcome) && continue
+                comparison = nothing
+            else
+                witness = agenda.outcome_relations[match]
+                outcome, comparison = agenda.samples[[witness.outcome,witness.comparison]]
+            end
         end
         reads = unique([cursor.policy.training;cursor.policy.available_after;cursor.observed;
             relation_refs(outcome);isnothing(comparison) ? String[] : relation_refs(comparison)])
@@ -511,6 +579,7 @@ end
 function bind_relation_instruction(cursor,instruction,obs,decision,agenda;meters=())
     op = instruction.node["layout"]
     haskey(op,"public_outcome") && return bind_policy_outcome(cursor,op,obs,decision,agenda)
+    haskey(op,"public_available") && return bind_policy_availability(cursor,op,obs,decision,agenda)
     options = policy_task_options(agenda,instruction,obs,decision;meters)
     sharing = instruction.shared
     if !isempty(sharing)
@@ -634,7 +703,14 @@ function policy_action_precondition(candidate,agenda,obs)
         exposed = isnothing(delta) ? row.available : delta["after"]
         union!(contradicted,(action for action in needed if action ∉ exposed))
     end
-    for test in candidate.proposal.tests, index in Iterators.reverse(agenda.producers[test.key].support)
+    obligation = candidate.proposal.obligation
+    supports = if hasproperty(obligation,:public_available)
+        [(obligation.source_index,nothing)]
+    else
+        [(index,test.key) for test in candidate.proposal.tests
+            for index in Iterators.reverse(agenda.producers[test.key].support)]
+    end
+    for (index,producer) in supports
         index < length(agenda.samples) || continue
         source,following = agenda.samples[index],agenda.samples[index+1]
         following.preceding == index && !source.advanced || continue
@@ -642,11 +718,9 @@ function policy_action_precondition(candidate,agenda,obs)
         Set(source.available) == available || continue
         action = following.effects.action["id"]
         action in needed && action ∉ contradicted || continue
-        delta = get(source.effects.public_delta,"available_actions",nothing)
-        isnothing(delta) && continue
-        action ∉ delta["before"] && action in delta["after"] || continue
+        action in observed_action_gain(source) || continue
         purpose = (;kind=:enable_policy_action,action,source=relation_ref(source),
-            consumer=relation_ref(following),producer=test.key)
+            consumer=relation_ref(following),producer)
         return (;purpose,reads=unique([relation_refs(source);relation_refs(following)]))
     end
     return nothing

@@ -74,6 +74,11 @@ end
 
 relation_ref(row::RelationSample) = row.effects.event_id
 relation_refs(row::RelationSample) = [row.effects.before_id,relation_ref(row)]
+
+function observed_action_gain(row)
+    change = get(row.effects.public_delta,"available_actions",nothing)
+    return isnothing(change) ? Int[] : sort!(collect(setdiff(change["after"],change["before"])))
+end
 previous_key(agenda,index) = index == 0 ? (0,-1,-1) : action_key(agenda.samples[index].effects.action)
 click_profile(support,point) = semantic_hash([6,shape_template(support),Tuple(relative_click(point,support))])
 primitive_profile(id) = string(id)
@@ -286,6 +291,10 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
         end
     elseif !isnothing(proposal) && proposal.intent == :prepare_public_outcome
         legal = proposal.obligation.action in next.available_actions
+        feedback = merge(feedback,(result=next.state == "NOT_FINISHED" && legal ? :established : :refuted,))
+    elseif !isnothing(proposal) && proposal.intent == :execute_relation_policy &&
+            hasproperty(proposal.obligation,:public_available)
+        legal = all(in(observed_action_gain(sample)),proposal.obligation.public_available)
         feedback = merge(feedback,(result=next.state == "NOT_FINISHED" && legal ? :established : :refuted,))
     elseif !isnothing(proposal) && proposal.intent == :distinguish_changed_context && !isnothing(binding)
         scope = (sample.level,action,binding.appearance)

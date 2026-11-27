@@ -32,6 +32,52 @@ const MODE = ARGS[2]
             return (;observed,policy,prediction,after)
         end
 
+        if MODE == "outcome-availability-policy"
+            training = NamedTuple[]
+            for (level,x) in enumerate((9,39))
+                before = last(entries).observation
+                granted = dispatch(Dict("id"=>5))
+                @test isnothing(granted.observed.producer)
+                @test last(before.frames) == last(granted.after.observation.frames)
+                @test granted.after.observation.available_actions == [6]
+                advanced = dispatch(TC.click_action((x,11)))
+                @test advanced.after.observation.levels_completed == level
+                @test only(advanced.observed.public_outcome.requirements).event == granted.observed.event
+                push!(training,(preparation=granted.observed.event,outcome=advanced.observed.event))
+            end
+            job = TC.prepare_policy_learning!(knowledge,CONFIG,store,ARGS[4],agenda;entries)
+            @test !isnothing(job)
+            status = TC.wait_worker(job.job,TC.store_path(store))
+            learned = TC.collect_policy_learning!(knowledge,store,job,status;
+                available_after=rec.before_ref,live_agenda=agenda)
+            @test learned["result"] == "published"
+            function choose_available_policy(cursor=nothing)
+                obs = rec.observation
+                scene = TC.public_action_candidates(obs,512;object_probes=true)
+                decision = (ranked=[(;action) for action in scene.actions],groups=scene.groups)
+                return TC.relation_policy_choice(knowledge.policies,cursor,Set(),agenda,obs,decision)
+            end
+            selection = choose_available_policy()
+            @test !isnothing(selection) && selection.proposal.action == Dict("id"=>5)
+            @test selection.proposal.obligation.public_available == [6] && isempty(selection.proposal.tests)
+            purpose = selection.proposal.obligation.purpose
+            @test purpose.kind == :enable_policy_action && purpose.action == 6
+            preparation = dispatch(selection.proposal.action,selection)
+            @test preparation.observed.feedback.result == :established
+            @test preparation.policy.result == :continue
+            next = choose_available_policy(preparation.policy.cursor)
+            @test !isnothing(next) && next.proposal.action == TC.click_action((24,11))
+            @test next.proposal.obligation.public_outcome == "advancement"
+            result = dispatch(next.proposal.action,next)
+            @test result.policy.result == :stopped_at_public_advance
+            @test rec.observation.state == "WIN" && close_scorecard!(rec)["completion"] == "confirmed"
+            @test last(recover_run(store)).event["event_id"] == result.observed.event
+            TC.atomic_json(TC.store_path(store,MODE * ".json"),(;
+                training,live=(preparation=preparation.observed.event,outcome=result.observed.event),
+                purpose,publication=learned["publication"],prediction=result.prediction.payload))
+            return
+        end
+
         preparation = Dict("id"=>5)
         for (level,x) in enumerate((9,39))
             target = TC.click_action((x,11))

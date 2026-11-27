@@ -25,7 +25,7 @@ from tests.bench.check_online import online_config
 from tests.bench.measurement_audit import receipts
 
 
-OUTCOME_POLICY_MODES = ("outcome-policy", "outcome-policy-failure")
+OUTCOME_POLICY_MODES = ("outcome-policy", "outcome-policy-failure", "outcome-availability-policy")
 
 
 FIXTURE = """
@@ -71,6 +71,7 @@ class Fixture(ARCBaseGame):
             "outcome-preparation": [5, 7], "outcome-chain": [5, 7], "role-outcome": [5, 6],
             "outcome-role-equivalence": [5, 6],
             "outcome-policy": [1, 2, 5, 6, 7], "outcome-policy-failure": [1, 2, 5, 6, 7],
+            "outcome-availability-policy": [5],
             "primitive-outcome": [2, 5], "outcome-relation-chain": [2, 5, 7],
             "bridge-partition": [5], "concrete-object-followup": [5, 6],
             "frontier-dispatch": [1, 2], "policy-yield": [1, 2],
@@ -105,7 +106,7 @@ class Fixture(ARCBaseGame):
             frame[10:13, 8:11] = 0
             frame[10:13, 38:41] = 4
             levels.append(Level(sprites=[Sprite(frame, name="board")]))
-        if MODE in ("outcome-policy", "outcome-policy-failure"):
+        if MODE in ("outcome-policy", "outcome-policy-failure", "outcome-availability-policy"):
             levels = []
             for left in (8, 38, 23):
                 board = frame.copy()
@@ -120,6 +121,8 @@ class Fixture(ARCBaseGame):
         self.previous = None
         self.probed = False
         self.hits = 0
+        if MODE == "outcome-availability-policy":
+            self._available_actions = [5]
         if MODE in ("history-refinement", "history-continuation", "history-matrix", "history-receipt", "long-history"):
             self._available_actions = [1, 4]
         if MODE in ("outcome-preparation", "outcome-chain"):
@@ -231,6 +234,11 @@ class Fixture(ARCBaseGame):
                     if left <= x < left + 3 and 10 <= y < 13 and pixels[y, x] in (4, 11):
                         pixels[24:26, left:left+2] = 7
             elif all(pixels[24, left] == 7 for left in selectors):
+                self.next_level()
+        elif MODE == "outcome-availability-policy":
+            if action == 5:
+                self._available_actions = [6]
+            elif pixels[self.action.data["y"], self.action.data["x"]] == 4:
                 self.next_level()
         elif MODE in ("outcome-policy", "outcome-policy-failure"):
             if action == 1:
@@ -583,6 +591,28 @@ def observed_steps(public):
 
 
 def verify(mode, public):
+    if mode == "outcome-availability-policy":
+        report = read(public / (mode + ".json"))
+        trace = receipts(public)
+        for pair in [*report["training"], report["live"]]:
+            prepare, prepared = trace[pair["preparation"]]
+            outcome, advanced = trace[pair["outcome"]]
+            initial = trace[prepare["before_ref"]][1]
+            assert prepare["action"] == {"id": 5}
+            assert initial["frame"][-1] == prepared["frame"][-1]
+            assert initial["available_actions"] == [5] and prepared["available_actions"] == [6]
+            assert outcome["before_ref"] == pair["preparation"]
+            assert outcome["action"]["id"] == 6
+            assert advanced["levels_completed"] == prepared["levels_completed"] + 1
+        assert report["purpose"]["kind"] == "enable_policy_action"
+        assert report["purpose"]["action"] == 6
+        assert report["prediction"]["guard_truth"] == "unknown"
+        assert not report["prediction"]["predicted_values"]
+        digest = report["publication"]
+        body = (public / "publication" / (digest + ".json")).read_bytes()
+        assert sha256(body).hexdigest() == digest and json.loads(body)["calls"]
+        assert trace[report["live"]["outcome"]][1]["state"] == "WIN"
+        return [report["live"]["preparation"], report["live"]["outcome"]]
     if mode == "effect-condition-contrast":
         report = read(public / (mode + ".json"))
         trace = receipts(public)
