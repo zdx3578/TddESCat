@@ -444,6 +444,15 @@ function rebound_outcome_action(row,decision)
     return isnothing(candidate) ? nothing : decision.ranked[candidate].action
 end
 
+function equivalent_effect_roles(agenda,source,target)
+    first,second = agenda.producers[source],agenda.producers[target]
+    first.relations == second.relations || return nothing
+    a,b = first.rule.click,second.rule.click
+    relative_effect_roles(a) && relative_effect_roles(b) || return nothing
+    a.offsets == b.offsets && all(!isnothing,a.offsets) || return nothing
+    return (;source,target,offsets=a.offsets)
+end
+
 function outcome_preparation_step(agenda,witness,step,obs,decision,context,target;
                                   meters,condition_view,confirmed=String[])
     at, producer = witness.steps[step]
@@ -461,18 +470,30 @@ function outcome_preparation_step(agenda,witness,step,obs,decision,context,targe
         observed_failure(agenda,context,action_key(action),agenda.previous) && continue
         tests = prepare_relation_tests(agenda,context,obs,decision.groups,action;meters,condition_view)
         matching = findfirst(test->test.key == producer,tests)
+        equivalence = nothing
+        if isnothing(matching)
+            for (index,test) in enumerate(tests)
+                test.scope in (:bound,:replicated) || continue
+                equivalence = equivalent_effect_roles(agenda,producer,test.key)
+                isnothing(equivalence) && continue
+                matching = index
+                break
+            end
+        end
         isnothing(matching) && continue
-        expected = tests[matching].expected
+        contract = tests[matching]
+        expected = contract.expected
         all(test->test.expected == expected,tests) || continue
         comparison,outcome = agenda.samples[[witness.comparison,witness.outcome]]
         chain = outcome_relation_chain(agenda,witness)
-        obligation = (;producer,target,comparison=relation_ref(comparison),
+        obligation = (;producer=contract.key,target,comparison=relation_ref(comparison),
             preparation=relation_ref(source),outcome=relation_ref(outcome),index=witness.outcome,
-            sought=tests[matching].relations,scope=:hypothesis,chain,step,confirmed)
+            sought=contract.relations,scope=:hypothesis,chain,step,confirmed)
+        isnothing(equivalence) || (obligation = merge(obligation,(;role_equivalence=equivalence)))
         reads = unique([relation_refs(comparison);relation_refs(outcome);confirmed;
             [ref for (index,_) in witness.steps for ref in relation_refs(agenda.samples[index])]])
         intent = step == 1 ? :establish_outcome_relation : :continue_outcome_preparation
-        return (;action,intent,tests=[tests[matching]],reads,obligation,witness)
+        return (;action,intent,tests=[contract],reads,obligation,witness)
     end
     return nothing
 end
@@ -599,7 +620,7 @@ function prepare_relation_tests(agenda,context,obs,groups,action;meters=(),condi
             models = get(condition_view.models,relation_condition_key(rule),())
             for model in models
                 known = candidate_evaluation(model,frame,groups,enclosure,action,condition_view.history;
-                    meters,transients=condition_view.transients,role_index)
+                    meters,transients=condition_view.transients,role_index,relative_transfer=true)
                 known.truth == proven && plan_channels(known.fragments) == expected || continue
                 push!(conditions,(;version=active_id(model),reads=condition_view.reads(model)))
             end

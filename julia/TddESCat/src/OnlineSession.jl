@@ -253,9 +253,10 @@ function mechanism_key(rule; composing=false)
 end
 
 function candidate_evaluation(active, before, groups, enclosure, action, history; transients=nothing,meters=(),
-                              observed_click=nothing,trained_click=nothing,role_index=nothing)
+                              observed_click=nothing,trained_click=nothing,role_index=nothing,relative_transfer=false)
     rule = active.rule
-    result = evaluate_joint_rule(rule,before,groups,enclosure,action;meters,observed_click,trained_click,role_index)
+    result = evaluate_joint_rule(rule,before,groups,enclosure,action;
+        meters,observed_click,trained_click,role_index,relative_transfer)
     result.truth == proven || return result
     scope = measured_scope(result.fragments)
     if !isnothing(scope) && scope ∉ active.meter_scopes

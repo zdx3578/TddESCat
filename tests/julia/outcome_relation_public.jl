@@ -3,6 +3,7 @@ using Test, TddESCat
 const TC = TddESCat
 const CONFIG = load_run_config(first(ARGS))
 const MODE = length(ARGS) == 3 ? ARGS[2] : "role-outcome"
+const REBOUND_EFFECT = MODE == "outcome-role-equivalence"
 
 @testset "A witnessed visual prerequisite controls a new outcome instance" begin
     with_run(last(ARGS)) do store
@@ -23,15 +24,30 @@ const MODE = length(ARGS) == 3 ? ARGS[2] : "role-outcome"
             TC.finish_relation_dispatch!(agenda,proposal;feedback=result.feedback)
             return result
         end
-        target = MODE == "role-outcome" ? TC.click_action((9,11)) : Dict("id"=>2)
+        target = MODE == "role-outcome" ? TC.click_action((9,11)) : Dict("id"=>(REBOUND_EFFECT ? 5 : 2))
         comparison = dispatch(target)
         @test rec.observation.levels_completed == 0
-        preparation = dispatch(Dict("id"=>5))
+        initial_action = REBOUND_EFFECT ? TC.click_action((9,11)) : Dict("id"=>5)
+        preparation = dispatch(initial_action)
         second_source = MODE == "outcome-relation-chain" ? dispatch(Dict("id"=>7)) : nothing
         progress = dispatch(target)
         @test rec.observation.levels_completed == 1
         @test progress.public_outcome.relationship.comparison == comparison.event
         @test progress.public_outcome.relationship.preparation == preparation.event
+        appearance_witnesses = String[]
+        live_action = initial_action
+        if REBOUND_EFFECT
+            groups = TC.public_components(last(rec.observation.frames))
+            roles = sort!(filter(shape->all(cell->cell[3] == 11,shape),groups);by=TC.anchor)
+            @test length(roles) == 3
+            actions = TC.click_action.(TC.component_probe.(roles))
+            witnesses = dispatch.(actions[1:2])
+            @test length(unique(row.producer.key for row in witnesses)) == 1
+            @test first(witnesses).binding.appearance != preparation.binding.appearance
+            @test first(witnesses).producer.relations == preparation.producer.relations
+            append!(appearance_witnesses,getproperty.(witnesses,:event))
+            live_action = last(actions)
+        end
         function propose()
             obs = rec.observation
             view = TC.public_action_candidates(obs,512;object_probes=true)
@@ -48,7 +64,13 @@ const MODE = length(ARGS) == 3 ? ARGS[2] : "role-outcome"
         end
         setup = propose()
         @test setup.proposal.intent == :establish_outcome_relation
-        @test setup.proposal.action == Dict("id"=>5) && setup.baseline["id"] == target["id"]
+        @test setup.proposal.action == live_action && setup.baseline["id"] == target["id"]
+        if REBOUND_EFFECT
+            proof = setup.task.obligation.role_equivalence
+            @test proof.source == preparation.producer.key && proof.target != proof.source
+            @test all(in(setup.task.reads),appearance_witnesses)
+            @test only(setup.task.contracts).scope == :replicated
+        end
         @test isnothing(agenda.preparing)
         effect = dispatch(setup.proposal.action;setup.proposal,setup.task)
         @test effect.feedback.result == :established && agenda.preparing.event == effect.event
@@ -74,7 +96,7 @@ const MODE = length(ARGS) == 3 ? ARGS[2] : "role-outcome"
         @test close_scorecard!(rec)["completion"] == "confirmed"
         TC.atomic_json(TC.store_path(store,MODE * ".json"),
             (;comparison,preparation,second_source,progress,setup=(;setup.task,setup.baseline,effect),
-                additional,follow=(;follow.task,win)))
+                additional,appearance_witnesses,follow=(;follow.task,win)))
         @test last(recover_run(store)).event["event_id"] == win.event
     end
 end

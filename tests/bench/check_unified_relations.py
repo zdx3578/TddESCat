@@ -63,6 +63,7 @@ class Fixture(ARCBaseGame):
             "advancement-transfer": [6], "advancement-refutation": [5, 6], "history-refinement": [1, 4],
             "history-continuation": [1, 4], "history-matrix": [1, 4], "history-receipt": [1, 4], "long-history": [1, 4],
             "outcome-preparation": [5, 7], "outcome-chain": [5, 7], "role-outcome": [5, 6],
+            "outcome-role-equivalence": [5, 6],
             "outcome-policy": [1, 2, 5, 6, 7], "outcome-policy-failure": [1, 2, 5, 6, 7],
             "primitive-outcome": [2, 5], "outcome-relation-chain": [2, 5, 7],
             "bridge-partition": [5], "concrete-object-followup": [5, 6],
@@ -72,7 +73,16 @@ class Fixture(ARCBaseGame):
             "circuit-role": [6, 7], "coordinate-restart": [6]}
         if MODE == "outcome-relation-chain":
             frame[50:52, 48:50] = 3
+        if MODE == "outcome-role-equivalence":
+            frame[24:26, 8:10] = 2
         levels = [Level(sprites=[Sprite(frame.copy(), name="board")])]
+        if MODE == "outcome-role-equivalence":
+            frame[10:13, :] = 0
+            for x in (8, 23, 38):
+                frame[10:13, x] = 11
+                frame[12, x:x+3] = 11
+                frame[24:26, x:x+2] = 2
+            levels.append(Level(sprites=[Sprite(frame, name="board")]))
         if MODE == "progress-restart":
             frame[10:13, 23:26] = 4
             frame[10:13, 38:41] = 4
@@ -189,6 +199,15 @@ class Fixture(ARCBaseGame):
             if action == 5:
                 pixels[40:42, 44:46] = 7
             elif pixels[40, 44] == 7 and pixels[self.action.data["y"], self.action.data["x"]] == 4:
+                self.next_level()
+        elif MODE == "outcome-role-equivalence":
+            selectors = (8,) if self.level_index == 0 else (8, 23, 38)
+            if action == 6:
+                x, y = (self.action.data[key] for key in ("x", "y"))
+                for left in selectors:
+                    if left <= x < left + 3 and 10 <= y < 13 and pixels[y, x] in (4, 11):
+                        pixels[24:26, left:left+2] = 7
+            elif all(pixels[24, left] == 7 for left in selectors):
                 self.next_level()
         elif MODE in ("outcome-policy", "outcome-policy-failure"):
             if action == 1:
@@ -356,6 +375,7 @@ def capture(
         "outcome-preparation",
         "outcome-chain",
         "role-outcome",
+        "outcome-role-equivalence",
         "primitive-outcome",
         "outcome-relation-chain",
         "bridge-partition",
@@ -427,6 +447,7 @@ def capture(
             "history-receipt": "history_matrix_public.jl",
             "long-history": "history_matrix_public.jl",
             "role-outcome": "outcome_relation_public.jl",
+            "outcome-role-equivalence": "outcome_relation_public.jl",
             "primitive-outcome": "outcome_relation_public.jl",
             "outcome-relation-chain": "outcome_relation_public.jl",
             "sequence-experiment": "sequence_experiment_public.jl",
@@ -464,7 +485,8 @@ def capture(
                 runtime,
                 public,
                 str(agent),
-                *([mode] if mode in ("long-history", "primitive-outcome", "outcome-relation-chain", "mixed-sequence") else []),
+                *([mode] if mode in ("long-history", "primitive-outcome", "outcome-relation-chain",
+                    "outcome-role-equivalence", "mixed-sequence") else []),
                 str(public),
                 script=script,
                 extra_read=paths,
@@ -536,6 +558,35 @@ def observed_steps(public):
 
 
 def verify(mode, public):
+    if mode == "outcome-role-equivalence":
+        report = read(public / (mode + ".json"))
+        trace = receipts(public)
+        source, initial = trace[report["preparation"]["event"]]
+        assert source["action"]["id"] == 6
+        source_before = trace[source["before_ref"]][1]["frame"][-1]
+        assert sum(pixel == 4 for row in source_before for pixel in row) == 9
+        assert initial["frame"][-1][24][8] == 7
+        setup = report["setup"]
+        actual, prepared = trace[setup["effect"]["event"]]
+        assert actual["action"] == {"id": 6, "x": 38, "y": 11}
+        live, alternative = trace[report["follow"]["win"]["event"]]
+        assert live["action"] == {"id": 5} and alternative["state"] == "WIN"
+        assert live["before_ref"] == setup["effect"]["event"]
+        before_setup = trace[actual["before_ref"]][1]["frame"][-1]
+        assert sum(pixel == 11 for row in before_setup[10:13] for pixel in row[38:41]) == 5
+        assert [before_setup[24][x] for x in (8, 23, 38)] == [7, 7, 2]
+        assert [prepared["frame"][-1][24][x] for x in (8, 23, 38)] == [7, 7, 7]
+        contract = setup["task"]["contracts"][0]
+        shared = setup["task"]["obligation"]["role_equivalence"]
+        assert shared["source"] == report["preparation"]["producer"]["key"]
+        assert shared["target"] == contract["producer"] != shared["source"]
+        assert shared["offsets"] == [[0, 14]] and contract["scope"] == "replicated"
+        for x, ref in zip((8, 23), report["appearance_witnesses"], strict=True):
+            witness, response = trace[ref]
+            witness_before = trace[witness["before_ref"]][1]["frame"][-1]
+            assert ref in contract["reads"] and witness["action"] == {"id": 6, "x": x, "y": 11}
+            assert witness_before[24][x] == 2 and response["frame"][-1][24][x] == 7
+        return [*report["appearance_witnesses"], actual["event_id"], live["event_id"]]
     if mode == "effect-scope-exploration":
         report = read(public / "effect-scope-exploration.json")
         trace = receipts(public)
@@ -1109,6 +1160,7 @@ def main(config, run):
         "outcome-preparation",
         "outcome-chain",
         "role-outcome",
+        "outcome-role-equivalence",
         "primitive-outcome",
         "outcome-relation-chain",
         *OUTCOME_POLICY_MODES,
@@ -1166,6 +1218,7 @@ if __name__ == "__main__":
                 "outcome-preparation",
                 "outcome-chain",
                 "role-outcome",
+                "outcome-role-equivalence",
                 "frontier-dispatch",
                 "frontier-route",
                 "history-matrix",
