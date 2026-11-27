@@ -121,6 +121,38 @@ end
     end
 end
 
+@testset "An unlocalized landing updates experiment selection" begin
+    frame = fill(0x00,16,16)
+    frame[6:7,5:6] .= 0x04
+    prior = picture_entry("probe-start",nothing,0,frame)
+    role = only(filter(shape->first(shape)[3]==0x04,TS.public_components(frame)))
+    model = TS.SpatialLearning()
+    model.role = TS.shape_template(role)
+    model.role_reads = ["bound-role"]
+    origin = TS.anchor(role)
+    domain = (ranked=[(;action=Dict("id"=>id)) for id in (2,3)],)
+    @test TS.spatial_experiment(model,prior.observation,domain).id == 2
+    changed = copy(frame)
+    changed[6:7,5:6] .= 0x07
+    reply = picture_entry("unlocalized-landing","probe-start",2,changed)
+    @test isnothing(TS.observe_spatial!(model,prior,reply,TS.observed_effects(prior,reply)))
+    @test TS.motion_evidence(model,origin,2,frame,0;current=true).status == :untested
+    @test TS.spatial_experiment(model,prior.observation,domain).id == 3
+    @test isnothing(TS.spatial_unbound(model,origin,[2],prior.observation))
+
+    altered = copy(frame)
+    altered[13,13] = 0x09
+    fresh = picture_entry("new-context",nothing,0,altered).observation
+    @test TS.spatial_experiment(model,fresh,domain).id == 3
+    reconsidered = TS.spatial_unbound(model,origin,[2],fresh)
+    @test reconsidered.id == 2 && reconsidered.unlocated_before == 1
+    base = (;action=Dict("id"=>1),reason="ordinary_public_option")
+    experiment = (;action=Dict("id"=>3),independent=true)
+    selected = TS.task_arbitration(base,reconsidered,nothing,nothing,experiment;
+        program=false,continuing_contact=false,conditional=false,object_probes=false)
+    @test selected.choice.source == :experiment && selected.choice.action == experiment.action
+end
+
 @testset "Observed motifs and temporal evidence" begin
     pixels = fill(0x0f,20,32)
     support = [(0,0),(1,0),(2,0),(0,1),(2,2)]

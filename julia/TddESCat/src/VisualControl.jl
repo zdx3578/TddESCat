@@ -624,7 +624,7 @@ function visual_plan(control, spatial, obs, decision, event;goal=nothing,relatio
     isnothing(here) && return nothing
     observe_scene!(control.scene,spatial,frame,here,event)
     candidates = sort!([row.action["id"] for row in decision.ranked if length(row.action) == 1])
-    unbound = spatial_unbound(spatial,here,candidates)
+    unbound = spatial_unbound(spatial,here,candidates,obs)
     isnothing(unbound) || return unbound
     if isnothing(control.field)
         bind_visual_fields!(control,spatial,frame,here,event)

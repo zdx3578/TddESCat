@@ -875,7 +875,8 @@ function task_arbitration(item,spatial,intervention,relation,experiment;
         contact = get(spatial,:contact,nothing)
         contact_ready = continuing_contact || !isnothing(contact) && contact.conditions.judgment == :admitted
         grounded = contact_ready || get(spatial,:effect_gain,0) > 0
-        add(:spatial,Dict("id"=>spatial.id),spatial.reason,grounded ? 1 : object_probes ? 7 : 4)
+        priority = grounded ? 1 : object_probes ? 7 : get(spatial,:unlocated_before,0) > 0 ? 5 : 4
+        add(:spatial,Dict("id"=>spatial.id),spatial.reason,priority)
     end
     if !isnothing(intervention)
         add(:intervention,intervention.action,intervention.reason,isnothing(intervention.goal) ? 6 : 2)

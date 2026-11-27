@@ -18,13 +18,14 @@ mutable struct SpatialLearning
     offsets::Dict{Int,Dict{Pixel,Vector{String}}}
     visits::Dict{Pixel,Int}
     trials::Dict{Tuple{Pixel,Int},Vector{ObservedMove}}
+    unlocalized::Dict{Int,Dict{Tuple{Pixel,String},String}}
     layouts::Dict{Pixel,Vector{UInt8}}
     floors::Dict{UInt8,Int}
     motion_contexts::Dict{String,MotionContext}
     conditions::Dict{Tuple{Pixel,Int},Dict{MotionVariable,FiniteRelation{Int,Pixel}}}
 end
 
-SpatialLearning() = SpatialLearning(ColorCell[],String[],Dict(),Dict(),Dict(),Dict(),Dict(),Dict(),Dict())
+SpatialLearning() = SpatialLearning(ColorCell[],String[],Dict(),Dict(),Dict(),Dict(),Dict(),Dict(),Dict(),Dict())
 
 function locate_role(frame, role)
     isempty(role) && return nothing
@@ -143,6 +144,13 @@ function motion_evidence(model, origin, action, frame, previous_action; current)
     return (status=point == origin ? :conditional_stop : :conditional_motion,point,reads)
 end
 
+function spatial_probe_scope(observation,origin)
+    frame = last(observation.frames)
+    context = semantic_hash([observation.levels_completed,size(frame),content_hash(vec(frame)),
+        sort(observation.available_actions),action_key(observation.action)])
+    return (origin,context)
+end
+
 function observe_spatial!(model, before, after, effects)
     old_obs,new_obs = before.observation,after.observation
     old_obs.levels_completed == new_obs.levels_completed || return nothing
@@ -157,7 +165,12 @@ function observe_spatial!(model, before, after, effects)
         append!(model.role_reads,[effects.before_id,effects.event_id])
     end
     origin,landing = locate_role(a,model.role),locate_role(b,model.role)
-    (isnothing(origin) || isnothing(landing)) && return nothing
+    isnothing(origin) && return nothing
+    if isnothing(landing)
+        attempts = get!(Dict{Tuple{Pixel,String},String},model.unlocalized,action)
+        get!(attempts,spatial_probe_scope(old_obs,origin),effects.event_id)
+        return nothing
+    end
     first_landing = landing
     if length(new_obs.frames) > 1
         for frame in new_obs.frames
@@ -220,7 +233,7 @@ function spatial_experiment(model::SpatialLearning, obs, decision)
     active = [row for row in decision.ranked if length(row.action) == 1]
     isempty(active) && return nothing
     action_ids = [row.action["id"] for row in active]
-    unbound = spatial_unbound(model,here,action_ids)
+    unbound = spatial_unbound(model,here,action_ids,obs)
     isnothing(unbound) || return unbound
     points = [here]
     parent = Dict{Pixel,Tuple{Int,Pixel,Vector{String}}}()
@@ -280,10 +293,22 @@ function spatial_experiment(model::SpatialLearning, obs, decision)
     return best
 end
 
-function spatial_unbound(model, here, action_ids)
-    missing = findfirst(id->!haskey(model.offsets,id) &&
-        isempty(get(model.trials,(here,id),ObservedMove[])),action_ids)
-    isnothing(missing) && return nothing
-    return (id=action_ids[missing],reason="test_unbound_spatial_action",
+function spatial_unbound(model, here, action_ids, obs)
+    candidates = [id for id in action_ids if !haskey(model.offsets,id) &&
+        isempty(get(model.trials,(here,id),()))]
+    isempty(candidates) && return nothing
+    scope = spatial_probe_scope(obs,here)
+    options = NamedTuple[]
+    for id in candidates
+        trials = get(model.unlocalized,id,nothing)
+        if isnothing(trials)
+            push!(options,(;id,unlocated_before=0))
+        elseif !haskey(trials,scope)
+            push!(options,(;id,unlocated_before=length(trials)))
+        end
+    end
+    isempty(options) && return nothing
+    chosen = argmin(option->option.unlocated_before,options)
+    return (;chosen.id,chosen.unlocated_before,reason="test_unbound_spatial_action",
         reads=copy(model.role_reads),role=here,destination=nothing,frontier=here)
 end
