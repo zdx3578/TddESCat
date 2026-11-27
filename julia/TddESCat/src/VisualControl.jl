@@ -192,7 +192,7 @@ function scene_survey(control, spatial, obs, decision)
     scene = control.scene
     isnothing(scene.occlusion_ref) && return nothing
     frame = last(obs.frames)
-    here = locate_role(frame,spatial.role)
+    here = locate_role(frame,spatial)
     isnothing(here) && return nothing
     floor = visual_floor(spatial)
     isnothing(floor) && return nothing
@@ -288,8 +288,8 @@ end
 
 function observe_visual!(control, spatial, before, after, move, effects)
     a,b = last(before.observation.frames),last(after.observation.frames)
-    here = locate_role(a,spatial.role)
-    there = isnothing(move) ? locate_role(b,spatial.role) : move.after
+    here = locate_role(a,spatial)
+    there = isnothing(move) ? locate_role(b,spatial) : move.after
     moved = !isnothing(move) && here != there
     meters = [effect.context.binding for effect in effects.effects
         if effect.family == :measurement && only(effect.values) < 0]
@@ -354,7 +354,7 @@ function observe_visual_contact!(control, spatial, before, after;learn=true)
     isnothing(control.field) && return nothing
     before_obs, after_obs = before.observation,after.observation
     frame = last(before_obs.frames)
-    origin = locate_role(frame,spatial.role)
+    origin = locate_role(frame,spatial)
     action = after_obs.action["id"]
     offset = measured_offset(spatial,action)
     (isnothing(origin) || isnothing(offset)) && return nothing
@@ -366,7 +366,7 @@ function observe_visual_contact!(control, spatial, before, after;learn=true)
     isnothing(context) && return nothing
     read_site = visual_value(frame,site.field)
     read_site == site.value || return nothing
-    positions = [locate_role(result,spatial.role) for result in after_obs.frames]
+    positions = [locate_role(result,spatial) for result in after_obs.frames]
     progress = before_obs.levels_completed < after_obs.levels_completed
     outcome = if progress && point in positions
         :progress
@@ -620,7 +620,7 @@ end
 function visual_plan(control, spatial, obs, decision, event;goal=nothing,relationship=nothing,refuted=nothing)
     isempty(spatial.role) && return nothing
     frame = last(obs.frames)
-    here = locate_role(frame,spatial.role)
+    here = locate_role(frame,spatial)
     isnothing(here) && return nothing
     observe_scene!(control.scene,spatial,frame,here,event)
     candidates = sort!([row.action["id"] for row in decision.ranked if length(row.action) == 1])

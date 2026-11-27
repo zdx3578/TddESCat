@@ -153,6 +153,45 @@ end
     @test selected.choice.source == :experiment && selected.choice.action == experiment.action
 end
 
+@testset "A verified rotation keeps the role bound without borrowing motion evidence" begin
+    sprite = UInt8[4 4 4; 9 9 9; 9 9 9]
+    turned = rotl90(sprite)
+    function scene(sprite,x,y;duplicate=false)
+        frame = fill(0x01,20,20)
+        h,w = size(sprite)
+        frame[y+1:y+h,x+1:x+w] .= sprite
+        duplicate && (frame[12:11+h,12:11+w] .= sprite)
+        return frame
+    end
+    p = picture_entry("initial",nothing,0,scene(sprite,2,3))
+    q = picture_entry("translated","initial",1,scene(sprite,4,3))
+    r = picture_entry("turned","translated",2,scene(turned,4,5))
+    s = picture_entry("after-turn","turned",3,scene(turned,6,5))
+    state = TS.SpatialLearning()
+    TS.observe_spatial!(state,p,q,TS.observed_effects(p,q))
+    @test isempty(state.orientations)
+    scope = deepcopy(state)
+    duplicate = picture_entry("ambiguous","translated",2,scene(turned,4,5;duplicate=true))
+    @test isnothing(TS.observe_spatial!(scope,q,duplicate,TS.observed_effects(q,duplicate)))
+    @test isempty(scope.orientations)
+    move = TS.observe_spatial!(state,q,r,TS.observed_effects(q,r))
+    @test move.after == (4,5) && move.orientation_before == 1 && move.orientation_after == 2
+    @test state.role_reads == ["initial","translated","turned"]
+    @test TS.locate_role(last(r.observation.frames),state) == (4,5)
+    @test isnothing(TS.locate_role(last(duplicate.observation.frames),state))
+    @test first(TS.measured_offset(state,2)) == (0,2)
+    rotated_at_prior = scene(turned,4,3)
+    @test TS.motion_evidence(state,(4,3),2,last(q.observation.frames),1;current=true).status == :witnessed
+    @test TS.motion_evidence(state,(4,3),2,rotated_at_prior,1;current=true).status == :untested
+    @test TS.motion_evidence(state,(4,3),2,rotated_at_prior,1;current=false).status == :conflict
+    ranked = [(action=Dict("id"=>id),) for id in 1:3]
+    next = TS.spatial_experiment(state,r.observation,(;ranked))
+    @test next.id == 3 && next.role == (4,5) && "turned" in next.reads
+    continued = TS.observe_spatial!(state,r,s,TS.observed_effects(r,s))
+    @test continued.after == (6,5) && continued.orientation_before == continued.orientation_after == 2
+    @test length(state.orientations) == 1
+end
+
 @testset "Observed motifs and temporal evidence" begin
     pixels = fill(0x0f,20,32)
     support = [(0,0),(1,0),(2,0),(0,1),(2,2)]

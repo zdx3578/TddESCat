@@ -1339,7 +1339,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 site_transitions = update_contact_sites!(visual,spatial,resulting)
                 visual_observation = observe_visual!(visual,spatial,entry,resulting,spatial_feedback,effects)
                 if !isnothing(spatial_feedback)
-                    origin = locate_role(sample.before,spatial.role)
+                    origin = locate_role(sample.before,spatial)
                     key = (origin,item.action["id"])
                     if haskey(spatial.conditions,key)
                         evidence = motion_evidence(spatial,origin,item.action["id"],sample.before,last(history);current=true)
@@ -1362,8 +1362,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 begin_visual_level!(visual,spatial)
                 previous = spatial
                 spatial = SpatialLearning()
-                if !isnothing(locate_role(last(resulting.observation.frames),previous.role))
+                if !isnothing(locate_role(last(resulting.observation.frames),previous))
                     spatial.role = copy(previous.role)
+                    spatial.orientations = copy(previous.orientations)
                     spatial.role_reads = unique([previous.role_reads;effects.event_id])
                 end
             end

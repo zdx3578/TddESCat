@@ -2,6 +2,8 @@ struct ObservedMove
     after::Pixel
     first_landing::Pixel
     event::String
+    orientation_before::Int
+    orientation_after::Int
 end
 
 struct MotionContext
@@ -14,6 +16,7 @@ const MotionVariable = Union{Pixel,Symbol}
 
 mutable struct SpatialLearning
     role::MotionShape
+    orientations::Vector{MotionShape}
     role_reads::Vector{String}
     offsets::Dict{Int,Dict{Pixel,Vector{String}}}
     visits::Dict{Pixel,Int}
@@ -25,9 +28,9 @@ mutable struct SpatialLearning
     conditions::Dict{Tuple{Pixel,Int},Dict{MotionVariable,FiniteRelation{Int,Pixel}}}
 end
 
-SpatialLearning() = SpatialLearning(ColorCell[],String[],Dict(),Dict(),Dict(),Dict(),Dict(),Dict(),Dict(),Dict())
+SpatialLearning() = SpatialLearning(ColorCell[],MotionShape[],String[],Dict(),Dict(),Dict(),Dict(),Dict(),Dict(),Dict(),Dict())
 
-function locate_role(frame, role)
+function role_match(frame, role)
     isempty(role) && return nothing
     pigment_counts = zeros(Int,16)
     for c in frame
@@ -41,10 +44,71 @@ function locate_role(frame, role)
         all(role) do (u,v,color)
             checkbounds(Bool,frame,oy+v,ox+u) && frame[oy+v,ox+u] == color
         end || continue
-        isnothing(found) || return nothing
+        isnothing(found) || return :ambiguous
         found = (ox-1,oy-1)
     end
     return found
+end
+
+function locate_role(frame,role)
+    found = role_match(frame,role)
+    return found === :ambiguous ? nothing : found
+end
+
+function spatial_binding(frame,role,orientations)
+    found = nothing
+    for (orientation,template) in enumerate(Iterators.flatten(((role,),orientations)))
+        point = role_match(frame,template)
+        isnothing(point) && continue
+        (point === :ambiguous || !isnothing(found)) && return :ambiguous
+        found = (;point,orientation)
+    end
+    return found
+end
+
+spatial_binding(frame,model::SpatialLearning) = spatial_binding(frame,model.role,model.orientations)
+
+function locate_role(frame,model::SpatialLearning)
+    found = spatial_binding(frame,model)
+    return found isa NamedTuple ? found.point : nothing
+end
+
+function same_footprint_rotations(role)
+    rotations = MotionShape[]
+    points = effect_points(role)
+    rotated = role
+    for _ in 1:3
+        h = maximum(cell->cell[2],rotated)+1
+        rotated = sort!(ColorCell[(h-1-y,x,c) for (x,y,c) in rotated])
+        rotated != role && rotated ∉ rotations && effect_points(rotated) == points &&
+            push!(rotations,rotated)
+    end
+    return rotations
+end
+
+function full_spatial_support(frame,point,role)
+    parts = color_components(frame)
+    x,y = point
+    members = Set(parts.owner[y+v+1,x+u+1] for (u,v,_) in role)
+    return sum(i->length(parts.groups[i]),members) == length(role)
+end
+
+function witness_orientation!(model,before,after,origin,effects)
+    rotations = same_footprint_rotations(model.role)
+    isempty(rotations) && return nothing
+    start = spatial_binding(before,model.role,rotations)
+    finish = spatial_binding(after,model.role,rotations)
+    start isa NamedTuple && start.point == origin.point && finish isa NamedTuple || return nothing
+    finish.orientation > 1 || return nothing
+    prior = start.orientation == 1 ? model.role : rotations[start.orientation-1]
+    form = rotations[finish.orientation-1]
+    full_spatial_support(before,start.point,prior) &&
+        full_spatial_support(after,finish.point,form) || return nothing
+    form ∉ model.orientations || return nothing
+    push!(model.orientations,form)
+    append!(model.role_reads,[effects.before_id,effects.event_id])
+    unique!(model.role_reads)
+    return (point=finish.point,orientation=length(model.orientations)+1)
 end
 
 function spatial_role(effects, before, after)
@@ -126,6 +190,17 @@ end
 function motion_evidence(model, origin, action, frame, previous_action; current)
     key = (origin,action)
     rows = get(model.trials,key,ObservedMove[])
+    if !isempty(rows) && !isempty(model.orientations)
+        if current
+            binding = spatial_binding(frame,model)
+            if !(binding isa NamedTuple && binding.point == origin)
+                return (status=:conflict,point=nothing,reads=model.role_reads)
+            end
+            rows = filter(row->row.orientation_before == binding.orientation,rows)
+        elseif length(Set(row.orientation_before for row in rows)) <= length(model.orientations)
+            return (status=:conflict,point=nothing,reads=model.role_reads)
+        end
+    end
     isempty(rows) && return (status=:untested,point=nothing,reads=String[])
     landings = Set(row.after for row in rows)
     if length(landings) == 1
@@ -164,24 +239,28 @@ function observe_spatial!(model, before, after, effects)
         model.role = candidate
         append!(model.role_reads,[effects.before_id,effects.event_id])
     end
-    origin,landing = locate_role(a,model.role),locate_role(b,model.role)
-    isnothing(origin) && return nothing
-    if isnothing(landing)
+    start = spatial_binding(a,model)
+    start isa NamedTuple || return nothing
+    finish = spatial_binding(b,model)
+    isnothing(finish) && (finish = witness_orientation!(model,a,b,start,effects))
+    origin = start.point
+    if !(finish isa NamedTuple)
         attempts = get!(Dict{Tuple{Pixel,String},String},model.unlocalized,action)
         get!(attempts,spatial_probe_scope(old_obs,origin),effects.event_id)
         return nothing
     end
+    landing = finish.point
     first_landing = landing
     if length(new_obs.frames) > 1
         for frame in new_obs.frames
-            candidate = locate_role(frame,model.role)
+            candidate = locate_role(frame,model)
             if !isnothing(candidate) && candidate != origin
                 first_landing = candidate
                 break
             end
         end
     end
-    move = ObservedMove(landing,first_landing,effects.event_id)
+    move = ObservedMove(landing,first_landing,effects.event_id,start.orientation,finish.orientation)
     key = (origin,action)
     rows = get!(Vector{ObservedMove},model.trials,key)
     model.motion_contexts[move.event] = MotionContext(effects.before_id,a,old_obs.action["id"])
@@ -228,7 +307,7 @@ end
 
 function spatial_experiment(model::SpatialLearning, obs, decision)
     frame = last(obs.frames)
-    here = locate_role(frame,model.role)
+    here = locate_role(frame,model)
     isnothing(here) && return nothing
     active = [row for row in decision.ranked if length(row.action) == 1]
     isempty(active) && return nothing
