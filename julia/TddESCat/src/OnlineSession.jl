@@ -1612,8 +1612,10 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     if !isnothing(spatial) && !rec.frozen && !isnothing(rec.card_id)
         close_scorecard!(rec)
     end
-    defer_tail = isnothing(rec.limit) && !frozen && rec.observation.state in ("WIN","GAME_OVER")
-    if !isnothing(inflight) && (!defer_tail || isfile(joinpath(inflight.job,"worker-status.json")))
+    defer_tail = !frozen && (rec.frozen ||
+        isnothing(rec.limit) && rec.observation.state in ("WIN","GAME_OVER"))
+    if !rec.frozen && !isnothing(inflight) &&
+            (!defer_tail || isfile(joinpath(inflight.job,"worker-status.json")))
         status = wait_worker(inflight.job,store_path(rec.store))
         collect_online_job!(knowledge,config,rec,inflight,status,publications,program_jobs,completed_cohorts;
             live_agenda=relations)
@@ -1639,10 +1641,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             unsubmitted_cohorts=cohorts["unsubmitted"]))
     end
     if defer_tail
-        # Every source is already in the receipt ledger, so recovery can
-        # rebuild the pending cohorts without extending a terminal game.
+        # Recovery can rebuild pending cohorts from the confirmed receipt ledger.
         atomic_json(store_path(rec.store,"learning","deferred-tail.json"),(;
-            event=rec.before_ref,public_state=rec.observation.state,
+            event=rec.before_ref,public_state=rec.observation.state,quarantined=rec.frozen,
             pending_events=final.pending,sequence_sources=sequence_enabled ?
                 [item.event["event_id"] for item in sequence_events] : String[]))
     end
