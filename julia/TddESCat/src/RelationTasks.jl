@@ -192,7 +192,7 @@ end
 
 function observed_producer!(agenda,sample,before,after)
     output = sample.effects
-    (sample.advanced || isempty(output.effects) || !output.complete) && return nothing
+    (sample.advanced || isempty(output.effects) || !endpoint_effects_observed(output)) && return nothing
     rule = observed_joint_model(output,before,after)
     action = rule.action_id
     action == 6 && isnothing(rule.click) && return nothing
@@ -215,7 +215,7 @@ function observed_producer!(agenda,sample,before,after)
     push!(producer.support,length(agenda.samples))
     sample.state == "NOT_FINISHED" &&
         push!(get!(Vector{Int},agenda.produced_at,sample.context),length(agenda.samples))
-    return (;key,relations)
+    return (;key,relations,scope=output.complete ? :observed_transition : :observed_endpoints)
 end
 
 function relation_checks(proposal,after,effects)

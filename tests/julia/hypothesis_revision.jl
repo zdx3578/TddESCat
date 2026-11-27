@@ -224,4 +224,32 @@ end
     @test !effects.complete
     @test "intermediate_frames_require_separate_interpretation" in effects.alternatives
     @test isempty(TS.compile_sequence_corpus([[initial,transient,last]]).programs)
+
+    @testset "A known public endpoint effect stays available as a local relation" begin
+        animated = snapshot(2,1,[a,b,c])
+        effects = TS.observed_effects(initial,animated)
+        @test !effects.complete && isempty(effects.residual)
+        @test only(effects.effects).values == [2,0]
+        @test TS.endpoint_effects_observed(effects)
+        agenda = TS.RelationAgenda()
+        checked = TS.observe_relations!(agenda,initial,animated,effects,nothing,NamedTuple[],nothing)
+        @test checked.producer.scope == :observed_endpoints
+        @test isnothing(agenda.producers[checked.producer.key].rule.patch)
+        TS.begin_relation_attempt!(agenda,nothing;observation=initial.observation)
+        scoped = TS.prepare_relation_tests(agenda,TS.relation_context(initial.observation),
+            initial.observation,TS.public_components(a),Dict("id"=>1))
+        @test only(scoped).scope == :bound
+        @test only(values(only(scoped).expected)) == (2,0)
+        witness = (;intent=:test_concrete_effect,tests=scoped)
+        @test TS.relation_checks(witness,c,effects).result == :established
+        @test isempty(TS.compile_sequence_corpus([[initial,animated]]).programs)
+
+        changed_domain = snapshot(2,1,[a,fill(0x00,8,11),c])
+        inconsistent = TS.observed_effects(initial,changed_domain)
+        @test !TS.endpoint_effects_observed(inconsistent)
+        agenda = TS.RelationAgenda()
+        omitted = TS.observe_relations!(agenda,initial,changed_domain,inconsistent,nothing,
+            NamedTuple[],nothing)
+        @test isnothing(omitted.producer)
+    end
 end

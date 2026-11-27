@@ -246,6 +246,13 @@ function observed_effects(previous, current; meters=MeterContext(), before_regio
         isempty(alternatives), candidate_roles,live_meters,uncertain_meters)
 end
 
+function endpoint_effects_observed(output::PublicEffects)
+    output.complete && return true
+    output.alternatives == ["intermediate_frames_require_separate_interpretation"] || return false
+    trace = get(output.public_delta,"response_trace",[])
+    return !isempty(trace) && all(row->row["changed_pixels"] isa Int,trace)
+end
+
 function replay_effects!(observations, episodes)
     for episode in episodes
         all(after->after.observation.action["id"] == 0 || haskey(observations,after.event["event_id"]),
