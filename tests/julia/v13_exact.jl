@@ -123,6 +123,45 @@ end
     @test TC.evaluate_predicate(predicate,base,negative.binding,(0,0),[0]) == TC.disproven
 end
 
+@testset "A compound role keeps the typed colors of its external neighbors" begin
+    function witness(x,y,count,name,verdict)
+        frame = zeros(UInt8,24,24)
+        frame[y:y+1,x:x+1] .= 0x04
+        frame[y:y+1,x+2:x+3] .= 0x08
+        frame[y-1,x] = 0x02
+        count == 2 && (frame[y+2,x+3] = 0x02)
+        groups = TC.color_components(frame).groups
+        support = sort!(reduce(vcat,filter(s->first(s)[3] in (0x04,0x08),groups)))
+        sample = TC.MotionExample(name,"before-" * name,1,frame,frame,[0])
+        return TC.AssociationExample(sample,TC.MotionBinding(support,TC.anchor(support)),verdict)
+    end
+    negative = witness(8,9,1,"compound-one",TC.disproven)
+    positive = witness(8,9,2,"compound-two",TC.proven)
+    frame = positive.sample.before
+    support = positive.binding.support
+    features = TC.support_features(frame,support)
+    @test features.composite && !isnothing(features.subject)
+    @test Set(pigment for (role,pigment) in features.colors if role == features.subject) == Set([4,8])
+    @test !((features.subject,features.subject) in features.neighbor)
+    @test length(TC.color_components(frame).groups) == 5
+    @test length(unique(first.(features.colors))) == 4
+    context = TC.observed_relation_context(frame,positive.binding,positive.sample.before_id)
+    counts = TC.observed_neighbor_counts(context,4)
+    @test counts[3] == 2 && counts[5] == counts[9] == 0
+    @test context.context.scope.view != "color-support"
+
+    predicate = TC.construct_relation([negative,positive])
+    @test !isnothing(predicate)
+    @test all(candidate["neighbor_count"] == 2 && candidate["pigment"] == 2
+        for candidate in predicate.certificate["candidates"])
+    held = witness(12,15,2,"compound-held",TC.proven)
+    @test TC.evaluate_predicate(predicate,held.sample.before,held.binding,(0,0),[0]) == TC.proven
+    @test TC.evaluate_predicate(predicate,negative.sample.before,negative.binding,(0,0),[0]) == TC.disproven
+    cut = TC.MotionBinding(support[1:end-1],positive.binding.anchor)
+    @test isnothing(TC.support_features(frame,cut.support).subject)
+    @test TC.evaluate_predicate(predicate,frame,cut,(0,0),[0]) == TC.unknown_truth
+end
+
 @testset "A learned joint condition binds pigments to the same observed role" begin
     base = zeros(UInt8,28,28)
     base[10:12,10:12] .= 4

@@ -53,11 +53,12 @@ predicate_record(p::RelationPredicate) = Dict("kind"=>"relation_predicate","defi
     "view"=>"color-support","certificate_sha256"=>p.certificate_sha,"search_macros"=>p.macro_refs)
 
 function observed_relation_context(frame,binding,event; slot=0)
-    scope = RelationScope("visible-frame",event,"components-exact","color-support","before")
+    views = [(connectivity,support_features(frame,binding.support;connectivity)) for connectivity in (4,8)]
+    view = any(row->last(row).composite,views) ? "color-support-" * semantic_hash(sort(binding.support)) : "color-support"
+    scope = RelationScope("visible-frame",event,"components-exact",view,"before")
     context = RelationEvaluation(scope,Dict(event=>0),1;slot)
     subjects = Dict{Int,Union{String,Nothing}}()
-    for connectivity in (4,8)
-        support = support_features(frame,binding.support;connectivity)
+    for (connectivity,support) in views
         subjects[connectivity] = support.subject
         observe_relation!(context,"adjacent-" * string(connectivity),[BEFORE_ROLE_COLUMN,BEFORE_ROLE_COLUMN],
             support.neighbor;event_reads=[event],domain_complete=true)
@@ -90,14 +91,17 @@ function observed_neighbor_counts(observed,connectivity)
     isnothing(subject) && return nothing
     suffix = string(connectivity)
     pigments = observed.context.atoms["color-" * suffix]
-    colors = Dict(first(row)=>last(row) for row in keys(pigments.rows))
+    colors = Dict{String,Vector{Int}}()
+    for (role,pigment) in keys(pigments.rows)
+        push!(get!(Vector{Int},colors,role),pigment)
+    end
     counts = zeros(Int,16)
     cursor = nothing
     while true
         page = relation_page!(observed.context,"adjacent-" * suffix,(subject,nothing),64;cursor)
         page.execution == "completed" || return nothing
-        for ((_,neighbor),_) in page.rows
-            counts[colors[neighbor]+1] += 1
+        for ((_,neighbor),_) in page.rows, pigment in colors[neighbor]
+            counts[pigment+1] += 1
         end
         page.coverage == "complete" && return counts
         cursor = page.cursor

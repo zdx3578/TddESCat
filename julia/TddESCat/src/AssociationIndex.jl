@@ -12,18 +12,44 @@ end
 
 AssociationIndex() = AssociationIndex(Dict(),Dict(),Dict())
 
+function full_region_members(frame,subject,groups,owner)
+    allunique(subject) || return nothing
+    members = BitSet()
+    for (x,y,color) in subject
+        checkbounds(Bool,frame,y+1,x+1) && frame[y+1,x+1] == color || return nothing
+        push!(members,owner[y+1,x+1])
+    end
+    isempty(members) && return nothing
+    sum(i->length(groups[i]),members) == length(subject) || return nothing
+    return members
+end
+
 function support_features(frame, subject; connectivity=4)
     components = color_components(frame,connectivity)
     groups, owner = components.groups, components.owner
     role(i) = "role-" * string(i)
     subject_index = findfirst(==(subject),groups)
+    region_roles = collect(eachindex(groups))
+    if isnothing(subject_index)
+        members = full_region_members(frame,subject,groups,owner)
+        if !isnothing(members)
+            if length(members) == 1
+                subject_index = only(members)
+            else
+                push!(groups, sort!(copy(subject)))
+                subject_index = length(groups)
+                for member in members
+                    region_roles[member] = subject_index
+                end
+            end
+        end
+    end
     pairs = Set{Tuple{Int,Int}}()
-    directions = connectivity == 4 ? FOUR_NEIGHBORS :
-        [(dx,dy) for dx in -1:1 for dy in -1:1 if (dx,dy) != (0,0)]
+    directions = connectivity == 4 ? FOUR_NEIGHBORS : EIGHT_NEIGHBORS
     for y in axes(frame,1), x in axes(frame,2), (dx,dy) in directions
         xx, yy = x+dx,y+dy
         checkbounds(Bool,frame,yy,xx) || continue
-        first, second = owner[y,x], owner[yy,xx]
+        first, second = region_roles[owner[y,x]], region_roles[owner[yy,xx]]
         first != second && push!(pairs,(first,second))
     end
     adjacency = sort!(collect(pairs))
@@ -37,9 +63,15 @@ function support_features(frame, subject; connectivity=4)
         previous = [semantic_hash([current,sort!(links[index])]) for (index,current) in enumerate(previous)]
     end
     hints = isnothing(subject_index) ? String[] : [labels[subject_index],previous[subject_index]]
-    return (; subject=isnothing(subject_index) ? nothing : role(subject_index), hints,
+    composite = !isnothing(subject_index) && subject_index > length(region_roles)
+    colors = Tuple{String,Int}[]
+    for i in sort!(unique(region_roles))
+        pigments = i > length(region_roles) ? sort!(unique(last.(groups[i]))) : (groups[i][1][3],)
+        append!(colors,((role(i),Int(color)) for color in pigments))
+    end
+    return (; subject=isnothing(subject_index) ? nothing : role(subject_index), composite, hints,
         neighbor=[(role(a),role(b)) for (a,b) in adjacency],
-        colors=[(role(i),Int(first(shape)[3])) for (i,shape) in enumerate(groups)])
+        colors)
 end
 
 association_port(example) =
