@@ -100,6 +100,68 @@ end
     @test cursor.pending == TC.RelationPolicyCursor(serial).pending
 end
 
+@testset "A synthesized branch reads the role established by the preparation" begin
+    python = joinpath(@__DIR__,"..","..","python","compute",".venv","bin","python")
+    if isfile(python)
+        agenda,entries = TC.RelationAgenda(),Any[]
+        function scene(selected=nothing;origins=(8,24),signals=(0x03,0x08))
+            frame = fill(0x00,64,64)
+            for (x,color) in zip(origins,signals)
+                frame[11:13,x+1:x+3] .= x == selected ? 0x09 : 0x04
+                frame[19:20,x+1:x+2] .= color
+            end
+            return frame
+        end
+        for (attempt,following) in enumerate((3,4,3,4))
+            attempt > 1 && TC.begin_relation_attempt!(agenda,nothing)
+            root = recorded_frame("typed-reset-$attempt",nothing,scene(),Dict("id"=>0),[3,4,6])
+            x = following == 3 ? 8 : 24
+            prepared = recorded_frame("typed-prep-$attempt",root.event["event_id"],scene(x),
+                TC.click_action((x+1,11)),[3,4,6])
+            finished = scene(x)
+            finished[11:13,x+1:x+3] .= UInt8(8+following)
+            closed = recorded_frame("typed-follow-$attempt",prepared.event["event_id"],finished,
+                Dict("id"=>following),[3,4,6])
+            for (before,after) in ((root,prepared),(prepared,closed))
+                TC.observe_relations!(agenda,before,after,TC.observed_effects(before,after),
+                    nothing,NamedTuple[],nothing)
+            end
+            append!(entries,[root,prepared,closed])
+        end
+        worker = TC.ComputeWorker(`$python -m tddesc_compute.worker`)
+        try
+            corpus = TC.policy_corpus(agenda,entries;solver=worker,snapshot="bound-branch")
+            @test !isnothing(corpus)
+            branches = filter(row->row.structure == "branch",corpus.episodes)
+            @test length(branches) == 4
+            @test all(row->TC.verify_relation_episode(row.body,row,agenda,entries),branches)
+            body = first(branches).body
+            @test body["kind"] == "RelationSequence"
+            suffix = last(body["children"])
+            atoms = first(suffix["children"])["layout"]["atoms"]
+            @test any(atom->atom["kind"] == "relative_component_color",values(atoms))
+            policy = TC.LearnedPolicy("verified","branch",1,"typed",Dict("tree"=>body),String[],"")
+            for (signal,expected) in ((0x03,3),(0x08,4))
+                origins = (16,40)
+                initial = recorded_frame("new-entry",nothing,scene(;origins,signals=(0x03,signal)),
+                    Dict("id"=>0),[3,4,6]).observation
+                prepared = recorded_frame("new-prep","new-entry",scene(40;origins,signals=(0x03,signal)),
+                    TC.click_action((41,11)),[3,4,6]).observation
+                cursor = TC.RelationPolicyCursor(policy)
+                @test TC.next_relation_instruction!(cursor,initial).instruction.node["layout"]["id"] == 6
+                pending = copy(cursor.pending)
+                @test TC.peek_relation_instruction(cursor,prepared).status == :unknown_guard
+                @test cursor.pending == pending
+                roles = TC.public_components(last(prepared.frames))
+                cursor.outputs = [only(filter(role->first(role)[3] == 0x09,roles))]
+                @test TC.next_relation_instruction!(cursor,prepared).instruction.node["layout"]["id"] == expected
+            end
+        finally
+            close(worker)
+        end
+    end
+end
+
 @testset "A policy prerequisite checks actual availability beyond its local effect" begin
     agenda = TC.RelationAgenda()
     frame = fill(0x00,64,64)

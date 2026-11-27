@@ -1,7 +1,6 @@
 """Exact public atoms available to a policy at a committed observation."""
-function policy_scene_atoms(observation)
+function policy_scene_atoms(observation;groups=public_components(last(observation.frames)))
     frame = last(observation.frames)
-    groups = public_components(frame)
     types = Dict{String,NamedTuple}()
     function accept(atom)
         id = semantic_hash(parse_json(JSON.json(atom)))
@@ -28,13 +27,59 @@ function policy_scene_atoms(observation)
     return types
 end
 
-function policy_atom_active(atoms,atom)
-    atom["kind"] == "all" && return all(member->policy_atom_active(atoms,member),atom["members"])
-    return haskey(atoms,semantic_hash(atom))
+function policy_role_context(observation,outputs;suggest=false)
+    isempty(outputs) && return policy_scene_atoms(observation)
+    frame = last(observation.frames)
+    parts = color_components(frame)
+    atoms = policy_scene_atoms(observation;groups=parts.groups)
+    bindings = map(outputs) do role
+        role isa MotionShape && !isempty(role) || return nothing
+        present = all(((x,y,c),)->checkbounds(Bool,frame,y+1,x+1) && frame[y+1,x+1] == c,role)
+        return present ? MotionBinding(role,anchor(role)) : nothing
+    end
+    if suggest
+        for (port,binding) in enumerate(bindings)
+            isnothing(binding) && continue
+            for group in parts.groups
+                at = anchor(group)
+                at == binding.anchor && continue
+                atom = (kind="relative_component_color",port,offset=at .- binding.anchor,
+                    offsets=position_offsets(group),color=Int(first(group)[3]))
+                atoms[semantic_hash(parse_json(JSON.json(atom)))] = atom
+            end
+        end
+    end
+    return (;atoms,frame,parts,bindings)
 end
 
-function policy_guard_value(layout,atoms)
-    valuation = Dict(name=>policy_atom_active(atoms,atom) for (name,atom) in layout["atoms"])
+policy_atom_definitions(scene::AbstractDict) = scene
+policy_atom_definitions(scene::NamedTuple) = scene.atoms
+policy_atom_field(atom::NamedTuple,key) = getproperty(atom,key)
+policy_atom_field(atom::AbstractDict,key) = atom[string(key)]
+
+function policy_atom_value(scene,atom)
+    kind = policy_atom_field(atom,:kind)
+    if kind == "all"
+        values = [policy_atom_value(scene,member) for member in policy_atom_field(atom,:members)]
+        false in values && return false
+        return any(isnothing,values) ? nothing : true
+    elseif kind == "relative_component_color"
+        scene isa NamedTuple || return nothing
+        port = policy_atom_field(atom,:port)
+        checkbounds(Bool,scene.bindings,port) || return nothing
+        binding = scene.bindings[port]
+        isnothing(binding) && return nothing
+        predicate = RelativeComponentColor(Tuple(policy_atom_field(atom,:offset)),
+            Pixel[Tuple(item) for item in policy_atom_field(atom,:offsets)],UInt8(policy_atom_field(atom,:color)))
+        observed = evaluate_predicate(predicate,scene.frame,binding,(0,0),Int[],scene.parts)
+        return observed == unknown_truth ? nothing : observed == proven
+    end
+    return haskey(policy_atom_definitions(scene),semantic_hash(parse_json(JSON.json(atom))))
+end
+
+function policy_guard_value(layout,scene)
+    valuation = Dict(name=>policy_atom_value(scene,atom) for (name,atom) in layout["atoms"])
+    any(isnothing,values(valuation)) && return nothing
     return evaluate_constraint(layout["guard"],valuation)
 end
 
@@ -42,13 +87,17 @@ function typed_policy_guard(worker,positives,negatives,snapshot)
     min(length(positives),length(negatives)) >= 2 || return nothing
     examples = [positives[1:end-1];negatives[1:end-1]]
     positive_count = length(positives)-1
-    atoms = reduce(merge,examples)
+    atoms = reduce(merge,policy_atom_definitions.(examples))
+    votes = Dict(key=>(atom.kind == "relative_component_color" ?
+        [policy_atom_value(scene,atom) for scene in examples] :
+        [haskey(policy_atom_definitions(scene),key) for scene in examples]) for (key,atom) in atoms)
     features = filter(sort!(collect(keys(atoms)))) do key
-        count(row -> haskey(row,key),examples) ∉ (0,length(examples))
+        observed = votes[key]
+        !any(isnothing,observed) && count(==(true),observed) ∉ (0,length(examples))
     end
     isempty(features) && return nothing
     definitions = NamedTuple[atoms[feature] for feature in features]
-    valuations = [[haskey(row,key) for key in features] for row in examples]
+    valuations = [Bool[votes[key][i] for key in features] for i in eachindex(examples)]
     # Closed intents over real public observations are additional guard inputs.
     # Their definitions expand to ordinary observable atoms at execution.
     incidence = Dict((i,key)=>(values[j] ? proven : disproven)
@@ -87,7 +136,7 @@ function typed_policy_guard(worker,positives,negatives,snapshot)
     return layout
 end
 
-function evaluate_policy_guard(layout,observation)
+function evaluate_policy_guard(layout,observation,outputs=())
     observation isa PublicObservation || return nothing
-    return policy_guard_value(layout,policy_scene_atoms(observation))
+    return policy_guard_value(layout,policy_role_context(observation,outputs))
 end

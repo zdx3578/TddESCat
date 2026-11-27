@@ -116,6 +116,11 @@ function policy_features!(cache,trace,ref)
     end
 end
 
+function witnessed_policy_ports(row)
+    return Any[effect.family in (:translation,:pigment,:selection) && !isempty(effect.after) ?
+        effect.after : nothing for effect in row.effects.effects]
+end
+
 function separating_feature(positive,negative)
     (isempty(positive) || isempty(negative)) && return nothing
     present = setdiff(reduce(intersect,positive),reduce(union,negative))
@@ -143,12 +148,24 @@ function policy_episodes(agenda,entries;solver=nothing,snapshot="trajectory")
     episodes = NamedTuple[]
     features = Dict{String,Set{String}}()
     atom_features = Dict{String,Dict{String,NamedTuple}}()
+    role_features = Dict{Tuple{String,Int},Any}()
     function scene(ref)
         isnothing(solver) && return policy_features!(features,trace,ref)
         return get!(() -> policy_scene_atoms(trace.by_ref[ref]),atom_features,ref)
     end
     before(index) = scene(agenda.samples[index].effects.before_id)
     after(index) = scene(relation_ref(agenda.samples[index]))
+    function after_preparation(index)
+        row = agenda.samples[index]
+        previous = row.preceding
+        if isnothing(solver) || isempty(trace.descriptors[previous]["relations"])
+            return before(index)
+        end
+        ref = row.effects.before_id
+        return get!(role_features,(ref,previous)) do
+            policy_role_context(trace.by_ref[ref],witnessed_policy_ports(agenda.samples[previous]);suggest=true)
+        end
+    end
     distinguish(a,b) = isnothing(solver) ? separating_feature(a,b) : typed_policy_guard(solver,a,b,snapshot)
     function emit(body,members,structure)
         rows = agenda.samples[members]
@@ -204,8 +221,8 @@ function policy_episodes(agenda,entries;solver=nothing,snapshot="trajectory")
             policy_expr("RelationBranch",policy_expr("RelationTest";layout=entry_guard),
                 sequence_policy(trace,a),sequence_policy(trace,b))
         else
-            guard = distinguish([before(rows[position]) for rows in left],
-                [before(rows[position]) for rows in right])
+            guard = distinguish([after_preparation(rows[position]) for rows in left],
+                [after_preparation(rows[position]) for rows in right])
             isnothing(guard) && continue
             prefix = sequence_policy(trace,a[1:position-1])
             shared = [trace.neighbors[a[position]].shared,trace.neighbors[b[position]].shared]
@@ -301,8 +318,8 @@ function relation_policy_slot(node)
     return nothing
 end
 
-function relation_predicate(layout,scene)
-    haskey(layout,"guard_schema") && return evaluate_policy_guard(layout,scene)
+function relation_predicate(layout,scene,outputs=())
+    haskey(layout,"guard_schema") && return evaluate_policy_guard(layout,scene,outputs)
     frame = scene isa PublicObservation ? last(scene.frames) : scene
     present = any(shape->4length(shape) <= length(frame) &&
         semantic_hash(shape_template(shape)) == layout["feature"],public_components(frame))
@@ -340,14 +357,14 @@ function next_relation_instruction!(cursor,scene)
             push!(cursor.pending,(node=children[2],iteration=0,shared=layout["shared"]))
             push!(cursor.pending,(node=children[1],iteration=0,shared=instruction.shared))
         elseif kind == "RelationBranch"
-            yes = relation_predicate(first(children)["layout"],scene)
+            yes = relation_predicate(first(children)["layout"],scene,cursor.outputs)
             isnothing(yes) && return (;instruction=nothing,branches,status=:unknown_guard)
             push!(branches,(control=:branch,outcome=yes))
             shared = haskey(layout,"shared_by_branch") ?
                 layout["shared_by_branch"][yes ? 1 : 2] : instruction.shared
             push!(cursor.pending,(node=children[yes ? 2 : 3],iteration=0,shared))
         elseif kind == "RelationRepeat"
-            yes = relation_predicate(first(children)["layout"],scene)
+            yes = relation_predicate(first(children)["layout"],scene,cursor.outputs)
             isnothing(yes) && return (;instruction=nothing,branches,status=:unknown_guard)
             push!(branches,(control=:repeat,outcome=yes,iteration=instruction.iteration))
             yes || continue
@@ -392,6 +409,7 @@ function verify_relation_episode(tree,episode,agenda,entries)
             canonical_bytes(next.instruction.shared) ==
                 canonical_bytes(public_role_links(earlier.effects,row.effects)) || return false
         end
+        cursor.outputs = isnothing(producer) ? Any[] : witnessed_policy_ports(row)
         earlier = row
     end
     return next_relation_instruction!(cursor,by_ref[relation_ref(earlier)]).status == :stopped
