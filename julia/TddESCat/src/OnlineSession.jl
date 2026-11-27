@@ -1347,7 +1347,18 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                             reads=evidence.reads,variables=sort!(collect(keys(spatial.conditions[key]));by=repr))
                     end
                 end
-                if !isnothing(visual.field) && !isnothing(get(something(spatial_choice,(;)),:expected,nothing))
+                pose = get(something(spatial_choice,(;)),:pose,nothing)
+                if !isnothing(pose)
+                    verdict = if isnothing(spatial_feedback)
+                        "unknown"
+                    else
+                        agreement = spatial_feedback.continuable && spatial_feedback.after == spatial_choice.destination &&
+                            spatial_feedback.orientation_before == pose.before &&
+                            spatial_feedback.orientation_after == pose.after
+                        agreement ? "supported" : "refuted"
+                    end
+                    visual_feedback = (contract="observed_role_orientation",expected=pose,verdict)
+                elseif !isnothing(visual.field) && !isnothing(get(something(spatial_choice,(;)),:expected,nothing))
                     actual = visual_value(last(resulting.observation.frames),visual.field)
                     if isnothing(spatial_feedback) || isnothing(actual)
                         visual_feedback = (actual=actual,verdict="unknown")

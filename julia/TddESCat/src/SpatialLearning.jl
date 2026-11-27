@@ -4,6 +4,7 @@ struct ObservedMove
     event::String
     orientation_before::Int
     orientation_after::Int
+    continuable::Bool
 end
 
 struct MotionContext
@@ -187,25 +188,36 @@ function fit_motion_conditions(model, rows)
     return candidates
 end
 
-function motion_evidence(model, origin, action, frame, previous_action; current)
+function motion_evidence(model, origin, action, frame, previous_action; current,orientation=nothing)
     key = (origin,action)
     rows = get(model.trials,key,ObservedMove[])
     if !isempty(rows) && !isempty(model.orientations)
-        if current
+        if current && isnothing(orientation)
             binding = spatial_binding(frame,model)
             if !(binding isa NamedTuple && binding.point == origin)
                 return (status=:conflict,point=nothing,reads=model.role_reads)
             end
-            rows = filter(row->row.orientation_before == binding.orientation,rows)
+            orientation = binding.orientation
+        end
+        if !isnothing(orientation)
+            rows = filter(row->row.orientation_before == orientation,rows)
         elseif length(Set(row.orientation_before for row in rows)) <= length(model.orientations)
             return (status=:conflict,point=nothing,reads=model.role_reads)
         end
     end
     isempty(rows) && return (status=:untested,point=nothing,reads=String[])
     landings = Set(row.after for row in rows)
+    function next_orientation(point)
+        matching = filter(row->row.after == point,rows)
+        isempty(matching) && return nothing
+        all(row->row.continuable && row.orientation_after == first(matching).orientation_after,matching) ||
+            return nothing
+        return first(matching).orientation_after
+    end
     if length(landings) == 1
         point = only(landings)
-        return (status=point == origin ? :stopped : :witnessed,point,reads=[first(rows).event])
+        return (status=point == origin ? :stopped : :witnessed,point,
+            orientation=next_orientation(point),reads=[first(rows).event])
     end
     reads = unique([ref for row in rows for ref in (model.motion_contexts[row.event].before,row.event)])
     unknown = (status=:conflict,point=nothing,reads)
@@ -216,7 +228,8 @@ function motion_evidence(model, origin, action, frame, previous_action; current)
         for (variable,relation) in candidates]
     (any(isnothing,projected) || !allequal(projected)) && return unknown
     point = first(projected)
-    return (status=point == origin ? :conditional_stop : :conditional_motion,point,reads)
+    return (status=point == origin ? :conditional_stop : :conditional_motion,point,
+        orientation=next_orientation(point),reads)
 end
 
 function spatial_probe_scope(observation,origin)
@@ -260,7 +273,8 @@ function observe_spatial!(model, before, after, effects)
             end
         end
     end
-    move = ObservedMove(landing,first_landing,effects.event_id,start.orientation,finish.orientation)
+    move = ObservedMove(landing,first_landing,effects.event_id,start.orientation,finish.orientation,
+        new_obs.state == "NOT_FINISHED")
     key = (origin,action)
     rows = get!(Vector{ObservedMove},model.trials,key)
     model.motion_contexts[move.event] = MotionContext(effects.before_id,a,old_obs.action["id"])
@@ -307,50 +321,54 @@ end
 
 function spatial_experiment(model::SpatialLearning, obs, decision)
     frame = last(obs.frames)
-    here = locate_role(frame,model)
-    isnothing(here) && return nothing
+    here = spatial_binding(frame,model)
+    here isa NamedTuple || return nothing
     active = [row for row in decision.ranked if length(row.action) == 1]
     isempty(active) && return nothing
     action_ids = [row.action["id"] for row in active]
-    unbound = spatial_unbound(model,here,action_ids,obs)
+    unbound = spatial_unbound(model,here.point,action_ids,obs;orientation=here.orientation)
     isnothing(unbound) || return unbound
     points = [here]
-    parent = Dict{Pixel,Tuple{Int,Pixel,Vector{String}}}()
+    parent = Dict{typeof(here),Tuple{Int,typeof(here),Vector{String}}}()
     visited = Set([here])
+    visited_points = Set([here.point])
     best = nothing
     best_rank = nothing
     for p in points
         for id in action_ids
-            observed = motion_evidence(model,p,id,frame,obs.action["id"];current=p == here)
-            if observed.status in (:witnessed,:conditional_motion)
-                target = observed.point
+            observed = motion_evidence(model,p.point,id,frame,obs.action["id"];
+                current=p == here,orientation=p.orientation)
+            orientation = get(observed,:orientation,nothing)
+            if !isnothing(orientation)
+                target = (point=observed.point,orientation=orientation)
                 if target ∉ visited
                     parent[target] = (id,p,observed.reads)
                     push!(visited,target)
+                    push!(visited_points,target.point)
                     push!(points,target)
                 end
                 continue
             elseif observed.status == :conflict && p == here
                 # A new scope is an experiment. It supplies no projected successor.
-                rows = model.trials[(p,id)]
+                rows = model.trials[(p.point,id)]
                 tested = any(rows) do row
                     context = model.motion_contexts[row.event]
                     context.previous_action == obs.action["id"] && context.frame == frame
                 end
                 if !tested
                     return (id=id,reason="distinguish_motion_context",
-                        reads=unique([model.role_reads;observed.reads]),role=here,
-                        destination=nothing,frontier=here)
+                        reads=unique([model.role_reads;observed.reads]),role=here.point,
+                        destination=nothing,frontier=here.point)
                 end
             end
             observed.status == :untested || continue
             offset = measured_offset(model,id)
             isnothing(offset) && continue
-            target = p .+ first(offset)
-            target in visited && !haskey(model.visits,target) && continue
+            target = p.point .+ first(offset)
+            target in visited_points && !haskey(model.visits,target) && continue
             quality = frontier_score(model,frame,target)
             quality > 0 || continue
-            travel, first_action, first_step = 0,id,target
+            travel, first_action, first_step = 0,id,(point=target,orientation=here.orientation)
             reads = [model.role_reads;last(offset)]
             q = p
             while q != here
@@ -365,16 +383,24 @@ function spatial_experiment(model::SpatialLearning, obs, decision)
             if isnothing(best_rank) || rank > best_rank
                 best_rank = rank
                 best = (id=first_action,reason="experiment_at_learned_spatial_frontier",
-                    reads=unique(reads),role=here,destination=first_step,frontier=target)
+                    reads=unique(reads),role=here.point,destination=first_step.point,frontier=target)
+                if first_step.point == here.point && first_step.orientation != here.orientation
+                    best = merge(best,(;pose=(before=here.orientation,after=first_step.orientation)))
+                end
             end
         end
     end
     return best
 end
 
-function spatial_unbound(model, here, action_ids, obs)
+function spatial_unbound(model, here, action_ids, obs;orientation=nothing)
+    if isnothing(orientation) && !isempty(model.orientations)
+        binding = spatial_binding(last(obs.frames),model)
+        binding isa NamedTuple && (orientation = binding.orientation)
+    end
+    tried(row) = isnothing(orientation) || row.orientation_before == orientation
     candidates = [id for id in action_ids if !haskey(model.offsets,id) &&
-        isempty(get(model.trials,(here,id),()))]
+        !any(tried,get(model.trials,(here,id),()))]
     isempty(candidates) && return nothing
     scope = spatial_probe_scope(obs,here)
     options = NamedTuple[]

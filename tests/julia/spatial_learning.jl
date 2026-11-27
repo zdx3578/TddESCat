@@ -3,8 +3,8 @@ using Test
 
 const TS = TddESCat
 
-function picture_entry(ref, parent, action, frame;coordinates=Dict{String,Int}())
-    observation = TS.PublicObservation("abstract-trial","test-session",[frame],"NOT_FINISHED",
+function picture_entry(ref, parent, action, frame;coordinates=Dict{String,Int}(),state="NOT_FINISHED")
+    observation = TS.PublicObservation("abstract-trial","test-session",[frame],state,
         0,2,merge(Dict("id"=>action),coordinates),[1,2,3,4,6],false)
     return (event=Dict("event_id"=>ref,"before_ref"=>parent),observation=observation)
 end
@@ -190,6 +190,35 @@ end
     continued = TS.observe_spatial!(state,r,s,TS.observed_effects(r,s))
     @test continued.after == (6,5) && continued.orientation_before == continued.orientation_after == 2
     @test length(state.orientations) == 1
+
+    @testset "A same-position preparation reaches another spatial experiment" begin
+        blocked = picture_entry("blocked","translated",2,scene(sprite,4,3))
+        turned_in_place = picture_entry("prepared","blocked",3,scene(turned,4,3))
+        checked_turn = picture_entry("checked-turn","prepared",3,scene(turned,4,3))
+        moved = picture_entry("prepared-effect","checked-turn",2,scene(turned,4,6))
+        model = TS.SpatialLearning()
+        for (before,after) in ((p,q),(q,blocked),(blocked,turned_in_place),
+                (turned_in_place,checked_turn),(checked_turn,moved))
+            TS.observe_spatial!(model,before,after,TS.observed_effects(before,after))
+        end
+        ranked = [(action=Dict("id"=>id),) for id in (2,3)]
+        proposal = TS.spatial_experiment(model,q.observation,(;ranked))
+        @test proposal.id == 3 && proposal.destination == (4,3) && proposal.frontier == (4,9)
+        @test proposal.pose == (before=1,after=2)
+        @test all(in(proposal.reads),["prepared","prepared-effect"])
+        baseline = (;action=Dict("id"=>2),reason="ordinary_public_option")
+        experiment = (;action=Dict("id"=>2),independent=true)
+        selection = TS.task_arbitration(baseline,proposal,nothing,nothing,experiment;
+            program=false,continuing_contact=false,conditional=false,object_probes=false)
+        @test selection.choice.source == :spatial && selection.choice.action == Dict("id"=>3)
+        continued = TS.spatial_experiment(model,turned_in_place.observation,(;ranked))
+        @test continued.id == 2 && continued.destination == (4,6)
+
+        failed = picture_entry("terminal","blocked",3,scene(turned,4,3);state="GAME_OVER")
+        movement = TS.observe_spatial!(model,blocked,failed,TS.observed_effects(blocked,failed))
+        @test !movement.continuable && movement.orientation_after == 2
+        @test isnothing(TS.spatial_experiment(model,q.observation,(;ranked)))
+    end
 end
 
 @testset "Observed motifs and temporal evidence" begin

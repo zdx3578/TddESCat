@@ -870,13 +870,20 @@ function task_arbitration(item,spatial,intervention,relation,experiment;
     candidates = NamedTuple[]
     add(source,action,reason,priority) = push!(candidates,(;source,action,reason,priority))
     add(program ? :program : :base,item.action,item.reason,program ? 0 : conditional ? 1 : 8)
-    contact_ready = false
+    spatial_ready = false
     if !isnothing(spatial)
         contact = get(spatial,:contact,nothing)
         contact_ready = continuing_contact || !isnothing(contact) && contact.conditions.judgment == :admitted
-        grounded = contact_ready || get(spatial,:effect_gain,0) > 0
-        priority = grounded ? 1 : object_probes ? 7 : get(spatial,:unlocated_before,0) > 0 ? 5 : 4
-        add(:spatial,Dict("id"=>spatial.id),spatial.reason,priority)
+        pose = get(spatial,:pose,nothing)
+        action = Dict("id"=>spatial.id)
+        admissible_pose = isnothing(pose) || isnothing(frontier) ||
+            !observed_failure(frontier.agenda,frontier.context,action_key(action),frontier.agenda.previous)
+        if admissible_pose
+            spatial_ready = contact_ready || !isnothing(pose)
+            grounded = spatial_ready || get(spatial,:effect_gain,0) > 0
+            priority = grounded ? 1 : object_probes ? 7 : get(spatial,:unlocated_before,0) > 0 ? 5 : 4
+            add(:spatial,action,spatial.reason,priority)
+        end
     end
     if !isnothing(intervention)
         add(:intervention,intervention.action,intervention.reason,isnothing(intervention.goal) ? 6 : 2)
@@ -908,7 +915,7 @@ function task_arbitration(item,spatial,intervention,relation,experiment;
     frontier_task = nothing
     if !isnothing(frontier)
         protected = if choice.source == :spatial
-            contact_ready
+            spatial_ready
         elseif choice.source == :relation_policy
             continuing_policy || choice.priority <= 2
         elseif choice.source == :relation
