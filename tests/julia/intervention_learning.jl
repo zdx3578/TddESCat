@@ -31,6 +31,51 @@ end
     @test TC.result_model(count,frame,groups,[],Dict("id"=>1);shift=(0,3),role_index=roles) === nothing
 end
 
+@testset "Relative placement binds jointly moving supports with a duplicate" begin
+    function scene(motion=0; origin=(4,4), unit=2)
+        frame = zeros(UInt8,64,64)
+        for (x,y,color) in ((origin[1]+motion,origin[2],0x04),
+                (origin[1]+3unit+motion,origin[2],0x08),(24,24,0x04))
+            frame[y+1:y+unit,x+1:x+unit] .= color
+        end
+        return frame
+    end
+    action = Dict("id"=>2)
+    before, after = scene(), scene(2)
+    initial = intervention_entry("base",Dict("id"=>0),before,[2])
+    next = intervention_entry("moved",action,after,[2];before="base")
+    effects = TC.observed_effects(initial,next)
+    agenda = TC.RelationAgenda()
+    learned = TC.observe_relations!(agenda,initial,next,effects,nothing,NamedTuple[],nothing)
+    rule = agenda.producers[learned.producer.key].rule
+    groups = TC.public_components(before)
+    @test isnothing(TC.model_binding(first(rule.effects),groups,[]))
+    admitted = TC.evaluate_joint_rule(rule,before,groups,[],action;role_index=TC.EffectRoleIndex())
+    @test admitted == TC.evaluate_joint_rule(rule,before,groups,[],action)
+    @test admitted.truth == TC.proven
+    @test [part.value for part in admitted.fragments] == rule.anchors
+    @test all(part->part.relative,admitted.fragments)
+    choice = (model=rule,fragments=admitted.fragments)
+    @test all(==("supported"),values(TC.measure_joint(choice,after;effects).assessments))
+    @test all(==("refuted"),values(TC.measure_joint(choice,before).assessments))
+
+    TC.begin_relation_attempt!(agenda,nothing;observation=initial.observation)
+    seen = TC.prepare_relation_tests(agenda,TC.relation_context(initial.observation),initial.observation,groups,action)
+    @test only(seen).scope == :bound
+    elsewhere = scene(;origin=(13,17),unit=3)
+    other = intervention_entry("other",Dict("id"=>0),elsewhere,[2])
+    other_groups = TC.public_components(elsewhere)
+    comparison = only(TC.prepare_relation_tests(agenda,TC.relation_context(other.observation),
+        other.observation,other_groups,action))
+    @test comparison.scope == :unverified
+    @test [part.value for part in comparison.fragments] == [(13,17),(22,17)]
+    @test all(part->part.expected == (3,0),comparison.fragments)
+
+    rival = copy(before)
+    rival[25:26,31:32] .= 0x08
+    @test TC.evaluate_joint_rule(rule,rival,TC.public_components(rival),[],action).truth == TC.unknown_truth
+end
+
 @testset "An intermediate frame witnesses a split and a merge within one receipt" begin
     merged = fill(UInt8(0),5,7)
     merged[3,2:6] .= 4

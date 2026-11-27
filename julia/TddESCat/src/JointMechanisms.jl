@@ -251,12 +251,45 @@ function matching_supports(index,groups,view,expected)
     return get(postings,expected,MotionShape[])
 end
 
-function model_binding(model, groups, enclosed_targets; position=nothing, role_index=nothing)
+function model_candidates(model, groups, enclosed_targets, role_index)
     view = model.enclosed ? :enclosure : :grid
     expected = support_signature(model.template,view,role_index)
-    candidates = matching_supports(role_index,model.enclosed ? enclosed_targets : groups,view,expected)
+    return matching_supports(role_index,model.enclosed ? enclosed_targets : groups,view,expected)
+end
+
+function model_binding(model, groups, enclosed_targets; position=nothing, role_index=nothing)
+    candidates = model_candidates(model,groups,enclosed_targets,role_index)
     isnothing(position) || (candidates = filter(shape->anchor(shape) == position,candidates))
     return length(candidates) == 1 ? only(candidates) : nothing
+end
+
+function joint_motion_positions(rule, movers, groups, enclosure, role_index)
+    length(movers) == length(rule.spacing) > 1 || return nothing
+    targets = [role.target for role in enclosure]
+    candidates = [model_candidates(rule.effects[index],groups,targets,role_index) for index in movers]
+    postings = map(candidates) do shapes
+        positions = Dict{Pixel,Int}()
+        for shape in shapes
+            point = anchor(shape)
+            positions[point] = get(positions,point,0) + 1
+        end
+        positions
+    end
+    source_unit = indexed_grid(rule.effects[first(movers)].template,role_index).unit
+    aligned = nothing
+    for shape in first(candidates)
+        origin = anchor(shape)
+        bound_unit = indexed_grid(shape,role_index).unit
+        offsets = [offset .* bound_unit for offset in rule.spacing]
+        all(offset->all(v->mod(v,source_unit) == 0,offset),offsets) || continue
+        positions = [origin .+ div.(offset,source_unit) for offset in offsets]
+        allunique(positions) || continue
+        multiplicities = [get(posting,point,0) for (posting,point) in zip(postings,positions)]
+        all(>(0),multiplicities) || continue
+        isnothing(aligned) && all(==(1),multiplicities) || return nothing
+        aligned = positions
+    end
+    return isnothing(aligned) ? nothing : zip(movers,aligned)
 end
 
 visible_support(frame,visibility) = all(cell -> checkbounds(Bool,frame,cell[2]+1,cell[1]+1) &&
@@ -367,6 +400,18 @@ function evaluate_joint_rule(rule, before, groups, enclosure, action; meters=(),
         fill(nothing,length(rule.effects))
     fragments = [result_model(effect,before,groups,enclosure,action;meters,clicked,position,shift,role_index)
         for (effect,position) in zip(rule.effects,positions)]
+    if !relative && any(isnothing,fragments)
+        movers = findall(effect->effect.family == :translation,rule.effects)
+        if any(i->isnothing(fragments[i]),movers)
+            positions = joint_motion_positions(rule,movers,groups,enclosure,role_index)
+            if !isnothing(positions)
+                for (i,position) in positions
+                    fragments[i] = result_model(rule.effects[i],before,groups,enclosure,action;
+                        position,role_index)
+                end
+            end
+        end
+    end
     any(isnothing,fragments) && return (truth=unknown_truth, fragments, reason="incomplete_effect_binding")
     relative && (fragments = [merge(part,(click_origin=anchor(support),)) for part in fragments])
     for (effect,fragment) in zip(rule.effects, fragments)
