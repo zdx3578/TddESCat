@@ -629,6 +629,17 @@ def verify(mode, public):
         assert selected["guard_truth"] is True
         assert list(selected["predicted_values"].values()) == [[3, 0]]
         assert report["refuted"]["event"] in selected["event_reads"]
+        repairs = report.get("revisions", [])
+        for revision in repairs:
+            written = trace[revision["event"]][0]["sequence"]
+            assert all(
+                trace[ref][0]["sequence"] <= written
+                for ref in revision["support"] + revision["excluded"]
+            )
+        if repairs:
+            assert repairs[0]["status"] == "repaired"
+            assert repairs[0]["excluded"] == [report["refuted"]["event"]]
+            assert any(row["version"] is not None for row in repairs)
         measured = report["contrasted"]["feedback"]["tests"]
         assert {test["status"] for test in measured} == {"established", "refuted"}
         assert trace[report["won"]["event"]][1]["state"] == "WIN"

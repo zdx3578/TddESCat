@@ -27,6 +27,7 @@ ActiveMechanism(rule,condition,refuted,unknown) = ActiveMechanism(rule,condition
 mutable struct OnlineKnowledge
     rules::Vector{JointMechanism}
     active::Vector{ActiveMechanism}
+    observed_conditions::Dict{String,ActiveMechanism}
     trials::Vector{PublicTrial}
     learning_jobs::Int
     definition_depths::Dict{String,Int}
@@ -38,7 +39,7 @@ mutable struct OnlineKnowledge
     receipt::Union{Nothing,ReceiptRegions}
 end
 
-OnlineKnowledge() = OnlineKnowledge(JointMechanism[],ActiveMechanism[],PublicTrial[],0,Dict{String,Int}(),
+OnlineKnowledge() = OnlineKnowledge(JointMechanism[],ActiveMechanism[],Dict(),PublicTrial[],0,Dict{String,Int}(),
     Any[],Dict(),Any[],Dict{String,PublicEffects}(),ProjectionMemory(),nothing)
 
 function publish_receipt_regions!(knowledge,store,entry,view=receipt_regions(entry))
@@ -213,8 +214,10 @@ function frozen_knowledge_digest(knowledge)
     depths = [(id,knowledge.definition_depths[id]) for id in sort!(collect(keys(knowledge.definition_depths)))]
     projections = sort!([(id,scope.version,[row.event for row in scope.trials])
         for (id,scope) in knowledge.projections.scopes];by=first)
+    observed = sort!([(key,active_id(model),model.condition.support,model.counterexamples)
+        for (key,model) in knowledge.observed_conditions];by=first)
     return content_hash(JSON.json([interpretations,[trial.sample.event_id for trial in knowledge.trials],
-        programs,policies,depths,projections]))
+        programs,policies,depths,projections,observed]))
 end
 
 function archive_trial!(knowledge, trial, limits)
@@ -500,10 +503,81 @@ end
 relation_condition_key(rule) = semantic_hash([mechanism_key(rule;composing=true),
     isnothing(rule.click) ? nothing : rule.click.offsets])
 
+function add_condition_support!(knowledge,key,model,ref)
+    guard = model.condition
+    condition = GuardSearch(guard.atoms,unique([guard.support;ref]),guard.excluded,guard.unresolved,
+        guard.complete,guard.feasible,guard.visited)
+    knowledge.observed_conditions[key] = ActiveMechanism(model.rule,condition,model.counterexamples,
+        model.unknown,model.meter_scopes)
+end
+
+function revise_observed_conditions!(knowledge,agenda,proposal,observed,limits)
+    revisions = NamedTuple[]
+    tests = isnothing(proposal) ? () : proposal.tests
+    checked = isnothing(observed.feedback) ? () : observed.feedback.tests
+    isempty(knowledge.observed_conditions) && !any(row->row.status == :refuted,checked) && return revisions
+    trial = last(knowledge.trials)
+    ref = trial.sample.event_id
+    observed.event == ref || error("An effect condition requires the matching confirmed trial")
+    published = Set(relation_condition_key(model.rule) for model in knowledge.active)
+    revised = Set{String}()
+    for (test,verdict) in zip(tests,checked)
+        verdict.status in (:refuted,:established) || continue
+        key = relation_condition_key(test.rule)
+        key in published && continue
+        previous = get(knowledge.observed_conditions,key,nothing)
+        if verdict.status == :refuted
+            push!(revised,key)
+            fitted = fit_joint_condition(test.rule,knowledge.trials,limits)
+            verified = fitted.condition.feasible && ref in fitted.condition.excluded
+            if verified
+                knowledge.observed_conditions[key] = fitted
+            else
+                delete!(knowledge.observed_conditions,key)
+            end
+            push!(revisions,(;producer=test.key,event=ref,previous=isnothing(previous) ? nothing : active_id(previous),
+                version=verified ? active_id(fitted) : nothing,support=fitted.condition.support,
+                excluded=fitted.condition.excluded,atoms=predicate_record.(fitted.condition.atoms),
+                status=verified ? :repaired : :unresolved))
+        elseif !isnothing(previous) && any(row->row.version == active_id(previous),get(test,:conditions,()))
+            add_condition_support!(knowledge,key,previous,ref)
+            push!(revised,key)
+        end
+    end
+    isnothing(observed.producer) && return revisions
+    producer = observed.producer.key
+    rule = agenda.producers[producer].rule
+    key = relation_condition_key(rule)
+    previous = get(knowledge.observed_conditions,key,nothing)
+    (isnothing(previous) || key in published || key in revised) && return revisions
+    trial_result = evaluate_joint_trial(previous.rule,trial)
+    (isnothing(trial_result) || trial_result.verdict != proven) && return revisions
+    frame = trial.sample.before
+    position = findfirst(part->part.family == :translation,rule.effects)
+    delta = isnothing(position) ? (0,0) : Tuple(rule.effects[position].values)
+    truth = conjunction(previous.condition.atoms,frame,trial_result.binding,delta,trial.sample.previous_actions;
+        transients=trial.sample.previous_transients)
+    if truth == proven
+        add_condition_support!(knowledge,key,previous,ref)
+    else
+        fitted = fit_joint_condition(rule,knowledge.trials,limits)
+        verified = fitted.condition.feasible && ref in fitted.condition.support
+        verified && (knowledge.observed_conditions[key] = fitted)
+        push!(revisions,(;producer,event=ref,previous=active_id(previous),
+            version=verified ? active_id(fitted) : active_id(previous),support=fitted.condition.support,
+            excluded=fitted.condition.excluded,atoms=predicate_record.(fitted.condition.atoms),
+            status=verified ? :refined : :unresolved))
+    end
+    return revisions
+end
+
 function relation_condition_view(knowledge,rec,history,obs)
     models = Dict{String,Vector{ActiveMechanism}}()
     for model in knowledge.active
         push!(get!(Vector{ActiveMechanism},models,relation_condition_key(model.rule)),model)
+    end
+    for (key,model) in knowledge.observed_conditions
+        haskey(models,key) || (models[key] = [model])
     end
     receipts = Dict{String,Vector{String}}()
     reads(model) = get!(() -> recovery_reads(rec,model),receipts,model.rule.id)
@@ -1379,12 +1453,16 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         elseif new_scene
             previous = Dict(m.rule.id=>m for m in knowledge.active)
             empty!(knowledge.trials)
+            empty!(knowledge.observed_conditions)
             knowledge.active = [fit_joint_condition(rule,knowledge.trials,limits) for rule in knowledge.rules]
             previous
         else
             archive_trial!(knowledge,PublicTrial(sample,item.action,effects),limits)
         end
-        frozen || persist_relation_certificates!(rec.store,knowledge.active)
+        observed_condition_revisions = !frozen && !new_scene && !isnothing(relation_feedback) ?
+            revise_observed_conditions!(knowledge,relations,relation_proposal,relation_feedback,limits) : NamedTuple[]
+        frozen || persist_relation_certificates!(rec.store,
+            Iterators.flatten((knowledge.active,values(knowledge.observed_conditions))))
         revisions = []
         for model in knowledge.active
             prior = get(old,model.rule.id,nothing)
@@ -1425,6 +1503,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 "task_feedback"=>advancement_feedback(task,entry,resulting,contact_feedback),
                 "intervention_feedback"=>intervention_feedback,
                 "public_relation_feedback"=>relation_feedback,
+                "observed_condition_revisions"=>observed_condition_revisions,
                 "relation_policy_feedback"=>relation_policy_feedback,
                 "learned_policy_feedback"=>policy_result,
                 "spatial_feedback"=>spatial_feedback,

@@ -12,6 +12,7 @@ const CONFIG = load_run_config(first(ARGS))
         entry() = (event=TC.read_json(TC.store_path(store,"events",rec.before_ref * ".json")),
             observation=rec.observation)
         history = [0]
+        limits = (;context_radii=(1,2),allow_full_frame=true,history_lengths=(1,2))
         function dispatch(action;proposal=nothing)
             before = entry()
             task = isnothing(proposal) ? nothing : TC.relation_task_record(proposal)
@@ -25,7 +26,8 @@ const CONFIG = load_run_config(first(ARGS))
             push!(history,action["id"])
             observed = TC.observe_relations!(agenda,before,after,effects,nothing,NamedTuple[],proposal)
             TC.finish_relation_dispatch!(agenda,proposal;feedback=observed.feedback)
-            return (;observed,prediction)
+            revisions = TC.revise_observed_conditions!(knowledge,agenda,proposal,observed,limits)
+            return (;observed,prediction,revisions)
         end
 
         refresh = Dict("id"=>5)
@@ -37,11 +39,15 @@ const CONFIG = load_run_config(first(ARGS))
         tests = TC.prepare_relation_tests(agenda,context,rec.observation,groups,left)
         @test only(tests).key == first_support.producer.key
         test = (;action=left,intent=:test_concrete_effect,tests,reads=String[],obligation=nothing)
-        refuted = dispatch(left;proposal=test).observed
+        trial = dispatch(left;proposal=test)
+        refuted = trial.observed
         @test refuted.feedback.result == :refuted
         @test refuted.producer.key != first_support.producer.key
+        @test only(trial.revisions).status == :repaired
+        @test only(trial.revisions).excluded == [refuted.event]
         dispatch(refresh)
-        next_support = dispatch(second).observed
+        following = dispatch(second)
+        next_support = following.observed
         @test next_support.producer.key == first_support.producer.key
         dispatch(refresh)
 
@@ -80,14 +86,13 @@ const CONFIG = load_run_config(first(ARGS))
         @test Set(test.status for test in contrasted.observed.feedback.tests) == Set((:established,:refuted))
         dispatch(refresh)
 
-        limits = (;context_radii=(1,2),allow_full_frame=true,history_lengths=(1,2))
         positive = (agenda.producers[first_support.producer.key]).rule
         negative = (agenda.producers[refuted.producer.key]).rule
-        models = TC.fit_joint_condition.((positive,negative),Ref(knowledge.trials),Ref(limits))
+        models = [knowledge.observed_conditions[TC.relation_condition_key(rule)] for rule in (positive,negative)]
         @test all(model->model.condition.feasible && !isempty(model.condition.atoms),models)
         @test refuted.event in first(models).condition.excluded
         @test next_support.event in first(models).condition.support
-        append!(knowledge.active,models)
+        @test isempty(knowledge.active)
         current = rec.observation
         condition_view = TC.relation_condition_view(knowledge,rec,history,current)
         learned = propose(last_role;condition_view)
@@ -101,7 +106,8 @@ const CONFIG = load_run_config(first(ARGS))
         @test rec.observation.state == "WIN" && close_scorecard!(rec)["completion"] == "confirmed"
         TC.atomic_json(TC.store_path(store,"effect-condition-contrast.json"),(;
             refuted,contrasted=contrasted.observed,won=actual.observed,
-            contrast=contrasted.prediction.payload,prediction=actual.prediction.payload))
+            contrast=contrasted.prediction.payload,prediction=actual.prediction.payload,
+            revisions=[trial.revisions;following.revisions;contrasted.revisions]))
         @test last(recover_run(store)).event["event_id"] == actual.observed.event
     end
 end
