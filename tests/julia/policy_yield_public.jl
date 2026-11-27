@@ -27,10 +27,16 @@ const CONFIG = load_run_config(first(ARGS))
             Dict("scope"=>"confirmed-wait","structure"=>"sequence",
                 "tree"=>TC.policy_expr("RelationTask";layout)),[source.observed.event],source.observed.event)
         obs = rec.observation
-        ranked = [(;action=Dict("id"=>id),reason="uncovered") for id in obs.available_actions]
+        ranked = [(;action=Dict("id"=>id),reason="uncovered",rank=(0,0)) for id in obs.available_actions]
         decision = (;ranked,groups=TC.public_components(last(obs.frames)))
-        attempt = TC.relation_policy_choice([learned],nothing,Set{Tuple{String,String}}(),agenda,obs,decision)
+        attempted = Set{Tuple{String,String}}()
+        @test isnothing(TC.relation_policy_choice([learned],nothing,attempted,agenda,obs,decision))
+        preferred = (;action=Dict("id"=>2))
+        relation = TC.relation_experiment(agenda,obs,decision,preferred,TC.relation_context(obs))
+        @test relation.intent == :test_delayed_effect && relation.action == preferred.action
+        attempt = TC.relation_policy_choice([learned],nothing,attempted,agenda,obs,decision;relation)
         @test attempt.proposal.action == Dict("id"=>2)
+        @test attempt.cursor.purpose.comparison == :test_delayed_effect
         actual = dispatch(2,attempt)
         finished = TC.confirm_relation_policy!(attempt,agenda,actual.observed,actual.after)
         @test finished.result == :stopped && isnothing(finished.cursor)

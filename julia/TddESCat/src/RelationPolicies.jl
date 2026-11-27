@@ -312,14 +312,15 @@ mutable struct RelationPolicyCursor
     observed::Vector{String}
     outputs::Vector{Any}
     loop_states::Set{Tuple{String,String}}
+    purpose::Union{Nothing,NamedTuple}
 end
 
 RelationPolicyCursor(policy) = RelationPolicyCursor(policy,
-    [(node=policy.body["tree"],iteration=0,shared=Any[])],String[],Any[],Set{Tuple{String,String}}())
+    [(node=policy.body["tree"],iteration=0,shared=Any[])],String[],Any[],Set{Tuple{String,String}}(),nothing)
 
 function peek_relation_instruction(cursor,scene)
     candidate = RelationPolicyCursor(cursor.policy,copy(cursor.pending),copy(cursor.observed),
-        copy(cursor.outputs),copy(cursor.loop_states))
+        copy(cursor.outputs),copy(cursor.loop_states),cursor.purpose)
     result = next_relation_instruction!(candidate,scene)
     return merge(result,(;cursor=candidate))
 end
@@ -533,14 +534,91 @@ function bind_relation_instruction(cursor,instruction,obs,decision,agenda;meters
             sought=instruction.node["layout"]["relations"],shared=sharing))
 end
 
-function relation_policy_choice(policies,cursor,attempted,agenda,obs,decision;meters=())
+function policy_outcome_steps(node)
+    kind = node["kind"]
+    if kind == "RelationTask"
+        return get(node["layout"],"public_outcome",nothing) == "advancement" ? [node["layout"]] : []
+    elseif kind == "RelationBranch"
+        return reduce(vcat,policy_outcome_steps.(node["children"][2:end]);init=[])
+    elseif kind == "RelationTest"
+        return []
+    end
+    return policy_outcome_steps(last(node["children"]))
+end
+
+function policy_advancement_purpose(candidate,ends,agenda,obs,decision,context)
+    training = Set(candidate.cursor.policy.training)
+    available = Set(obs.available_actions)
+    for witness in Iterators.reverse(agenda.outcome_relations)
+        outcome = agenda.samples[witness.outcome]
+        relation_ref(outcome) in training || continue
+        id = outcome.effects.action["id"]
+        role = isnothing(outcome.binding) ? nothing : outcome.binding.appearance
+        any(op->op["id"] == id && op["role"] == role,ends) || continue
+        at,producer = first(witness.steps)
+        Set(agenda.samples[at].available) == available || continue
+        matched = findfirst(test->test.key == producer,candidate.proposal.tests)
+        isnothing(matched) && continue
+        sources = [agenda.samples[index] for (index,_) in witness.steps]
+        all(row->relation_ref(row) in training,sources) || continue
+        target = rebound_outcome_action(outcome,decision)
+        isnothing(target) && continue
+        observed_failure(agenda,context,action_key(target),agenda.previous) && continue
+        comparison = agenda.samples[witness.comparison]
+        purpose = (;kind=:establish_public_outcome,scope=:hypothesis,target,producer,
+            sought=candidate.proposal.tests[matched].relations,
+            outcome=relation_ref(outcome),comparison=relation_ref(comparison))
+        reads = unique([relation_refs(outcome);relation_refs(comparison);reduce(vcat,relation_refs.(sources))])
+        return (;purpose,reads)
+    end
+    return nothing
+end
+
+function policy_comparison_purpose(proposal,relation,agenda,obs,context)
+    if !isnothing(relation) && proposal.action == relation.action && relation.intent in
+            (:establish_preparation,:test_delayed_effect,:test_history_response,:distinguish_changed_context,
+                :test_concrete_effect)
+        same_effect = if isempty(relation.tests)
+            proposal.obligation.wait
+        else
+            all(wanted->any(test->test.key == wanted.key && test.expected == wanted.expected,proposal.tests),
+                relation.tests)
+        end
+        if same_effect
+            purpose = (;kind=:distinguish_relation,comparison=relation.intent,relation=relation.obligation)
+            return (;purpose,reads=relation.reads)
+        end
+    end
+    history = relation_history_key(agenda,context,agenda.previous)
+    action = action_key(proposal.action)
+    pending = filter(proposal.tests) do test
+        test.scope == :replicated &&
+            effect_experiment_scope(obs.levels_completed,action,history,test) ∉ agenda.checked_effects
+    end
+    isempty(pending) && return nothing
+    # The known effect has yet to be checked at this role and history.
+    purpose = (;kind=:distinguish_relation,comparison=:effect_at_bound_condition,
+        producers=[test.key for test in pending],history)
+    return (;purpose,reads=String[])
+end
+
+function assign_policy_purpose(candidate,purpose,reads=get(purpose,:reads,String[]))
+    purpose = merge(purpose,(;reads))
+    candidate.cursor.purpose = purpose
+    task = candidate.proposal
+    proposal = merge(task,(;obligation=merge(task.obligation,(;purpose)),reads=unique([task.reads;reads])))
+    return merge(candidate,(;proposal))
+end
+
+function relation_policy_choice(policies,cursor,attempted,agenda,obs,decision;meters=(),relation=nothing)
     context = relation_context(obs)
     function ready(candidate)
         next = peek_relation_instruction(candidate,obs)
         next.status == :task || return nothing
         proposal = bind_relation_instruction(next.cursor,next.instruction,obs,decision,agenda;meters)
         isnothing(proposal) && return nothing
-        return (;cursor=next.cursor,proposal,next.branches,context)
+        candidate = (;cursor=next.cursor,proposal,next.branches,context)
+        return isnothing(next.cursor.purpose) ? candidate : assign_policy_purpose(candidate,next.cursor.purpose)
     end
 
     choices = [policy for policy in Iterators.reverse(policies) if haskey(policy.body,"tree") &&
@@ -562,17 +640,31 @@ function relation_policy_choice(policies,cursor,attempted,agenda,obs,decision;me
             b_effects = Set(semantic_hash(test.expected) for test in b.tests)
             a_effects == b_effects || continue
             (isempty(current.cursor.pending) || current.cursor.pending == next.cursor.pending) || continue
+            next.cursor.observed = copy(current.cursor.observed)
+            next.cursor.loop_states = copy(current.cursor.loop_states)
             proposal = merge(b,(reads=unique([a.reads;b.reads]),))
-            return merge(next,(;proposal))
+            replacement = merge(next,(;proposal))
+            return isnothing(cursor.purpose) ? replacement : assign_policy_purpose(replacement,cursor.purpose)
         end
         return current
     end
     sort!(choices;by=policy->policy.body["structure"] == "sequence")
+    comparison = nothing
     for policy in choices
+        ends = get(() -> policy_outcome_steps(policy.body["tree"]),policy.body,"public_outcomes")
+        isempty(ends) && !isnothing(comparison) && continue
         next = ready(RelationPolicyCursor(policy))
-        isnothing(next) || return next
+        isnothing(next) && continue
+        if !isempty(ends)
+            goal = policy_advancement_purpose(next,ends,agenda,obs,decision,context)
+            isnothing(goal) || return assign_policy_purpose(next,goal.purpose,goal.reads)
+        end
+        if isnothing(comparison)
+            trial = policy_comparison_purpose(next.proposal,relation,agenda,obs,context)
+            isnothing(trial) || (comparison = assign_policy_purpose(next,trial.purpose,trial.reads))
+        end
     end
-    return nothing
+    return comparison
 end
 
 function observed_policy_port(effects,fragment)

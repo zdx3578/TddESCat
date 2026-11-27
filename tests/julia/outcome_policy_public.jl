@@ -45,6 +45,14 @@ const MODE = ARGS[2]
         end
         training_outcomes = [row.event for row in agenda.outcomes if row.result == :advancement]
         @test length(training_outcomes) == 2
+        idle,restore,clear = Dict("id"=>1),Dict("id"=>7),Dict("id"=>2)
+        for _ in 1:2
+            dispatch(idle)
+            dispatch(restore)
+        end
+        dispatch(preparation)
+        dispatch(clear)
+        dispatch(restore)
         job = TC.prepare_policy_learning!(knowledge,CONFIG,store,ARGS[4],agenda;entries)
         @test !isnothing(job)
         @test any(episode->last(episode.members) == last(agenda.outcomes).index,job.corpus.episodes)
@@ -53,27 +61,42 @@ const MODE = ARGS[2]
             available_after=rec.before_ref,live_agenda=agenda)
         @test learned["result"] == "published"
 
-        basis = Dict("id"=>1)
-        dispatch(basis)
-        dispatch(preparation)
-        dispatch(Dict("id"=>7))
-        dispatch(basis)
         target = TC.click_action((24,11))
         attempted = Set{Tuple{String,String}}()
-        function choose(cursor=nothing)
-            obs = rec.observation
-            ranked = [(;action) for action in (preparation,target)]
-            decision = (;ranked,groups=TC.public_components(last(obs.frames)))
-            return TC.relation_policy_choice(knowledge.policies,cursor,attempted,agenda,obs,decision)
+        function scene()
+            ranked = [(;action,reason="uncovered") for action in (idle,preparation,target)]
+            return (;ranked,groups=TC.public_components(last(rec.observation.frames)))
         end
+        choose(policies,cursor=nothing) = TC.relation_policy_choice(policies,cursor,attempted,
+            agenda,rec.observation,scene())
+        irrelevant = NamedTuple[]
+        for policy in knowledge.policies
+            isempty(policy.body["public_outcomes"]) || continue
+            next = TC.peek_relation_instruction(TC.RelationPolicyCursor(policy),rec.observation)
+            next.status == :task || continue
+            bound = TC.bind_relation_instruction(next.cursor,next.instruction,rec.observation,scene(),agenda)
+            isnothing(bound) || bound.action != idle || push!(irrelevant,(;policy,bound))
+        end
+        @test !isempty(irrelevant)
+        unused = last(irrelevant)
+        @test all(test->test.scope == :bound,unused.bound.tests)
+        @test isnothing(choose([unused.policy]))
+        policies = [filter(policy->!isempty(policy.body["public_outcomes"]),knowledge.policies);unused.policy]
+        selected = choose(policies)
 
-        selected = choose()
         @test !isnothing(selected) && selected.proposal.action == preparation
-        prepared_dispatch = dispatch(selected.proposal.action,selected)
+        purpose = selected.proposal.obligation.purpose
+        @test purpose.kind == :establish_public_outcome && purpose.target == target
+        @test purpose.outcome in training_outcomes && purpose.comparison in selected.proposal.reads
+        arbitration = TC.task_arbitration(first(scene().ranked),nothing,nothing,nothing,nothing;
+            program=false,continuing_contact=false,conditional=false,object_probes=true,policy=selected.proposal)
+        @test arbitration.baseline.action == idle && arbitration.choice.action == preparation
+        prepared_dispatch = dispatch(arbitration.choice.action,selected)
         @test prepared_dispatch.observed.feedback.result == :established && prepared_dispatch.policy.result == :continue
-        next = choose(prepared_dispatch.policy.cursor)
+        next = choose(policies,prepared_dispatch.policy.cursor)
         @test !isnothing(next) && next.proposal.action == target
         obligation = next.proposal.obligation
+        @test obligation.purpose == purpose
         @test obligation.public_outcome == "advancement" && obligation.scope == :hypothesis
         @test obligation.preparation == prepared_dispatch.observed.event && obligation.outcome in training_outcomes
         result = dispatch(next.proposal.action,next)
@@ -86,8 +109,12 @@ const MODE = ARGS[2]
         @test isnothing(result.policy.cursor)
         @test close_scorecard!(rec)["completion"] == "confirmed"
         @test last(recover_run(store)).event["event_id"] == result.observed.event
+        replayed = [relation for relation in unused.policy.training if any(row->
+            TC.relation_ref(row) == relation && row.effects.action["id"] in (1,7) && !row.unchanged,agenda.samples)]
+        @test length(replayed) >= 2
         TC.atomic_json(TC.store_path(store,"outcome-policy.json"),(;
             event=result.observed.event,training_outcomes,obligation,publication=learned["publication"],
-            prediction=result.prediction.payload,policy=result.policy.result))
+            prediction=result.prediction.payload,policy=result.policy.result,
+            selection=(;purpose,ignored=(;action=unused.bound.action,replayed))))
     end
 end

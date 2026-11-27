@@ -227,7 +227,8 @@ function validate_policy_bodies!(selected,released,prepared,available_after)
             definition = argmax(ref->depths[ref],refs)
             scope = semantic_hash(policy.tree)
             body_record = Dict("tree"=>policy.tree,"definitions"=>refs,"scope"=>scope,
-                "structure"=>episode.structure,"structure_source"=>"confirmed_task_trajectory")
+                "structure"=>episode.structure,"structure_source"=>"confirmed_task_trajectory",
+                "public_outcomes"=>policy_outcome_steps(policy.tree))
             result = get!(selected,scope,LearnedPolicy(id,definition,depths[definition],corpus.model,
                 body_record,String[],available_after))
             union!(result.training,episode.events)

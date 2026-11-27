@@ -989,7 +989,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         end
         relation_policy = if relation_tasks && isnothing(relations.restart)
             relation_policy_choice(knowledge.policies,relation_policy_cursor,attempted_relation_policies,
-                relations,obs,decision;meters)
+                relations,obs,decision;meters,relation=relation_choice)
         end
         policy_withdrawal = if !isnothing(relation_policy_cursor) && isnothing(relation_policy)
             prior = relation_policy_cursor
@@ -1176,6 +1176,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             decision_record["relation_policy"] = (;definition=policy.definition,
                 definitions=policy.body["definitions"],policy.publication,policy.available_after,
                 policy.training,structure=policy.body["structure"],branches=relation_policy.branches,
+                purpose=relation_policy.cursor.purpose,
                 baseline_action=arbitration.baseline.action,changed_action=item.action != arbitration.baseline.action)
         end
         isnothing(policy_task) || (decision_record["learned_policy"] = policy_task)

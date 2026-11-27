@@ -63,7 +63,7 @@ class Fixture(ARCBaseGame):
             "advancement-transfer": [6], "advancement-refutation": [5, 6], "history-refinement": [1, 4],
             "history-continuation": [1, 4], "history-matrix": [1, 4], "history-receipt": [1, 4], "long-history": [1, 4],
             "outcome-preparation": [5, 7], "outcome-chain": [5, 7], "role-outcome": [5, 6],
-            "outcome-policy": [1, 5, 6, 7], "outcome-policy-failure": [1, 5, 6, 7],
+            "outcome-policy": [1, 2, 5, 6, 7], "outcome-policy-failure": [1, 2, 5, 6, 7],
             "primitive-outcome": [2, 5], "outcome-relation-chain": [2, 5, 7],
             "bridge-partition": [5], "concrete-object-followup": [5, 6],
             "frontier-dispatch": [1, 2], "policy-yield": [1, 2],
@@ -95,6 +95,7 @@ class Fixture(ARCBaseGame):
                 board = frame.copy()
                 board[10:13, :] = 0
                 board[10:13, left:left+3] = 4
+                board[50:52, 48:50] = 3
                 levels.append(Level(sprites=[Sprite(board, name="board")]))
         super().__init__(GAME, levels,
             camera=Camera(width=64, height=64), available_actions=actions[MODE], seed=seed)
@@ -190,10 +191,14 @@ class Fixture(ARCBaseGame):
             elif pixels[40, 44] == 7 and pixels[self.action.data["y"], self.action.data["x"]] == 4:
                 self.next_level()
         elif MODE in ("outcome-policy", "outcome-policy-failure"):
-            if action == 5:
+            if action == 1:
+                pixels[50:52, 48:50] = 8
+            elif action == 2:
+                pixels[40:42, 44:46] = 2
+            elif action == 5:
                 pixels[40:42, 44:46] = 7
             elif action == 7:
-                pixels[40:42, 44:46] = 2
+                pixels[50:52, 48:50] = 3
             elif action == 6 and pixels[40, 44] == 7 and pixels[self.action.data["y"], self.action.data["x"]] == 4:
                 if MODE == "outcome-policy-failure" and self.level_index == 2:
                     self.lose()
@@ -552,6 +557,20 @@ def verify(mode, public):
         preparing, prepared = trace[event["before_ref"]]
         assert event["action"] == {"id": 6, "x": 24, "y": 11}
         assert preparing["action"] == {"id": 5}
+        purpose = record["selection"]["purpose"]
+        assert purpose["kind"] == "establish_public_outcome"
+        assert purpose["target"] == event["action"]
+        omitted_action, omitted_outcome = trace[purpose["comparison"]]
+        assert omitted_action["action"]["id"] == event["action"]["id"]
+        assert omitted_outcome["state"] == "NOT_FINISHED"
+        ignored = record["selection"]["ignored"]
+        assert ignored["action"] == {"id": 1}
+        for ref in ignored["replayed"]:
+            untouched, after = trace[ref]
+            _, before = trace[untouched["before_ref"]]
+            assert before["frame"][-1][50][48] != after["frame"][-1][50][48]
+            assert before["frame"][-1][40][44] == after["frame"][-1][40][44]
+            assert before["levels_completed"] == after["levels_completed"] == 2
         assert prepared["frame"][-1][40][44] == 7 and prepared["levels_completed"] == 2
         expected = "WIN" if mode == "outcome-policy" else "GAME_OVER"
         assert outcome["state"] == expected

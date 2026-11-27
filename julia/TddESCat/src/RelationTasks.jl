@@ -308,7 +308,7 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
         feedback = merge(feedback,(;comparison))
     end
     if !isnothing(feedback)
-        history = action[1] == 6 && !isempty(proposal.tests) ?
+        history = !isempty(proposal.tests) && (action[1] == 6 || proposal.intent == :execute_relation_policy) ?
             relation_history_key(agenda,sample.context,sample.preceding) : nothing
         for (row,test) in zip(feedback.tests,proposal.tests)
             row.status == :refuted && push!(agenda.producers[row.producer].refuted,index)
@@ -861,7 +861,9 @@ function task_arbitration(item,spatial,intervention,relation,experiment;
     end
     baseline = argmin(row->row.priority,candidates)
     if !isnothing(policy)
-        priority = continuing_policy ? 0 : policy_yield ? baseline.priority+1 : 1
+        purpose = get(policy.obligation,:purpose,nothing)
+        directed = !isnothing(purpose) && purpose.kind == :establish_public_outcome
+        priority = continuing_policy ? 0 : policy_yield ? baseline.priority+1 : directed ? 2 : 4
         add(:relation_policy,policy.action,"execute_relation_policy",priority)
     end
     choice = argmin(row->row.priority,candidates)
@@ -870,7 +872,7 @@ function task_arbitration(item,spatial,intervention,relation,experiment;
         protected = if choice.source == :spatial
             contact_ready
         elseif choice.source == :relation_policy
-            continuing_policy
+            continuing_policy || choice.priority <= 2
         elseif choice.source == :relation
             choice.priority <= 2 || relation.intent in
                 (:establish_preparation,:probe_observed_advancement,:prepare_public_outcome,:establish_outcome_relation)
