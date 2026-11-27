@@ -1,5 +1,12 @@
+import json
+from hashlib import sha256
+from pathlib import Path
+from subprocess import CompletedProcess
+from tempfile import TemporaryDirectory
 from unittest import TestCase
+from unittest.mock import Mock, patch
 
+from scripts import evaluate_public24
 from tests.bench.public_coverage import PublicCoverage
 
 
@@ -84,3 +91,85 @@ class PublicCoverageTest(TestCase):
         self.assertEqual(report["6"]["model"]["channel_supported"], 2)
         self.assertEqual(report["6"]["model"]["unexplained_changes"], 2)
         self.assertEqual(report["6"]["control"]["changed_arbitration_baseline"], 2)
+
+    def test_confirmed_outcome_survives_an_incomplete_action_record(self):
+        with TemporaryDirectory() as temporary:
+            case = Path(temporary)
+            public = case / "public"
+            for name in ("events", "blobs", "checks", "decisions"):
+                (public / name).mkdir(parents=True)
+            (case / "grade").mkdir()
+            config = case / "agent.toml"
+            config.write_text(
+                '[environment]\ngame_id = "fixture"\n'
+                '[execution]\nmax_public_commands = "unlimited"\n[learning]\n'
+            )
+            prior = None
+            for sequence, (action, state, levels) in enumerate(
+                ((0, "NOT_FINISHED", 0), (1, "NOT_FINISHED", 0), (1, "WIN", 1)),
+                start=1,
+            ):
+                ref = f"event-{sequence}"
+                command = f"command-{sequence}"
+                response = {
+                    "state": state,
+                    "frame": [[[sequence]]],
+                    "levels_completed": levels,
+                    "win_levels": 1,
+                    "available_actions": [1],
+                    "action_input": {"id": action},
+                    "guid": "local-session",
+                }
+                raw = json.dumps(response).encode()
+                digest = sha256(raw).hexdigest()
+                (public / "blobs" / digest).write_bytes(raw)
+                receipt = {
+                    "event_id": ref,
+                    "before_ref": prior,
+                    "command_ref": command,
+                    "response_blob": digest,
+                    "action": {"id": action},
+                    "completion": "confirmed",
+                    "sequence": sequence,
+                }
+                (public / "events" / f"{ref}.json").write_text(json.dumps(receipt))
+                prior = ref
+            for name in ("command-2.json", "command-3.json"):
+                (public / "decisions" / name).write_text('{"action": {"id": 1}}')
+            (public / "checks" / "command-2.json").write_text(
+                '{"action": {"id": 1}, "definition_refs": [],'
+                ' "assessments": {}, "evidence": {"residual": []}}'
+            )
+            with (
+                patch.multiple(
+                    evaluate_public24,
+                    offline_capture=Mock(return_value=0),
+                    read_task=Mock(return_value={"agent_config": config}),
+                    runtime_paths=Mock(return_value={}),
+                    julia_command=Mock(return_value=[]),
+                    solver_sandbox=Mock(return_value=[]),
+                    public_scorecard_win=Mock(return_value=(True, "verified")),
+                    write_artifact_index=Mock(),
+                ),
+                patch.object(
+                    evaluate_public24.subprocess,
+                    "run",
+                    return_value=CompletedProcess([], 0),
+                ),
+            ):
+                result = evaluate_public24.evaluate_one(case)
+            self.assertFalse(result["verified"])
+            self.assertEqual(result["confirmed_actions"], 2)
+            self.assertEqual(result["actions"], 1)
+            self.assertEqual(result["peak_levels"], 1)
+            self.assertEqual(
+                result["advancement"], [{"event": "event-3", "completed": 1}]
+            )
+            self.assertEqual(
+                result["missing_action_records"],
+                [{"event": "event-3", "missing": ["feedback"]}],
+            )
+            observed = result["causal_coverage"]["actions"]["1"]["experiment"]
+            self.assertEqual(observed["confirmed"], 2)
+            self.assertEqual(observed["feedback_pending"], 1)
+            self.assertEqual(observed["wins"], 1)

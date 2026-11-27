@@ -105,6 +105,7 @@ def audit_case(public, game, report):
                 coverage.confirm(previous, event, response, decision, check)
                 counts["decisions_checked"] += 1
             else:
+                coverage.confirm(previous, event, response, None, None)
                 counts["pending_checks"] += 1
         else:
             counts["resets"] += 1
@@ -121,6 +122,7 @@ def audit_case(public, game, report):
         cold_start
         and len(guids) == 1
         and counts["actions"] > 0
+        and not counts["pending_checks"]
         and not (public / "prior-events.json").exists()
         and terminal.get("state") == "WIN"
         and terminal["levels_completed"] == terminal["win_levels"] > 0

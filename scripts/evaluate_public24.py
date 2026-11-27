@@ -81,10 +81,12 @@ def evaluate_one(task_dir):
     code = offline_capture(ROOT, task, task_dir)
     agent_seconds = monotonic() - started
     trace = receipts(public)
+    confirmed_actions = sum(event["action"]["id"] != 0 for event, _ in trace.values())
     result = {
         "game_id": game_id,
         "capture_exit": code,
-        "started": bool(trace),
+        "started": confirmed_actions > 0,
+        "confirmed_actions": confirmed_actions,
         "budget_commands": config["execution"]["max_public_commands"],
         "capture_seconds": round(agent_seconds, 3),
     }
@@ -134,10 +136,12 @@ def evaluate_one(task_dir):
     first_obligations = {}
     failures = []
     retries = []
+    missing_action_records = []
     peak = first["levels_completed"]
     coverage = PublicCoverage()
     for event, response in ordered:
         coverage.observe(event, response)
+        peak = max(peak, response["levels_completed"])
         if not event["action"]["id"]:
             attempt_file = public / "attempts" / (event["command_ref"] + ".json")
             if attempt_file.is_file():
@@ -150,13 +154,28 @@ def evaluate_one(task_dir):
                     retries.append(attempt)
             continue
         command = event["command_ref"] + ".json"
-        check = load(public / "checks" / command)
-        decision = load(public / "decisions" / command)
-        assert check["action"] == decision["action"] == event["action"]
         parent = trace[event["before_ref"]][1]
         assert event["action"]["id"] in parent["available_actions"]
+        if response["levels_completed"] > parent["levels_completed"]:
+            outcomes.append(
+                dict(event=event["event_id"], completed=response["levels_completed"])
+            )
+        decision_path = public / "decisions" / command
+        check_path = public / "checks" / command
+        missing = [
+            label
+            for label, path in (("decision", decision_path), ("feedback", check_path))
+            if not path.is_file()
+        ]
+        if missing:
+            coverage.confirm(trace[event["before_ref"]], event, response, None, None)
+            missing_action_records.append(
+                dict(event=event["event_id"], missing=missing)
+            )
+            continue
+        check, decision = load(check_path), load(decision_path)
+        assert check["action"] == decision["action"] == event["action"]
         coverage.confirm(trace[event["before_ref"]], event, response, decision, check)
-        peak = max(peak, response["levels_completed"])
         checked += 1
         clicks += event["action"]["id"] == 6
         if check["definition_refs"]:
@@ -260,10 +279,6 @@ def evaluate_one(task_dir):
                 intervention_goals += 1
                 intervention_confirmed += advanced
                 intervention_refuted += not advanced
-        if response["levels_completed"] > parent["levels_completed"]:
-            outcomes.append(
-                dict(event=event["event_id"], completed=response["levels_completed"])
-            )
     win, scorecard_digest = public_scorecard_win(public, game_id, last)
     result.update(
         replay_exit=proc.returncode,
@@ -272,6 +287,7 @@ def evaluate_one(task_dir):
         peak_levels=peak,
         target=last["win_levels"],
         actions=checked,
+        missing_action_records=missing_action_records,
         resets=sum(not row["action_input"]["id"] for _, row in ordered),
         frames=sum(len(row["frame"]) for _, row in ordered),
         cold_start=first["action_input"]["id"] == 0
@@ -309,6 +325,7 @@ def evaluate_one(task_dir):
         and result["cold_start"]
         and result["same_session"]
         and checked > 0
+        and not missing_action_records
     )
     if last["state"] == "WIN":
         result["verified"] &= win

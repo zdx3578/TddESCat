@@ -122,16 +122,19 @@ class PublicCoverage:
         assert action_id in before["available_actions"]
         self.tested[action_id].add((self.context(receipt, before), action))
         observed = self.observations[action_id]
-        model = self.models[action_id]
-        control = self.control[action_id]
-        relation = check.get("public_relation_feedback") or {}
         advanced = response["levels_completed"] > before["levels_completed"]
-        if binding := relation.get("binding"):
-            self.roles[action_id].add(binding["lineage"])
         observed["confirmed"] += 1
         observed["game_over"] += response["state"] == "GAME_OVER"
         observed["advancement"] += advanced
         observed["wins"] += response["state"] == "WIN"
+        if decision is None or check is None:
+            observed["feedback_pending"] += 1
+            return
+        model = self.models[action_id]
+        control = self.control[action_id]
+        relation = check.get("public_relation_feedback") or {}
+        if binding := relation.get("binding"):
+            self.roles[action_id].add(binding["lineage"])
         model["unexplained_changes"] += bool(check["evidence"]["residual"])
         model["unresolved_transition"] += bool(relation.get("unresolved"))
         for judgment in check["assessments"].values():
@@ -169,7 +172,13 @@ class PublicCoverage:
                 "experiment": {
                     **{
                         field: self.observations[action_id][field]
-                        for field in ("confirmed", "game_over", "advancement", "wins")
+                        for field in (
+                            "confirmed",
+                            "game_over",
+                            "advancement",
+                            "wins",
+                            "feedback_pending",
+                        )
                     },
                     "tested_context_parameters": tested,
                     "untested_context_parameters": defined - tested,
