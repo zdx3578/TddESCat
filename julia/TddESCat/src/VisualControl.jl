@@ -129,13 +129,6 @@ function role_size(role)
     return maximum(c->c[1],role)+1,maximum(c->c[2],role)+1
 end
 
-function spatial_grid(model)
-    offsets = [first(measured_offset(model,id)) for id in keys(model.offsets)]
-    x = foldl(gcd,(abs(first(d)) for d in offsets);init=0)
-    y = foldl(gcd,(abs(last(d)) for d in offsets);init=0)
-    return x,y
-end
-
 function bind_visual_fields!(control, spatial, frame, here, event)
     stride = spatial_grid(spatial)
     any(iszero,stride) && return

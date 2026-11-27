@@ -221,6 +221,40 @@ end
     end
 end
 
+@testset "A visible compact region can guide an experiment without a context field" begin
+    frame = fill(0x01,24,24)
+    frame[9:10,7:8] .= 0x04
+    frame[9:10,19:20] .= 0x09
+    model = TS.SpatialLearning()
+    model.role = [(x,y,0x04) for x in 0:1 for y in 0:1]
+    model.role_reads = ["bound-position"]
+    model.floors[0x01] = 1
+    model.offsets[1] = Dict((0,-2)=>["up-observation"])
+    model.offsets[4] = Dict((2,0)=>["right-observation"])
+    obs = picture_entry("visible-region",nothing,0,frame).observation
+    ranked = [(action=Dict("id"=>id),) for id in (1,4)]
+    decision = (;ranked)
+    function grounded(frame)
+        return TS.ReceiptRegions("visible-region",[TS.frame_regions(frame)],
+            Union{Nothing,Int}[nothing],Union{Nothing,NamedTuple}[nothing])
+    end
+    @test TS.spatial_experiment(model,obs,decision).id == 1
+    regions = grounded(frame)
+    probe = TS.spatial_experiment(model,obs,decision;regions)
+    @test probe.id == 4 && probe.destination == (8,8)
+    @test probe.region_probe.point == (18,8) && probe.region_probe.status == :unresolved
+    @test all(in(probe.reads),["visible-region","bound-position","right-observation"])
+    @test last(regions.frames).groups[probe.region_probe.region] ==
+        [(x,y,0x09) for x in 18:19 for y in 8:9]
+    model.visits[(18,8)] = 1
+    model.layouts[(18,8)] = fill(0x09,4)
+    @test TS.spatial_experiment(model,obs,decision;regions).id == 1
+    changed = copy(frame)
+    changed[9:10,19:20] .= 0x07
+    fresh = picture_entry("visible-region",nothing,0,changed).observation
+    @test TS.spatial_experiment(model,fresh,decision;regions=grounded(changed)).id == 4
+end
+
 @testset "Observed motifs and temporal evidence" begin
     pixels = fill(0x0f,20,32)
     support = [(0,0),(1,0),(2,0),(0,1),(2,2)]

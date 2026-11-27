@@ -937,7 +937,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             planned = autonomous_visual_plan(visual,spatial,obs,decision,rec.before_ref;
                 goal=learned_goal,relationship=isnothing(selected_policy) ? nothing : selected_policy.relation,
                 refuted=policy_counterexample)
-            isnothing(planned) ? spatial_experiment(spatial,obs,decision) : planned
+            isnothing(planned) ? spatial_experiment(spatial,obs,decision;regions=knowledge.receipt) : planned
         end
         spatial_baseline = spatial_choice
         baseline_action = isnothing(spatial_choice) ? item.action : Dict("id"=>spatial_choice.id)
@@ -1348,6 +1348,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                     end
                 end
                 pose = get(something(spatial_choice,(;)),:pose,nothing)
+                region_probe = get(something(spatial_choice,(;)),:region_probe,nothing)
                 if !isnothing(pose)
                     verdict = if isnothing(spatial_feedback)
                         "unknown"
@@ -1358,6 +1359,10 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                         agreement ? "supported" : "refuted"
                     end
                     visual_feedback = (contract="observed_role_orientation",expected=pose,verdict)
+                elseif !isnothing(region_probe) && spatial_choice.destination == region_probe.point
+                    verdict = isnothing(spatial_feedback) ? "unknown" :
+                        spatial_feedback.after == region_probe.point ? "supported" : "refuted"
+                    visual_feedback = (contract="observed_region_overlap",expected=region_probe,verdict)
                 elseif !isnothing(visual.field) && !isnothing(get(something(spatial_choice,(;)),:expected,nothing))
                     actual = visual_value(last(resulting.observation.frames),visual.field)
                     if isnothing(spatial_feedback) || isnothing(actual)

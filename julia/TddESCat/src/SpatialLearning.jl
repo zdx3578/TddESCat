@@ -319,7 +319,45 @@ function frontier_score(model, frame, destination)
     return occupied ? 4 : common ? (length(colors)>1 ? 5 : 4) : length(colors)>1 ? 2 : 1
 end
 
-function spatial_experiment(model::SpatialLearning, obs, decision)
+function spatial_grid(model)
+    offsets = [first(measured_offset(model,id)) for id in keys(model.offsets)]
+    x = foldl(gcd,(abs(first(d)) for d in offsets);init=0)
+    y = foldl(gcd,(abs(last(d)) for d in offsets);init=0)
+    return x,y
+end
+
+function region_probe_sites(model,frame,here,regions)
+    sites = Dict{Pixel,Int}()
+    isnothing(regions) && return sites
+    floor = visual_floor(model)
+    isnothing(floor) && return sites
+    stride = spatial_grid(model)
+    all(iszero,stride) && return sites
+    role = effect_points(model.role)
+    occupied = Set(here .+ point for point in role)
+    aligned(point) = all(i->iszero(stride[i]) ? point[i] == here[i] :
+        iszero(mod(point[i]-here[i],stride[i])),1:2)
+    for (index,group) in enumerate(last(regions.frames).groups)
+        length(group) <= length(role) && first(group)[3] != floor || continue
+        support = effect_points(group)
+        isdisjoint(support,occupied) || continue
+        representative = first(group)[1:2]
+        for offset in role
+            point = representative .- offset
+            aligned(point) || continue
+            all(pixel->pixel .- point in role,support) || continue
+            patch = footprint(frame,model.role,point)
+            isempty(patch) && continue
+            if haskey(model.visits,point) && get(model.layouts,point,nothing) == patch
+                continue
+            end
+            get!(sites,point,index)
+        end
+    end
+    return sites
+end
+
+function spatial_experiment(model::SpatialLearning, obs, decision;regions=nothing)
     frame = last(obs.frames)
     here = spatial_binding(frame,model)
     here isa NamedTuple || return nothing
@@ -328,6 +366,10 @@ function spatial_experiment(model::SpatialLearning, obs, decision)
     action_ids = [row.action["id"] for row in active]
     unbound = spatial_unbound(model,here.point,action_ids,obs;orientation=here.orientation)
     isnothing(unbound) || return unbound
+    sites = region_probe_sites(model,frame,here.point,regions)
+    distance(a,b) = sum(abs,a .- b)
+    closest(point) = argmin(site->(distance(point,site),site),keys(sites))
+    initial_distance = isempty(sites) ? 0 : distance(here.point,closest(here.point))
     points = [here]
     parent = Dict{typeof(here),Tuple{Int,typeof(here),Vector{String}}}()
     visited = Set([here])
@@ -368,6 +410,9 @@ function spatial_experiment(model::SpatialLearning, obs, decision)
             target in visited_points && !haskey(model.visits,target) && continue
             quality = frontier_score(model,frame,target)
             quality > 0 || continue
+            site = isempty(sites) ? nothing : closest(target)
+            cost = isnothing(site) ? 0 : distance(target,site)
+            approaching = !isnothing(site) && cost < initial_distance
             travel, first_action, first_step = 0,id,(point=target,orientation=here.orientation)
             reads = [model.role_reads;last(offset)]
             q = p
@@ -378,12 +423,19 @@ function spatial_experiment(model::SpatialLearning, obs, decision)
                 travel += 1
                 q = predecessor
             end
-            # Prefer visually plausible, untested landings. Break ties by path cost.
-            rank = (quality, !haskey(model.visits,target), -travel, -id)
+            rank = (approaching,approaching ? -cost : 0,quality,!haskey(model.visits,target),-travel,-id)
             if isnothing(best_rank) || rank > best_rank
                 best_rank = rank
-                best = (id=first_action,reason="experiment_at_learned_spatial_frontier",
+                reason = approaching ? "approach_untried_region_relation" : "experiment_at_learned_spatial_frontier"
+                if approaching
+                    push!(reads,regions.event)
+                end
+                best = (id=first_action,reason,
                     reads=unique(reads),role=here.point,destination=first_step.point,frontier=target)
+                if approaching
+                    best = merge(best,(;region_probe=(event=regions.event,region=sites[site],point=site,
+                        status=:unresolved)))
+                end
                 if first_step.point == here.point && first_step.orientation != here.orientation
                     best = merge(best,(;pose=(before=here.orientation,after=first_step.orientation)))
                 end
