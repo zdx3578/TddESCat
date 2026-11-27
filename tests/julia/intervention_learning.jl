@@ -59,6 +59,21 @@ end
     @test all(==("supported"),values(TC.measure_joint(choice,after;effects).assessments))
     @test all(==("refuted"),values(TC.measure_joint(choice,before).assessments))
 
+    projection = (model=(;rule,condition=(complete=true,)),fragments=admitted.fragments)
+    predicted = TC.project_frame(projection,before)
+    @test predicted == after
+    outputs = TC.projected_program_ports(projection,predicted)
+    @test outputs == [effect.after for effect in effects.effects]
+    @test isnothing(TC.projected_program_ports(projection,before))
+    step = Dict{String,Any}("action"=>action,"effects"=>TC.effect_record.(effects.effects))
+    program = TC.LearnedProgram("publication","move-pair",1,["moved"],[step,step],
+        [[(0,0),(1,1)]],nothing)
+    cursor = TC.ProgramCursor(program,2,outputs)
+    following = TC.evaluate_joint_rule(rule,predicted,TC.public_components(predicted),[],action)
+    decision = (ranked=[(;action,chosen=merge(projection,(;fragments=following.fragments)))],)
+    @test TC.current_program_step(cursor,decision).action == action
+    @test cursor.next_step == 2 && cursor.outputs == outputs
+
     TC.begin_relation_attempt!(agenda,nothing;observation=initial.observation)
     seen = TC.prepare_relation_tests(agenda,TC.relation_context(initial.observation),initial.observation,groups,action)
     @test only(seen).scope == :bound

@@ -80,7 +80,7 @@ function projected_program_ports(choice,frame)
             support = sort!(reduce(vcat,(s for s in groups if shape_template(s) == model.template);init=ColorCell[]))
             (instance=part.instance,count=part.expected,support)
         elseif part.family == :translation
-            model_binding(model,groups,enclosed)
+            model_binding(model,groups,enclosed;position=part.value .+ part.expected)
         elseif part.family == :selection
             part.basis
         else
