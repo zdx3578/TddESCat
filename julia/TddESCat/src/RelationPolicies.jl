@@ -1,7 +1,8 @@
 """A policy input is a witnessed dependency between adjacent public relation tasks."""
 function witnessed_relation_steps(agenda,entries)
     by_ref = Dict(entry.event["event_id"]=>entry.observation for entry in entries)
-    by_sample = Dict(index=>key for (key,producer) in agenda.producers for index in producer.support)
+    by_sample = Dict(index=>key for (key,producer) in agenda.producers for index in producer.support
+        if !scene_translation_unresolved(agenda.samples[index].effects))
     descriptors = Dict{Int,Any}()
     neighbors = Dict{Int,NamedTuple}()
     outcomes_after = Dict{Int,Vector{NamedTuple}}()

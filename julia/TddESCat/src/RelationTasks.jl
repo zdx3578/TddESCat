@@ -215,7 +215,9 @@ function observed_producer!(agenda,sample,before,after)
     push!(producer.support,length(agenda.samples))
     sample.state == "NOT_FINISHED" &&
         push!(get!(Vector{Int},agenda.produced_at,sample.context),length(agenda.samples))
-    return (;key,relations,scope=output.complete ? :observed_transition : :observed_endpoints)
+    evidence_scope = output.complete ? :observed_transition : scene_translation_unresolved(output) ?
+        :observed_scene_coordinates : :observed_endpoints
+    return (;key,relations,scope=evidence_scope)
 end
 
 function relation_checks(proposal,after,effects)
@@ -579,8 +581,11 @@ function verified_instance(agenda,producer,context,action,previous,level;conditi
     refined_history(history_scope(agenda,context)) && return :unverified
     # Both local effects and disagreement remain in the same index.
     # Evidence for visual transfer excludes terminal outcomes.
-    support = isnothing(condition) ? producer.support :
-        filter(i->relation_ref(agenda.samples[i]) in condition.support,producer.support)
+    support = filter(producer.support) do index
+        row = agenda.samples[index]
+        !scene_translation_unresolved(row.effects) &&
+            (isnothing(condition) || relation_ref(row) in condition.support)
+    end
     witnesses = [row.binding for index in support for row in (agenda.samples[index],)
         if row.level == level && row.state == "NOT_FINISHED" && !isnothing(row.binding)]
     contradicted = any(producer.refuted) do index

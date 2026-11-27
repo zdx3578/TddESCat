@@ -253,3 +253,52 @@ end
         @test isnothing(omitted.producer)
     end
 end
+
+@testset "A stationary support refutes a whole-frame displacement" begin
+    function scene(shift;move_landmark=false)
+        frame = fill(0x00,18,30)
+        for (x,y,color) in ((4,4,0x03),(10,4,0x05),(6,9,0x08))
+            frame[y:y+1,x+shift:x+shift+1] .= color
+        end
+        landmark = move_landmark ? 22 + shift : 22
+        frame[13:14,landmark:landmark+1] .= 0x0c
+        return frame
+    end
+    before = observed_step("before-shared",nothing,0,scene(0))
+    local_motion = observed_step("local-shared",before,4,scene(2))
+    camera = observed_step("whole-frame",before,4,scene(2;move_landmark=true))
+    effects = TS.observed_effects(before,local_motion)
+    @test !effects.complete && TS.scene_translation_unresolved(effects)
+    @test length(effects.effects) == 3
+    contrast = only(effects.public_delta["scene_translation_contrasts"])
+    @test contrast.delta == (2,0) && contrast.witness.expected == 0x0c
+    @test contrast.witness.actual == 0x00
+    @test all(last(local_motion.observation.frames)[y+1,x+1] == color
+        for (x,y,color) in contrast.witness.stationary)
+    @test TS.endpoint_effects_observed(effects)
+    agenda = TS.RelationAgenda()
+    established = TS.observe_relations!(agenda,before,local_motion,effects,nothing,NamedTuple[],nothing)
+    @test established.producer.scope == :observed_scene_coordinates
+    @test isnothing(agenda.producers[established.producer.key].rule.patch)
+    moved = copy(last(local_motion.observation.frames))
+    moved[4:5,6] .= 0x00
+    moved[4:5,8] .= 0x03
+    later = observed_step("later",local_motion,4,moved)
+    followup = TS.observed_effects(local_motion,later)
+    @test followup.complete && length(TS.public_role_links(effects,followup)) == 1
+    confirmed = TS.observe_relations!(agenda,local_motion,later,followup,nothing,NamedTuple[],nothing)
+    @test !isnothing(confirmed.producer)
+    @test isempty(TS.witnessed_relation_steps(agenda,[before,local_motion,later]).descriptors)
+
+    global_motion = TS.observed_effects(before,camera)
+    @test TS.scene_translation_unresolved(global_motion)
+    @test isnothing(only(global_motion.public_delta["scene_translation_contrasts"]).witness)
+    @test !TS.endpoint_effects_observed(global_motion)
+
+    initial_edge, final_edge = scene(0), scene(2;move_landmark=true)
+    initial_edge[end,7:9] .= 0x0a
+    final_edge[end,7:9] .= 0x0a
+    edge = observed_step("before-edge",nothing,0,initial_edge)
+    moved_edge = observed_step("moved-edge",edge,4,final_edge)
+    @test !TS.endpoint_effects_observed(TS.observed_effects(edge,moved_edge))
+end

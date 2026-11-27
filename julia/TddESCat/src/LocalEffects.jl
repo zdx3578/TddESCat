@@ -103,19 +103,41 @@ function observed_public_delta(previous, current; regions=nothing)
     return delta
 end
 
-function possible_scene_transform(effects)
-    offsets = Dict{Tuple,Vector{Pixel}}()
+const SHARED_SCENE_TRANSLATION = "shared_scene_transform_or_joint_motion"
+
+function scene_translation_contrasts(effects,stationary,after)
+    offsets = Dict{Pixel,Vector{Pixel}}()
     for effect in effects
         effect.family == :translation || continue
         push!(get!(Vector{Pixel},offsets,Tuple(effect.values)),anchor(effect.before))
     end
-    for points in values(offsets)
-        length(points) >= 3 || continue
-        a,b = points[1:2]
-        any(c -> (b[1]-a[1])*(c[2]-a[2]) != (b[2]-a[2])*(c[1]-a[1]),points[3:end]) &&
-            return true
+    contrasts = NamedTuple[]
+    candidates = filter(offsets) do (_,points)
+        length(points) >= 3 || return false
+        anchors = unique(points)
+        length(anchors) >= 3 || return false
+        a,b = anchors[1:2]
+        return any(c -> (b[1]-a[1])*(c[2]-a[2]) != (b[2]-a[2])*(c[1]-a[1]),anchors[3:end])
     end
-    return false
+    isempty(candidates) && return contrasts
+    height,width = size(after)
+    interior = filter(group->all(((x,y,_),)->0 < x < width-1 && 0 < y < height-1,group),
+        sort!(collect(stationary);by=first))
+    for delta in sort!(collect(keys(candidates)))
+        dx,dy = delta
+        witness = nothing
+        for group in interior
+            all(((x,y,_),)->checkbounds(Bool,after,y+dy+1,x+dx+1),group) || continue
+            mismatch = findfirst(((x,y,c),)->after[y+dy+1,x+dx+1] != c,group)
+            isnothing(mismatch) && continue
+            x,y,c = group[mismatch]
+            at = (x+dx,y+dy)
+            witness = (;stationary=group,at,expected=c,actual=after[at[2]+1,at[1]+1])
+            break
+        end
+        push!(contrasts,(;delta,witness))
+    end
+    return contrasts
 end
 
 function observed_effects(previous, current; meters=MeterContext(), before_regions=nothing, after_regions=nothing)
@@ -237,8 +259,10 @@ function observed_effects(previous, current; meters=MeterContext(), before_regio
         one_transition = all(!isnothing,counts) && count(>(0),counts) <= 1
         one_transition || push!(alternatives,"intermediate_frames_require_separate_interpretation")
     end
-    if possible_scene_transform(effects)
-        push!(alternatives,"shared_scene_transform_or_joint_motion")
+    contrasts = scene_translation_contrasts(effects,static_support,after)
+    if !isempty(contrasts)
+        public_delta["scene_translation_contrasts"] = contrasts
+        push!(alternatives,SHARED_SCENE_TRANSLATION)
     end
     covered = Set(pixel for effect in effects for pixel in effect.changed)
     return PublicEffects(sample.event_id, sample.before_id, action, frame_before, frame_after,
@@ -248,10 +272,20 @@ end
 
 function endpoint_effects_observed(output::PublicEffects)
     output.complete && return true
-    output.alternatives == ["intermediate_frames_require_separate_interpretation"] || return false
-    trace = get(output.public_delta,"response_trace",[])
-    return !isempty(trace) && all(row->row["changed_pixels"] isa Int,trace)
+    isempty(output.alternatives) && return false
+    return all(output.alternatives) do alternative
+        if alternative == "intermediate_frames_require_separate_interpretation"
+            trace = get(output.public_delta,"response_trace",[])
+            return !isempty(trace) && all(row->row["changed_pixels"] isa Int,trace)
+        elseif alternative == SHARED_SCENE_TRANSLATION
+            contrasts = get(output.public_delta,"scene_translation_contrasts",[])
+            return !isempty(contrasts) && all(row->!isnothing(row.witness),contrasts)
+        end
+        return false
+    end
 end
+
+scene_translation_unresolved(output::PublicEffects) = SHARED_SCENE_TRANSLATION in output.alternatives
 
 function replay_effects!(observations, episodes)
     for episode in episodes
@@ -342,7 +376,7 @@ function relation_corpus(pairs; previous_signature=nothing, observations=Dict{St
             dispositions[output.event_id] = isempty(output.alternatives) ? "no_supported_effect" : "unresolved"
             continue
         end
-        if "shared_scene_transform_or_joint_motion" in output.alternatives
+        if scene_translation_unresolved(output)
             dispositions[output.event_id] = "ambiguous_scene_transform"
             continue
         end
