@@ -100,9 +100,10 @@ function evaluate_joint_trial(rule, trial)
         row = trial.sample
         groups = public_components(row.before)
         meters = isnothing(trial.effects) ? MeterBinding[] : trial_meters(trial.effects)
-        evaluation = evaluate_joint_rule(rule,row.before,groups,enclosure_pairs(groups),trial.action;meters)
+        evaluation = evaluate_joint_rule(rule,row.before,groups,enclosure_pairs(groups),trial.action;
+            meters,relative_transfer=true)
         evaluation.truth == proven || return nothing
-        assessed = measure_joint((model=rule,fragments=evaluation.fragments),row.after)
+        assessed = measure_joint((model=rule,fragments=evaluation.fragments),row.after;effects=trial.effects)
         verdict = "refuted" in values(assessed.assessments) ? disproven :
             all(==("supported"),values(assessed.assessments)) ? proven : unknown_truth
         move = findfirst(effect->effect.family == :translation,rule.effects)
@@ -1293,7 +1294,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             end
         end
         assessment = isnothing(item.chosen) ? (actual=Dict(),assessments=Dict()) :
-            measure_joint((model=item.chosen.model.rule,fragments=item.chosen.fragments),sample.after)
+            measure_joint((model=item.chosen.model.rule,fragments=item.chosen.fragments),sample.after;effects)
         relation_feedback = if relation_tasks
             observation = observe_relations!(relations,entry,resulting,effects,contact_feedback,site_transitions,
                 relation_proposal;groups=decision.groups)
@@ -1324,7 +1325,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         end
         projection_feedback = if !isnothing(projected)
             local_feedback = projection_choice === item.chosen ? assessment :
-                measure_joint((model=projection_choice.model.rule,fragments=projection_choice.fragments),sample.after)
+                measure_joint((model=projection_choice.model.rule,fragments=projection_choice.fragments),sample.after;effects)
             check_projection!(knowledge.projections,projected,sample.before,sample.after,effects,
                 local_feedback,limits.history_lengths;frozen)
         end

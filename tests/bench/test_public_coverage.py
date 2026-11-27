@@ -4,6 +4,35 @@ from tests.bench.public_coverage import PublicCoverage
 
 
 class PublicCoverageTest(TestCase):
+    def test_competing_predictions_report_a_distinguished_effect(self):
+        coverage = PublicCoverage()
+        action = {"id": 6, "x": 10, "y": 20}
+        event = {"event_id": "observed-comparison", "action": action}
+        reason = "extend_observed_object_effect"
+        dispatch = {"action": action, "reason": reason}
+        decision = {
+            "intervention": {"action": action, "probe": "representative"},
+            "task_arbitration": {"choice": dispatch, "candidates": [dispatch]},
+            "public_relation_task": {
+                "action": action,
+                "contracts": [{"producer": "positive"}, {"producer": "negative"}],
+            },
+        }
+        feedback = {
+            "feedback": {
+                "tests": [
+                    {"producer": "positive", "status": "established"},
+                    {"producer": "negative", "status": "refuted"},
+                ],
+            },
+        }
+        coverage.record_object_followup(
+            event, {"state": "NOT_FINISHED"}, decision, feedback, False
+        )
+        self.assertEqual(coverage.object_followups["effect_distinguished"], 1)
+        self.assertEqual(coverage.object_followups["effect_refuted"], 0)
+        self.assertEqual(coverage.object_followups["effect_supported"], 0)
+
     def test_repeat_receipts_share_one_observed_parameter_binding(self):
         coverage = PublicCoverage()
         reset = {"event_id": "reset"}

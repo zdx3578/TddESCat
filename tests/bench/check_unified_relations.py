@@ -56,9 +56,15 @@ class Fixture(ARCBaseGame):
             frame[10:13, 23:26] = 4
         if MODE == "effect-scope-exploration":
             frame[10:13, 38:41] = 4
+        if MODE == "effect-condition-contrast":
+            for x in (8, 20, 32, 44):
+                frame[10:13, x:x+3] = 4
+                frame[24:26, x+1:x+3] = 9
+            frame[47:49, 48:50] = 3
         actions = {"delayed": [5, 7], "remote": [5, 6], "directions": [6],
             "context-reprobe": [5, 6],
             "effect-scope-exploration": [5, 6],
+            "effect-condition-contrast": [5, 6],
             "restart": [6], "progress-restart": [6], "restart-choices": [6],
             "advancement-transfer": [6], "advancement-refutation": [5, 6], "history-refinement": [1, 4],
             "history-continuation": [1, 4], "history-matrix": [1, 4], "history-receipt": [1, 4], "long-history": [1, 4],
@@ -195,6 +201,23 @@ class Fixture(ARCBaseGame):
             elif self.hits >= 3 and (self.action.data["x"], self.action.data["y"]) == (39, 11):
                 pixels[10:13, 38:41] = 9
                 self.next_level()
+        elif MODE == "effect-condition-contrast":
+            selectors = (8, 20, 32, 44)
+            if action == 5:
+                self.hits += 1
+                pixels[47:49, 48:50] = 8 if self.hits == 1 else 3
+                pixels[24:26, :] = 0
+                for x in selectors:
+                    pixels[24:26, x+1:x+3] = 9
+            else:
+                x, y = (self.action.data[key] for key in ("x", "y"))
+                for left in selectors:
+                    if left <= x < left + 3 and 10 <= y < 13 and pixels[24, left+1] == 9:
+                        dx = 3 if pixels[47, 48] == 3 else -3
+                        pixels[24:26, left+1:left+3] = 0
+                        pixels[24:26, left+1+dx:left+3+dx] = 9
+                        if self.hits >= 4 and left == selectors[-1]:
+                            self.next_level()
         elif MODE == "role-outcome":
             if action == 5:
                 pixels[40:42, 44:46] = 7
@@ -381,6 +404,7 @@ def capture(
         "bridge-partition",
         "context-reprobe",
         "effect-scope-exploration",
+        "effect-condition-contrast",
         "frontier-dispatch",
         "policy-yield",
         "frontier-route",
@@ -439,6 +463,7 @@ def capture(
             "coordinate-restart": "coordinate_restart_public.jl",
             "context-reprobe": "context_reprobe_public.jl",
             "effect-scope-exploration": "effect_scope_exploration_public.jl",
+            "effect-condition-contrast": "effect_condition_contrast_public.jl",
             "frontier-dispatch": "frontier_dispatch.jl",
             "policy-yield": "policy_yield_public.jl",
             "frontier-route": "frontier_route_public.jl",
@@ -558,6 +583,26 @@ def observed_steps(public):
 
 
 def verify(mode, public):
+    if mode == "effect-condition-contrast":
+        report = read(public / (mode + ".json"))
+        trace = receipts(public)
+        for key, signal, dx in (("refuted", 8, -3), ("contrasted", 3, 3), ("won", 3, 3)):
+            event, outcome = trace[report[key]["event"]]
+            parent = trace[event["before_ref"]][1]["frame"][-1]
+            after = outcome["frame"][-1]
+            x, y = event["action"]["x"], event["action"]["y"]
+            assert y == 11 and parent[47][48] == signal
+            assert parent[24][x : x + 2] == [9, 9] and after[24][x : x + 2] == [0, 0]
+            assert after[24][x + dx : x + dx + 2] == [9, 9]
+        compare, selected = report["contrast"], report["prediction"]
+        assert compare["guard_truth"] == "unknown" and not compare["predicted_values"]
+        assert selected["guard_truth"] is True
+        assert list(selected["predicted_values"].values()) == [[3, 0]]
+        assert report["refuted"]["event"] in selected["event_reads"]
+        measured = report["contrasted"]["feedback"]["tests"]
+        assert {test["status"] for test in measured} == {"established", "refuted"}
+        assert trace[report["won"]["event"]][1]["state"] == "WIN"
+        return [report[key]["event"] for key in ("refuted", "contrasted", "won")]
     if mode == "outcome-role-equivalence":
         report = read(public / (mode + ".json"))
         trace = receipts(public)
@@ -1171,6 +1216,7 @@ def main(config, run):
         "bridge-partition",
         "context-reprobe",
         "effect-scope-exploration",
+        "effect-condition-contrast",
         "frontier-dispatch",
         "policy-yield",
         "frontier-route",
@@ -1219,6 +1265,7 @@ if __name__ == "__main__":
                 "outcome-chain",
                 "role-outcome",
                 "outcome-role-equivalence",
+                "effect-condition-contrast",
                 "frontier-dispatch",
                 "frontier-route",
                 "history-matrix",

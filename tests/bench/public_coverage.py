@@ -82,11 +82,12 @@ class PublicCoverage:
                     for row in feedback.get("tests", ())
                     if row["producer"] in contracts
                 }
-                if "refuted" in judgments.values():
+                outcomes = set(judgments.values())
+                if "refuted" in outcomes and "established" in outcomes:
+                    counters["effect_distinguished"] += 1
+                elif contracts == judgments.keys() and outcomes == {"refuted"}:
                     counters["effect_refuted"] += 1
-                elif contracts == judgments.keys() and set(judgments.values()) == {
-                    "established"
-                }:
+                elif contracts == judgments.keys() and outcomes == {"established"}:
                     counters["effect_supported"] += 1
                 else:
                     counters["effect_unresolved"] += 1

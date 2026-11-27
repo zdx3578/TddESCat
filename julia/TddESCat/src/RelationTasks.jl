@@ -214,18 +214,7 @@ function relation_checks(proposal,after,effects)
     isnothing(proposal) && return nothing
     results = NamedTuple[]
     for test in proposal.tests
-        verdict = measure_joint((model=test.rule,fragments=test.fragments),after)
-        # A uniquely observed different displacement refutes the prediction even
-        # when a screen full of identical supports defeats post-state matching.
-        for part in test.fragments
-            part.family == :translation || continue
-            changes = filter(effect->effect.family == :translation && effect.before == part.basis,effects.effects)
-            length(changes) == 1 || continue
-            key = scope_key(part)
-            actual = Tuple(only(changes).values)
-            verdict.actual[key] = actual
-            verdict.assessments[key] = actual == part.expected ? "supported" : "refuted"
-        end
+        verdict = measure_joint((model=test.rule,fragments=test.fragments),after;effects)
         status = "refuted" in values(verdict.assessments) ? :refuted :
             all(==("supported"),values(verdict.assessments)) ? :established : :unresolved
         push!(results,(producer=test.key,scope=test.scope,status,expected=test.expected,
@@ -563,7 +552,7 @@ function advancement_probe(agenda,obs,decision,context)
         reads=relation_refs(best.row),obligation)
 end
 
-function verified_instance(agenda,producer,context,action,previous,level)
+function verified_instance(agenda,producer,context,action,previous,level;condition=nothing)
     history = relation_history_key(agenda,context,previous)
     exact(index) = begin
         row = agenda.samples[index]
@@ -579,11 +568,16 @@ function verified_instance(agenda,producer,context,action,previous,level)
     refined_history(history_scope(agenda,context)) && return :unverified
     # Both local effects and disagreement remain in the same index.
     # Evidence for visual transfer excludes terminal outcomes.
-    witnesses = [row.binding for index in producer.support for row in (agenda.samples[index],)
+    support = isnothing(condition) ? producer.support :
+        filter(i->relation_ref(agenda.samples[i]) in condition.support,producer.support)
+    witnesses = [row.binding for index in support for row in (agenda.samples[index],)
         if row.level == level && row.state == "NOT_FINISHED" && !isnothing(row.binding)]
-    contradicted = any(index->agenda.samples[index].level == level,producer.refuted)
+    contradicted = any(producer.refuted) do index
+        row = agenda.samples[index]
+        row.level == level && (isnothing(condition) || relation_ref(row) ∉ condition.excluded)
+    end
     if action[1] != 6
-        contexts = Set(row.context for index in producer.support for row in (agenda.samples[index],)
+        contexts = Set(row.context for index in support for row in (agenda.samples[index],)
             if row.level == level && row.state == "NOT_FINISHED" &&
                 first(previous_key(agenda,row.preceding)) == first(previous_key(agenda,previous)))
         return length(contexts) >= 2 && !contradicted ? :replicated : :unverified
@@ -623,6 +617,10 @@ function prepare_relation_tests(agenda,context,obs,groups,action;meters=(),condi
                     meters,transients=condition_view.transients,role_index,relative_transfer=true)
                 known.truth == proven && plan_channels(known.fragments) == expected || continue
                 push!(conditions,(;version=active_id(model),reads=condition_view.reads(model)))
+                if scope == :unverified && !isempty(model.condition.excluded)
+                    scope = verified_instance(agenda,producer,context,point,previous,obs.levels_completed;
+                        condition=model.condition)
+                end
             end
             isempty(models) || !isempty(conditions) || continue
         end
@@ -763,6 +761,11 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
     end
     outcome_relation = prepare_outcome_relation(agenda,obs,decision,context;meters,condition_view)
     isnothing(outcome_relation) || return outcome_relation
+    comparison = isnothing(intervention) ? nothing : get(intervention,:effect_experiment,nothing)
+    if !isnothing(comparison) && comparison.comparison == :distinguish_concrete_effects
+        return (;intervention.action,intent=:test_concrete_effect,intervention.tests,
+            reads=String[],obligation=comparison)
+    end
     sought = observed_relation_task(agenda,obs,decision,context;meters)
     isnothing(sought) || return sought
     progress = advancement_probe(agenda,obs,decision,context)
@@ -817,8 +820,7 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
             obligation=intervention.changed_context)
     end
     isempty(tests) && return nothing
-    obligation = get(intervention,:effect_experiment,nothing)
-    return (;action,intent=:test_concrete_effect,tests,reads=String[],obligation)
+    return (;action,intent=:test_concrete_effect,tests,reads=String[],obligation=comparison)
 end
 
 function observed_relation_task(agenda,obs,decision,context;meters)
@@ -987,11 +989,12 @@ function object_effect_followup(agenda::RelationAgenda,obs,context,candidates;
         tests = prepare_relation_tests(agenda,context,obs,groups,action;
             meters,condition_view,enclosure,role_index)
         isempty(tests) && continue
-        all(test->test.expected == first(tests).expected,tests) || continue
         pending = [test.key for test in tests if
             effect_experiment_scope(level,action_key(action),history,test) ∉ agenda.checked_effects]
         isempty(pending) && continue
-        purpose = (;comparison=:effect_at_bound_condition,producers=pending,history)
+        comparison = all(test->test.expected == first(tests).expected,tests) ?
+            :effect_at_bound_condition : :distinguish_concrete_effects
+        purpose = (;comparison,producers=pending,history)
         return (;candidate,tests,purpose)
     end
     return nothing

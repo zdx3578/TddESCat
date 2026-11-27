@@ -443,7 +443,7 @@ function judge_joint(models, denied, before, action)
     return (choice=first(choices),reason="published_joint_effects")
 end
 
-function measure_joint(choice, after)
+function measure_joint(choice, after;effects=nothing)
     groups = public_components(after)
     enclosure = enclosure_pairs(groups)
     actual = Dict{String,Any}()
@@ -481,6 +481,17 @@ function measure_joint(choice, after)
         name = scope_key(part)
         actual[name] = value
         assessments[name] = isnothing(value) ? "unknown" : value == part.expected ? "supported" : "refuted"
+    end
+    if !isnothing(effects)
+        for part in choice.fragments
+            part.family == :translation || continue
+            changes = filter(effect->effect.family == :translation && effect.before == part.basis,effects.effects)
+            length(changes) == 1 || continue
+            name = scope_key(part)
+            displacement = Tuple(only(changes).values)
+            actual[name] = displacement
+            assessments[name] = displacement == part.expected ? "supported" : "refuted"
+        end
     end
     return (; actual, assessments)
 end
