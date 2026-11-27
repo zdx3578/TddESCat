@@ -61,8 +61,7 @@ function policy_atom_value(scene,atom)
     kind = policy_atom_field(atom,:kind)
     if kind == "all"
         values = [policy_atom_value(scene,member) for member in policy_atom_field(atom,:members)]
-        false in values && return false
-        return any(isnothing,values) ? nothing : true
+        return boolean_connective(values,false)
     elseif kind == "relative_component_color"
         scene isa NamedTuple || return nothing
         port = policy_atom_field(atom,:port)
@@ -79,7 +78,6 @@ end
 
 function policy_guard_value(layout,scene)
     valuation = Dict(name=>policy_atom_value(scene,atom) for (name,atom) in layout["atoms"])
-    any(isnothing,values(valuation)) && return nothing
     return evaluate_constraint(layout["guard"],valuation)
 end
 

@@ -3,6 +3,13 @@ constraint_value(value::Bool) = Dict("sort"=>"Bool","value"=>value)
 constraint_value(value::Integer) = Dict("sort"=>"Int","value"=>value)
 constraint_variable(name) = Dict("var"=>name)
 
+function boolean_connective(values,decisive::Bool)
+    all(value->value isa Union{Bool,Nothing},values) ||
+        throw(ArgumentError("Boolean constraint needs Boolean operands"))
+    any(value->value === decisive,values) && return decisive
+    return any(isnothing,values) ? nothing : !decisive
+end
+
 function evaluate_constraint(expr,variables)
     haskey(expr,"var") && return variables[expr["var"]]
     if haskey(expr,"value")
@@ -16,8 +23,9 @@ function evaluate_constraint(expr,variables)
     end
     args = [evaluate_constraint(child,variables) for child in expr["args"]]
     op = expr["op"]
-    op == "and" && return all(args)
-    op == "or" && return any(args)
+    op == "and" && return boolean_connective(args,false)
+    op == "or" && return boolean_connective(args,true)
+    any(isnothing,args) && return nothing
     op == "not" && return !only(args)
     op == "eq" && return allequal(args)
     op == "distinct" && return allunique(args)

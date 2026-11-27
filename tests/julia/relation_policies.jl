@@ -140,6 +140,18 @@ end
             suffix = last(body["children"])
             atoms = first(suffix["children"])["layout"]["atoms"]
             @test any(atom->atom["kind"] == "relative_component_color",values(atoms))
+            relative = first(atom for atom in values(atoms) if atom["kind"] == "relative_component_color")
+            unbound_scene = entries[2].observation
+            relative_term = TC.constraint_variable("relative")
+            action_term = TC.constraint_variable("available")
+            for (operation,id,expected) in (("or",6,true),("and",2,false),
+                    ("or",2,nothing),("and",6,nothing))
+                layout = Dict("guard_schema"=>"public-atoms-v1",
+                    "atoms"=>Dict("relative"=>relative,
+                        "available"=>Dict("kind"=>"available_action","value"=>id)),
+                    "guard"=>TC.constraint_term(operation,relative_term,action_term))
+                @test TC.evaluate_policy_guard(layout,unbound_scene) === expected
+            end
             policy = TC.LearnedPolicy("verified","branch",1,"typed",Dict("tree"=>body),String[],"")
             for (signal,expected) in ((0x03,3),(0x08,4))
                 origins = (16,40)
