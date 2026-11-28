@@ -44,7 +44,7 @@ from tests.bench.program_audit import audit_live_goal_programs
 from tests.bench.policy_audit import PolicyAudit
 
 
-def offline_capture(root, task, run):
+def offline_capture(root, task, run, *, native_docker=False):
     public = run / "public"
     private = run / "private"
     bundle = task["offline_bundle"]
@@ -94,6 +94,7 @@ def offline_capture(root, task, run):
             private / directory,
             run / "grade" / log,
             startup_timeout=timeout,
+            **({"native_docker": True} if native_docker else {}),
         )
 
     with ExitStack() as stack:
@@ -135,6 +136,8 @@ def offline_capture(root, task, run):
         projection = absolute_compute_settings(original, values, projection)
         agent.write_text(projection, encoding="utf-8")
         paths = public_settings(root, agent, tomllib.loads(projection))
+        if native_docker:
+            return supervise(root, agent, public, expected_paths=paths, native_docker=True)
         probe = isolation_probe(
             root,
             url,

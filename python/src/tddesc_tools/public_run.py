@@ -16,8 +16,13 @@ from time import monotonic, sleep
 from uuid import uuid4
 
 from .contracts import Contracts
-from .isolation import solver_sandbox
-from .run import julia_command, runtime_paths
+from .isolation import (
+    limit_address_space,
+    optional_time,
+    solver_sandbox,
+    stop_native_process,
+)
+from .run import julia_command, julia_environment, runtime_paths
 from .stitch import build_identity, run_worker
 
 BUILD_INPUTS = (
@@ -166,7 +171,7 @@ def supervisor_environment():
 
 
 def process_jobs(
-    root, public, binary, worker_sha, policy_sha, hard_memory, unit, serviced
+    root, public, binary, worker_sha, policy_sha, hard_memory, unit, serviced, *, native_docker=False
 ):
     queue = public / "learning"
     for job in sorted(queue.glob("job-*")):
@@ -228,6 +233,7 @@ def process_jobs(
                     expected_policy=policy_sha,
                     solver_unit=unit,
                     resume_search=resume,
+                    **({"native_docker": True} if native_docker else {}),
                 )
         except Exception as exc:
             failure = f"{type(exc).__name__}: {exc}"
@@ -266,11 +272,19 @@ def supervisor_liveness(public, state, *, recovery):
         yield
 
 
-def supervise(root, config, public, *, expected_paths=None, recovery=False):
+def supervise(root, config, public, *, expected_paths=None, recovery=False, native_docker=False):
     runtime = runtime_paths(root)
     data = tomllib.loads(config.read_text(encoding="utf-8"))
-    if data["execution"]["memory_enforcement"] != "cgroup_v2":
-        raise ValueError("The learning solver requests cgroup_v2 enforcement")
+    enforcement = "cooperative" if native_docker else "cgroup_v2"
+    if data["execution"]["memory_enforcement"] != enforcement:
+        raise ValueError(f"The learning solver requests {enforcement} enforcement")
+    if native_docker:
+        env = data["environment"]
+        if (
+            recovery or env["competition_mode"] or env.get("credentials_file")
+            or not re.fullmatch(r"http://127\.0\.0\.1:[1-9][0-9]*/?", env["base_url"])
+        ):
+            raise ValueError("Native Docker capture requires an offline loopback SDK")
     binary = (config.parent / data["learning"]["engine"]).resolve()
     if not binary.is_file() or not os.access(binary, os.X_OK):
         raise RuntimeError(
@@ -289,7 +303,7 @@ def supervise(root, config, public, *, expected_paths=None, recovery=False):
             public / "supervision.json", {"state": "BLOCKED", "reason": str(exc)}
         )
         return SUPERVISOR_BLOCKED
-    if not Path("/sys/fs/cgroup/cgroup.controllers").is_file():
+    if not native_docker and not Path("/sys/fs/cgroup/cgroup.controllers").is_file():
         raise RuntimeError("The learning solver requires cgroup v2")
     execution = data["execution"]
     solver_memory, hard_memory = (
@@ -311,7 +325,7 @@ def supervise(root, config, public, *, expected_paths=None, recovery=False):
     worker_sha = identity["binary_sha256"]
     policy = (config.parent / data["learning"]["policy_file"]).resolve()
     policy_sha = sha256(policy.read_bytes()).hexdigest()
-    unit = f"tddesc-solver-{uuid4().hex}.scope"
+    unit = None if native_docker else f"tddesc-solver-{uuid4().hex}.scope"
     state = {
         "state": "RUNNING",
         "scope": unit,
@@ -323,23 +337,41 @@ def supervise(root, config, public, *, expected_paths=None, recovery=False):
         "policy_sha256": policy_sha,
         "runtime_deadline": None,
     }
-    command = [
-        "systemd-run",
-        "--user",
-        "--scope",
-        "--quiet",
-        "--collect",
-        "--unit",
-        unit,
-        *(["-p", f"MemoryMax={solver_memory}"] if solver_memory is not None else []),
-        "-p",
-        "MemorySwapMax=0",
-        "-p",
-        "TasksMax=128",
-        "--",
-        *solver_command(root, runtime, config, public, paths, recovery=recovery),
-    ]
-    env = supervisor_environment()
+    if native_docker:
+        state["execution_mode"] = "native_docker"
+        state["memory_limit_kind"] = "process_address_space" if solver_memory else "none"
+        args = julia_command(
+            root, runtime, root / "scripts/public25_cpu/native_capture.jl",
+            str(config), str(public),
+        )
+        if data.get("compute"):
+            args.insert(1, "--threads=2")
+        if heap_hint := execution.get("solver_heap_hint_bytes"):
+            args.insert(1, f"--heap-size-hint={heap_hint}")
+        command = [
+            *limit_address_space(solver_memory),
+            *optional_time(public / "solver-usage.txt"),
+            *args,
+        ]
+        env = julia_environment(runtime)
+    else:
+        command = [
+            "systemd-run",
+            "--user",
+            "--scope",
+            "--quiet",
+            "--collect",
+            "--unit",
+            unit,
+            *(["-p", f"MemoryMax={solver_memory}"] if solver_memory is not None else []),
+            "-p",
+            "MemorySwapMax=0",
+            "-p",
+            "TasksMax=128",
+            "--",
+            *solver_command(root, runtime, config, public, paths, recovery=recovery),
+        ]
+        env = supervisor_environment()
     with (
         supervisor_liveness(public, state, recovery=recovery),
         (public / ("recovery.log" if recovery else "solver.log")).open(
@@ -366,11 +398,14 @@ def supervise(root, config, public, *, expected_paths=None, recovery=False):
                     hard_memory,
                     unit,
                     serviced,
+                    native_docker=native_docker,
                 )
                 sleep(0.05)
         finally:
             try:
-                if solver.poll() is None:
+                if solver.poll() is None and native_docker:
+                    stop_native_process(solver)
+                elif solver.poll() is None:
                     subprocess.run(
                         ["systemctl", "--user", "stop", unit],
                         check=False,

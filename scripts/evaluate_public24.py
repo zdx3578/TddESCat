@@ -14,6 +14,7 @@ from time import monotonic
 from tddesc_tools.isolation import private_network, solver_sandbox
 from tddesc_tools.run import (
     julia_command,
+    julia_environment,
     read_task,
     runtime_paths,
     worktree_digest,
@@ -69,7 +70,7 @@ def unconfirmed_transport(case):
     return None
 
 
-def evaluate_one(task_dir):
+def evaluate_one(task_dir, *, native_docker=False):
     public = task_dir / "public"
     grade = task_dir / "grade"
     runtime = runtime_paths(ROOT)
@@ -78,7 +79,9 @@ def evaluate_one(task_dir):
     config = tomllib.loads(task["agent_config"].read_text())
     game_id = config["environment"]["game_id"]
     started = monotonic()
-    code = offline_capture(ROOT, task, task_dir)
+    code = offline_capture(
+        ROOT, task, task_dir, **({"native_docker": True} if native_docker else {})
+    )
     agent_seconds = monotonic() - started
     trace = receipts(public)
     confirmed_actions = sum(event["action"]["id"] != 0 for event, _ in trace.values())
@@ -109,19 +112,13 @@ def evaluate_one(task_dir):
         write_artifact_index(task_dir)
         return result
     replay_script = ROOT / "scripts/run.jl"
+    replay_cmd = julia_command(ROOT, runtime, replay_script, "--replay", str(public))
+    if not native_docker:
+        replay_cmd = solver_sandbox(ROOT, runtime, replay_cmd, public, script=replay_script, offline=True)
     with (grade / "replay.log").open("wb") as log:
         proc = subprocess.run(
-            solver_sandbox(
-                ROOT,
-                runtime,
-                julia_command(ROOT, runtime, replay_script, "--replay", str(public)),
-                public,
-                script=replay_script,
-                offline=True,
-            ),
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            check=False,
+            replay_cmd, stdout=log, stderr=subprocess.STDOUT, check=False,
+            env=julia_environment(runtime) if native_docker else None,
         )
     ordered = list(trace.values())
     first, last = ordered[0][1], ordered[-1][1]
@@ -334,17 +331,17 @@ def evaluate_one(task_dir):
     return result
 
 
-def evaluate_isolated(directory, game, runtime):
-    command = private_network(
-        [
-            runtime["python"]["executable"],
-            "-m",
-            "scripts.evaluate_public24",
-            "--one",
-            str(directory),
-        ],
-        (directory,),
-    )
+def evaluate_isolated(directory, game, runtime, *, native_docker=False, cpu=None):
+    command = [
+        runtime["python"]["executable"],
+        "-m", "scripts.evaluate_public24", "--one", str(directory),
+    ]
+    if native_docker:
+        command.append("--native-docker")
+        if cpu is not None:
+            command[:0] = ["/usr/bin/taskset", "--cpu-list", str(cpu)]
+    else:
+        command = private_network(command, (directory,))
     with (directory / "grade/process.log").open("wb") as log:
         process = subprocess.run(
             command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, check=False
@@ -586,6 +583,7 @@ def campaign(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--one", type=Path)
+    parser.add_argument("--native-docker", action="store_true")
     parser.add_argument("--native", type=Path)
     parser.add_argument("--relationships", type=Path)
     parser.add_argument("--policy", type=Path)
@@ -598,7 +596,10 @@ if __name__ == "__main__":
     parser.add_argument("--workers", type=int, default=5)
     args = parser.parse_args()
     if args.one:
-        raise SystemExit(int(not evaluate_one(args.one).get("verified", False)))
+        result = evaluate_one(args.one, native_docker=args.native_docker)
+        raise SystemExit(int(not result.get("verified", False)))
+    if args.native_docker:
+        parser.error("--native-docker requires --one")
     modern = args.unified_relations or args.relation_policies
     if modern and (
         not args.unified_relations

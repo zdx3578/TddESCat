@@ -1,0 +1,1020 @@
+{
+  "arcengine_version": "0.9.3",
+  "as_of": "2026-11-28T07:06:16.039577+00:00",
+  "campaign_started_utc": "2026-11-28T06:55:51+00:00",
+  "execution_mode": "native_docker",
+  "execution_profile": {
+    "actions": "unlimited",
+    "memory_enforcement": "cooperative"
+  },
+  "games": {
+    "ar25-e3c63847": {
+      "actions": 152,
+      "confirmed_resets": 2,
+      "cpu": 0,
+      "eval_log_timestamp_ns": 1795849253844350110,
+      "first_action": {
+        "action": {
+          "id": 1
+        },
+        "event": "e-d6188341fa8eae16-c000000003",
+        "response_sha256": "55a2c52d950303af3d2ea2f3252428ac9bb5e9ff0a3e0d80fa61bec48d47301b",
+        "timestamp_ns": 1795849332682818701
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "event": "e-d6188341fa8eae16-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "65276839c78a4bfc62629174949f9830eef445fdab503cfb42919956528f9e4f",
+        "timestamp_ns": 1795849301353837727
+      },
+      "highest_level": 0,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          0
+        ],
+        "direct_docker": true,
+        "pid": 2675085
+      },
+      "solver_log_timestamp_ns": 1795849256776441919
+    },
+    "bp35-0a0ad940": {
+      "actions": 36,
+      "confirmed_resets": 1,
+      "cpu": 1,
+      "eval_log_timestamp_ns": 1795849253844350110,
+      "first_action": {
+        "action": {
+          "id": 3
+        },
+        "event": "e-6f50d04446733fa0-c000000003",
+        "response_sha256": "058d70737c194e1eac9d30e843e0e7a12cc30291932656ca96863ff6eb146a4f",
+        "timestamp_ns": 1795849341082081700
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          3,
+          4,
+          6,
+          7
+        ],
+        "event": "e-6f50d04446733fa0-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "8ae884619579cef735a11e5126a932c5387e151734480a6df2b2270d7a5c0da6",
+        "timestamp_ns": 1795849299692785716
+      },
+      "highest_level": 0,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          1
+        ],
+        "direct_docker": true,
+        "pid": 2675027
+      },
+      "solver_log_timestamp_ns": 1795849255983417088
+    },
+    "cd82-fb555c5d": {
+      "actions": 103,
+      "confirmed_resets": 2,
+      "cpu": 2,
+      "eval_log_timestamp_ns": 1795849253845350141,
+      "first_action": {
+        "action": {
+          "id": 1
+        },
+        "event": "e-d7ed6ea7cf654018-c000000003",
+        "response_sha256": "f7257727712e9d7408fbca29c30475b5fab760aee2ce84a86cda15a028b04f7a",
+        "timestamp_ns": 1795849331120769790
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "event": "e-d7ed6ea7cf654018-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "8279e847839bac229722831f1c4bab7bd094d8b88c7ee74d4fb406b2f924fc20",
+        "timestamp_ns": 1795849299333774474
+      },
+      "highest_level": 0,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          2
+        ],
+        "direct_docker": true,
+        "pid": 2675128
+      },
+      "solver_log_timestamp_ns": 1795849257272457450
+    },
+    "cn04-65d47d14": {
+      "actions": 36,
+      "confirmed_resets": 1,
+      "cpu": 3,
+      "eval_log_timestamp_ns": 1795849253846350172,
+      "first_action": {
+        "action": {
+          "id": 1
+        },
+        "event": "e-866971989268e45c-c000000003",
+        "response_sha256": "216fddc8c388123c212de9d48d79557e07c1070d422aaff57413385902e98f7f",
+        "timestamp_ns": 1795849338529001757
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "event": "e-866971989268e45c-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "40cd4271f17ae27c0ec3df7211a9f9844f540976b29e5e0b19f00e0f57be8059",
+        "timestamp_ns": 1795849308029046741
+      },
+      "highest_level": 0,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          3
+        ],
+        "direct_docker": true,
+        "pid": 2675026
+      },
+      "solver_log_timestamp_ns": 1795849255983417088
+    },
+    "dc22-4c9bff3e": {
+      "actions": 18,
+      "confirmed_resets": 1,
+      "cpu": 4,
+      "eval_log_timestamp_ns": 1795849253847350203,
+      "first_action": {
+        "action": {
+          "id": 1
+        },
+        "event": "e-da83cdd5e8f33d94-c000000003",
+        "response_sha256": "070988faf3d0ce502b187f105681be7050e9bbdbcaca85c2a95c37ecf88eda85",
+        "timestamp_ns": 1795849331051767629
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          1,
+          2,
+          3,
+          4,
+          6
+        ],
+        "event": "e-da83cdd5e8f33d94-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "7324491f9440d2c75401827dcb76d71bb35d7b823999fe3d9ae95b283d293189",
+        "timestamp_ns": 1795849299767788064
+      },
+      "highest_level": 0,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          4
+        ],
+        "direct_docker": true,
+        "pid": 2675144
+      },
+      "solver_log_timestamp_ns": 1795849257345459736
+    },
+    "ft09-0d8bbf25": {
+      "actions": 63,
+      "confirmed_resets": 1,
+      "cpu": 5,
+      "eval_log_timestamp_ns": 1795849253847350203,
+      "first_action": {
+        "action": {
+          "id": 6,
+          "x": 43,
+          "y": 46
+        },
+        "event": "e-50b3d11f0e4c94ea-c000000003",
+        "response_sha256": "223f360cb664c8c44b33de4f01ac9acaea2f87d641b73a3a4d833180b86f1fca",
+        "timestamp_ns": 1795849331718788515
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          6
+        ],
+        "event": "e-50b3d11f0e4c94ea-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "9d102315b36b854e11ac476e61868e44464281c266fe6e3b095943b1724c5c91",
+        "timestamp_ns": 1795849299248771813
+      },
+      "highest_level": 0,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          5
+        ],
+        "direct_docker": true,
+        "pid": 2675143
+      },
+      "solver_log_timestamp_ns": 1795849257343459674
+    },
+    "g50t-5849a774": {
+      "actions": 37,
+      "confirmed_resets": 1,
+      "cpu": 6,
+      "eval_log_timestamp_ns": 1795849253848350235,
+      "first_action": {
+        "action": {
+          "id": 1
+        },
+        "event": "e-fb6e979211033b2d-c000000003",
+        "response_sha256": "e34be468e6a99f4c73a730a66f0b5275dcef6b4b777d5fa049e2140ef09b4463",
+        "timestamp_ns": 1795849329094706350
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "event": "e-fb6e979211033b2d-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "07c437f7aa9f204e2682f4b1580cd6cc94aeb1316a57bedd6acfb974efd7a31b",
+        "timestamp_ns": 1795849300884823041
+      },
+      "highest_level": 0,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          6
+        ],
+        "direct_docker": true,
+        "pid": 2675025
+      },
+      "solver_log_timestamp_ns": 1795849255983417088
+    },
+    "ka59-9f096b4a": {
+      "actions": 45,
+      "confirmed_resets": 1,
+      "cpu": 7,
+      "eval_log_timestamp_ns": 1795849253849350266,
+      "first_action": {
+        "action": {
+          "id": 1
+        },
+        "event": "e-2037fec81b776663-c000000003",
+        "response_sha256": "23eb83a498463846f858c1e02b890bb46d87867470fd2dede2fded7719db688e",
+        "timestamp_ns": 1795849335130895355
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          1,
+          2,
+          3,
+          4,
+          6
+        ],
+        "event": "e-2037fec81b776663-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "abb09c0997e8d1a77edc2a929a1403b80846990feb4459eed32c82599d4bef92",
+        "timestamp_ns": 1795849304457934922
+      },
+      "highest_level": 0,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          7
+        ],
+        "direct_docker": true,
+        "pid": 2675024
+      },
+      "solver_log_timestamp_ns": 1795849255983417088
+    },
+    "lf52-271a04aa": {
+      "actions": 86,
+      "confirmed_resets": 1,
+      "cpu": 8,
+      "eval_log_timestamp_ns": 1795849253850350297,
+      "first_action": {
+        "action": {
+          "id": 1
+        },
+        "event": "e-018955d89923bce8-c000000003",
+        "response_sha256": "25b6021eaa7244949219a6ee4db89306d3c10107c68e8faf2248543ba01ca78a",
+        "timestamp_ns": 1795849329732726328
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          1,
+          2,
+          3,
+          4,
+          6,
+          7
+        ],
+        "event": "e-018955d89923bce8-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "95afc686bff8b87cc188358c237a0abfce5ab6d2ee7c69d9d4c4b13969309789",
+        "timestamp_ns": 1795849298218739561
+      },
+      "highest_level": 1,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          8
+        ],
+        "direct_docker": true,
+        "pid": 2675023
+      },
+      "solver_log_timestamp_ns": 1795849255983417088
+    },
+    "lp85-305b61c3": {
+      "actions": 208,
+      "confirmed_resets": 1,
+      "cpu": 9,
+      "eval_log_timestamp_ns": 1795849253851350329,
+      "first_action": {
+        "action": {
+          "id": 6,
+          "x": 32,
+          "y": 57
+        },
+        "event": "e-5dff44f483d9f21a-c000000003",
+        "response_sha256": "ead5ba0709156b415b1ed9350d4d522809b276b1166e65ef8558a4eeb480c21f",
+        "timestamp_ns": 1795849349238337088
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          6
+        ],
+        "event": "e-5dff44f483d9f21a-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "d56d326e911e96c5cd5e4793432b36c1c1ff40b57570ca92b2e7d9f91f8cb5e0",
+        "timestamp_ns": 1795849304383932605
+      },
+      "highest_level": 1,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          9
+        ],
+        "direct_docker": true,
+        "pid": 2675147
+      },
+      "solver_log_timestamp_ns": 1795849257345459736
+    },
+    "ls20-9607627b": {
+      "actions": 12,
+      "confirmed_resets": 1,
+      "cpu": 10,
+      "eval_log_timestamp_ns": 1795849253852350360,
+      "first_action": {
+        "action": {
+          "id": 1
+        },
+        "event": "e-45bc2fe056dee466-c000000003",
+        "response_sha256": "b6b1d961ed6e2861d4b32dac294fe038425f47a660422740efa7891a2ea0ef77",
+        "timestamp_ns": 1795849332609816415
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "event": "e-45bc2fe056dee466-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "05fa1a4b71808ba875f8403f65cc028d1bd42b5529240f0452617fe0e48129d3",
+        "timestamp_ns": 1795849304421933795
+      },
+      "highest_level": 0,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          10
+        ],
+        "direct_docker": true,
+        "pid": 2675032
+      },
+      "solver_log_timestamp_ns": 1795849255986417182
+    },
+    "m0r0-dadda488": {
+      "actions": 61,
+      "confirmed_resets": 1,
+      "cpu": 11,
+      "eval_log_timestamp_ns": 1795849253853350391,
+      "first_action": {
+        "action": {
+          "id": 1
+        },
+        "event": "e-08b08d9e4e0cd127-c000000003",
+        "response_sha256": "c3476531ce436bf580fed97f867343b77d73f7ae88ec25c0bffff73e93041ee8",
+        "timestamp_ns": 1795849328445686028
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "event": "e-08b08d9e4e0cd127-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "eefc9c56759acde9f6d1b6b5a9599d764ee6993c5e23fdce483097fdd04b3123",
+        "timestamp_ns": 1795849297342712130
+      },
+      "highest_level": 0,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          11
+        ],
+        "direct_docker": true,
+        "pid": 2675029
+      },
+      "solver_log_timestamp_ns": 1795849255986417182
+    },
+    "r11l-aa269680": {
+      "actions": 53,
+      "confirmed_resets": 1,
+      "cpu": 12,
+      "eval_log_timestamp_ns": 1795849253853350391,
+      "first_action": {
+        "action": {
+          "id": 6,
+          "x": 26,
+          "y": 4
+        },
+        "event": "e-43f92a207ba5d353-c000000003",
+        "response_sha256": "ac9347f0b9bb324527721bd3a070a22daf4ba7bbbf41600d1bd0ab6c8d688c29",
+        "timestamp_ns": 1795849338424998500
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          6
+        ],
+        "event": "e-43f92a207ba5d353-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "5a957ca01cba846fa09510aa5df8f427462ecb717b53f5cfbfe92de8c008d130",
+        "timestamp_ns": 1795849302130862057
+      },
+      "highest_level": 0,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          12
+        ],
+        "direct_docker": true,
+        "pid": 2675145
+      },
+      "solver_log_timestamp_ns": 1795849257345459736
+    },
+    "re86-4e57566e": {
+      "actions": 101,
+      "confirmed_resets": 2,
+      "cpu": 13,
+      "eval_log_timestamp_ns": 1795849253854350423,
+      "first_action": {
+        "action": {
+          "id": 1
+        },
+        "event": "e-3bf7a567d6275438-c000000003",
+        "response_sha256": "3e97c503e50b0ab383267cd1ec9deb87a51f889a1b324f7fbf0c93c09871f38f",
+        "timestamp_ns": 1795849340385059874
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "event": "e-3bf7a567d6275438-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "0aeba29e3990f940bbd045bb1183bb32d0054d33ecde77dc231d8e364ed52842",
+        "timestamp_ns": 1795849308159050812
+      },
+      "highest_level": 0,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          13
+        ],
+        "direct_docker": true,
+        "pid": 2675022
+      },
+      "solver_log_timestamp_ns": 1795849255983417088
+    },
+    "s5i5-a48e4b1d": {
+      "actions": 365,
+      "confirmed_resets": 8,
+      "cpu": 14,
+      "eval_log_timestamp_ns": 1795849253855350454,
+      "first_action": {
+        "action": {
+          "id": 6,
+          "x": 21,
+          "y": 41
+        },
+        "event": "e-82c299296e9bc4e8-c000000003",
+        "response_sha256": "3034d431de36e50bff4a9aee61dfdf6cc1ae63f7bc41e05607f5572a603e0471",
+        "timestamp_ns": 1795849341879106656
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          6
+        ],
+        "event": "e-82c299296e9bc4e8-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "7f54a90d338cafaca58d1613e3290c585dd11ed71bcaa9a6a3a8f29b86dd391f",
+        "timestamp_ns": 1795849298548749894
+      },
+      "highest_level": 0,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          14
+        ],
+        "direct_docker": true,
+        "pid": 2675030
+      },
+      "solver_log_timestamp_ns": 1795849255986417182
+    },
+    "sb26-7fbdac44": {
+      "actions": 165,
+      "confirmed_resets": 1,
+      "cpu": 15,
+      "eval_log_timestamp_ns": 1795849253855350454,
+      "first_action": {
+        "action": {
+          "id": 5
+        },
+        "event": "e-dd510539074c2da2-c000000003",
+        "response_sha256": "14c1590cc0fe1868eba2307fe39c4b7fdd1cc06e1a3ca75de75d46f2c22a2deb",
+        "timestamp_ns": 1795849334115863572
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          5,
+          6,
+          7
+        ],
+        "event": "e-dd510539074c2da2-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "a486b4659bc6c8cf85e4c74de85aa8e4df6d2a904facd2e88068c048e2b91a0c",
+        "timestamp_ns": 1795849301815852193
+      },
+      "highest_level": 0,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          15
+        ],
+        "direct_docker": true,
+        "pid": 2675146
+      },
+      "solver_log_timestamp_ns": 1795849257345459736
+    },
+    "sc25-f9b21a2f": {
+      "actions": 72,
+      "confirmed_resets": 1,
+      "cpu": 16,
+      "eval_log_timestamp_ns": 1795849253856350485,
+      "first_action": {
+        "action": {
+          "id": 1
+        },
+        "event": "e-f1229788f2d3c797-c000000003",
+        "response_sha256": "1d0c3155e48130dc9c68d10a5c90784ad403decc405a95cd14ccbb246101c525",
+        "timestamp_ns": 1795849331577784100
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          1,
+          2,
+          3,
+          4,
+          6
+        ],
+        "event": "e-f1229788f2d3c797-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "a3e97a3af02b845f656f4c60bd0e39d5ff0f222b0063de7e93dbfd62de2290d6",
+        "timestamp_ns": 1795849299935793325
+      },
+      "highest_level": 0,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          16
+        ],
+        "direct_docker": true,
+        "pid": 2675031
+      },
+      "solver_log_timestamp_ns": 1795849255986417182
+    },
+    "sk48-41055498": {
+      "actions": 86,
+      "confirmed_resets": 1,
+      "cpu": 17,
+      "eval_log_timestamp_ns": 1795849253856350485,
+      "first_action": {
+        "action": {
+          "id": 1
+        },
+        "event": "e-067c8f786f03e911-c000000003",
+        "response_sha256": "81cd3f2b7bfc2e3f7af3cd8fff719e8728d2e48de6c1566d37eb0297c2712201",
+        "timestamp_ns": 1795849339993047599
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          1,
+          2,
+          3,
+          4,
+          6,
+          7
+        ],
+        "event": "e-067c8f786f03e911-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "1a766d1323abde31ba75c2962a79a0d22ea7cdc4c75682b847d03c95b9e7250f",
+        "timestamp_ns": 1795849309750100632
+      },
+      "highest_level": 0,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          17
+        ],
+        "direct_docker": true,
+        "pid": 2675129
+      },
+      "solver_log_timestamp_ns": 1795849257278457638
+    },
+    "sp80-0ee2d095": {
+      "actions": 40,
+      "confirmed_resets": 2,
+      "cpu": 18,
+      "eval_log_timestamp_ns": 1795849253858350548,
+      "first_action": {
+        "action": {
+          "id": 1
+        },
+        "event": "e-1fefa8307706326d-c000000003",
+        "response_sha256": "0a5b7e4a5b0b116b1b363b52590ace61068efbafe7ff743fbd571a735265cfa2",
+        "timestamp_ns": 1795849331756789705
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "event": "e-1fefa8307706326d-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "bec7662edae8d071ee1a1cb913a80025574c8ca59153e6490a48cec8ad822013",
+        "timestamp_ns": 1795849299710786279
+      },
+      "highest_level": 0,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          18
+        ],
+        "direct_docker": true,
+        "pid": 2675034
+      },
+      "solver_log_timestamp_ns": 1795849255986417182
+    },
+    "su15-4c352900": {
+      "actions": 34,
+      "confirmed_resets": 1,
+      "cpu": 19,
+      "eval_log_timestamp_ns": 1795849253858350548,
+      "first_action": {
+        "action": {
+          "id": 7
+        },
+        "event": "e-7ce7df94df7f8f0e-c000000003",
+        "response_sha256": "096c5ee8651ed156dc823a869ea051ca397d1fb6d0cc58dad2a797dabeacf41c",
+        "timestamp_ns": 1795849330160739730
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          6,
+          7
+        ],
+        "event": "e-7ce7df94df7f8f0e-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "b9fb2941e2e1bb2e06ebcd642cf18b12bf8d5026b9ba6168a820a648c6de1d06",
+        "timestamp_ns": 1795849298973763202
+      },
+      "highest_level": 0,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          19
+        ],
+        "direct_docker": true,
+        "pid": 2675084
+      },
+      "solver_log_timestamp_ns": 1795849256776441919
+    },
+    "tn36-ab4f63cc": {
+      "actions": 87,
+      "confirmed_resets": 2,
+      "cpu": 20,
+      "eval_log_timestamp_ns": 1795849253859350579,
+      "first_action": {
+        "action": {
+          "id": 6,
+          "x": 31,
+          "y": 41
+        },
+        "event": "e-65ba9f7bf50a0a4d-c000000003",
+        "response_sha256": "f6d4242d29798ba18c82f6a4e358538d5605d6c05e65f9c631a42e7ea8ad2939",
+        "timestamp_ns": 1795849336494938066
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          6
+        ],
+        "event": "e-65ba9f7bf50a0a4d-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "854af7274fa292e969fcbdcf4589d78cf1f7cd984413023fcaaa71c4fdc3cc9c",
+        "timestamp_ns": 1795849304513936676
+      },
+      "highest_level": 0,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          20
+        ],
+        "direct_docker": true,
+        "pid": 2675033
+      },
+      "solver_log_timestamp_ns": 1795849255986417182
+    },
+    "tr87-cd924810": {
+      "actions": 128,
+      "confirmed_resets": 1,
+      "cpu": 21,
+      "eval_log_timestamp_ns": 1795849253860350611,
+      "first_action": {
+        "action": {
+          "id": 1
+        },
+        "event": "e-80880fad68d15102-c000000003",
+        "response_sha256": "6b242fd9e2691bc8096fb52cc0440bb13126d73a4e1afeafc826a7c19934a128",
+        "timestamp_ns": 1795849335918920030
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "event": "e-80880fad68d15102-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "2086a455f1a04de899f399fd9f7148885b4bacefb12c7c21ce0791eb8dc190b7",
+        "timestamp_ns": 1795849308084048463
+      },
+      "highest_level": 0,
+      "last_state": "GAME_OVER",
+      "process": {
+        "cpus": [
+          21
+        ],
+        "direct_docker": true,
+        "pid": 2675131
+      },
+      "solver_log_timestamp_ns": 1795849257284457826
+    },
+    "tu93-2b534c15": {
+      "actions": 57,
+      "confirmed_resets": 2,
+      "cpu": 22,
+      "eval_log_timestamp_ns": 1795849253861350642,
+      "first_action": {
+        "action": {
+          "id": 1
+        },
+        "event": "e-c8a42a27742b527c-c000000003",
+        "response_sha256": "952e8ca53e155bb68cf370d3659cc64b528dcd67fdbf5eb512ee8d3d81ed6875",
+        "timestamp_ns": 1795849331385778088
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "event": "e-c8a42a27742b527c-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "2c1c1425a56a78c96c50de805cb26c2735746aec0a3ce14e96b0716a88be478c",
+        "timestamp_ns": 1795849299625783618
+      },
+      "highest_level": 0,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          22
+        ],
+        "direct_docker": true,
+        "pid": 2675040
+      },
+      "solver_log_timestamp_ns": 1795849255989417276
+    },
+    "vc33-9851e02b": {
+      "actions": 139,
+      "confirmed_resets": 3,
+      "cpu": 23,
+      "eval_log_timestamp_ns": 1795849253862350673,
+      "first_action": {
+        "action": {
+          "id": 6,
+          "x": 47,
+          "y": 14
+        },
+        "event": "e-8af5d408417f580c-c000000003",
+        "response_sha256": "c39ce07aa259f407c52bf19406681dd1331c8c78fd79c124ca701f9236495170",
+        "timestamp_ns": 1795849335347902150
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          6
+        ],
+        "event": "e-8af5d408417f580c-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "fc55a0bc1d6ce1dea3adc822efd8c4935a540b25f0e6c02027137cea51c96d9b",
+        "timestamp_ns": 1795849302881885573
+      },
+      "highest_level": 0,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          23
+        ],
+        "direct_docker": true,
+        "pid": 2675064
+      },
+      "solver_log_timestamp_ns": 1795849256113421159
+    },
+    "wa30-ee6fef47": {
+      "actions": 30,
+      "confirmed_resets": 1,
+      "cpu": 24,
+      "eval_log_timestamp_ns": 1795849253863350704,
+      "first_action": {
+        "action": {
+          "id": 1
+        },
+        "event": "e-926d3ac43ce5dba1-c000000003",
+        "response_sha256": "9531cc686524a964f961247843e509521d83ad29b2c983b884be8e7af25605cb",
+        "timestamp_ns": 1795849320190427539
+      },
+      "first_reset": {
+        "action": {
+          "id": 0
+        },
+        "available_actions": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "event": "e-926d3ac43ce5dba1-c000000002",
+        "levels_completed": 0,
+        "response_sha256": "96cdb7f83c8e5f2d1f21021d282ea1f837b36134a7edd97a074f29ff0a898767",
+        "timestamp_ns": 1795849294648627773
+      },
+      "highest_level": 0,
+      "last_state": "NOT_FINISHED",
+      "process": {
+        "cpus": [
+          24
+        ],
+        "direct_docker": true,
+        "pid": 2675021
+      },
+      "solver_log_timestamp_ns": 1795849255980416994
+    }
+  },
+  "independent_opening_replay": {
+    "applied": 2,
+    "through_event": "e-d6188341fa8eae16-c000000003",
+    "total": 2
+  },
+  "path": "/home/zdx/github/VSAHDC/TddESCat/.runtime/public25-native/runs/public25-native-2c87e7ed",
+  "sdk_version": "0.9.10",
+  "shared_online_prepare_seconds": 278.46005316311494,
+  "source_commit": "2c87e7eddc61dc0bfd0d23027e9dbea99c881208",
+  "summary": {
+    "confirmed_actions": 2214,
+    "cpu_masks_correct": 25,
+    "eval_log_to_first_action_seconds_median": 78.84,
+    "games_with_action": 25,
+    "games_with_reset": 25,
+    "live_julia": 25,
+    "peak_levels": 2,
+    "reset_to_first_action_seconds_median": 31.64,
+    "solver_log_to_first_action_seconds_median": 76.62,
+    "terminal_wins": 0
+  }
+}

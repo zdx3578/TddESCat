@@ -4,6 +4,7 @@ import argparse
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from hashlib import file_digest
+import os
 import json
 from pathlib import Path
 import re
@@ -25,7 +26,7 @@ from tddesc_tools.stitch import build_identity
 from scripts.evaluate_public24 import ROOT, evaluate_isolated, unconfirmed_transport
 
 
-def prepare_cases(output, games, template, suite, bundle):
+def prepare_cases(output, games, template, suite, bundle, *, native_docker=False):
     settings = template.read_text(encoding="utf-8")
     data = tomllib.loads(settings)
     assert data["execution"]["max_public_commands"] == "unlimited"
@@ -33,6 +34,12 @@ def prepare_cases(output, games, template, suite, bundle):
     assert data["environment"]["game_selection"] == "explicit"
     assert data["environment"]["competition_mode"] is False
     assert "prior_evidence" not in data["learning"]
+    if native_docker:
+        assert data["execution"]["memory_enforcement"] == "cgroup_v2"
+        settings, changed = re.subn(
+            r"(?m)^memory_enforcement\s*=.*$", 'memory_enforcement = "cooperative"', settings
+        )
+        assert changed == 1
     engine_path = (template.parent / data["learning"]["engine"]).resolve()
     policy_path = (template.parent / data["learning"]["policy_file"]).resolve()
 
@@ -167,8 +174,9 @@ def prepare_online_runtime(runtime):
     return {**metadata, "prepare_seconds": monotonic() - started}
 
 
-def evaluate_game(case, game, runtime):
-    result = evaluate_isolated(case, game, runtime)
+def evaluate_game(case, game, runtime, *, native_docker=False, cpu=None):
+    options = {"native_docker": True, "cpu": cpu} if native_docker else {}
+    result = evaluate_isolated(case, game, runtime, **options)
     failure = None if result.get("verified") else unconfirmed_transport(case)
     if failure is None:
         return {**result, "compute_receipts": backend_receipts(case / "public")}
@@ -181,7 +189,7 @@ def evaluate_game(case, game, runtime):
         (retry / directory).mkdir(parents=True)
     for name in ("agent.toml", "task.toml"):
         shutil.copyfile(case / name, retry / name)
-    result = evaluate_isolated(retry, game, runtime)
+    result = evaluate_isolated(retry, game, runtime, **options)
     return {
         **result,
         "selected_attempt": retry.name,
@@ -202,6 +210,11 @@ def campaign(args):
     if not 1 <= args.workers <= len(games):
         raise ValueError("workers must be between 1 and 25")
 
+    native_docker = getattr(args, "native_docker", False)
+    cpus = sorted(os.sched_getaffinity(0))[:args.workers] if native_docker else []
+    if native_docker and len(cpus) != args.workers:
+        raise ValueError("Native Docker needs one available CPU per worker")
+    cpu_assignment = {game: cpus[i % len(cpus)] for i, game in enumerate(games)} if cpus else {}
     output = args.output.resolve()
     template = ROOT / "config/v13_public25.toml"
     online_runtime = (
@@ -211,7 +224,7 @@ def campaign(args):
     )
     compute = verify_compute_profile(template, runtime)
     output.mkdir(parents=True)
-    engine, policy = prepare_cases(output, games, template, suite, bundle)
+    engine, policy = prepare_cases(output, games, template, suite, bundle, native_docker=native_docker)
     commit = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
     ).strip()
@@ -231,6 +244,7 @@ def campaign(args):
             "game_ids": games,
             "command_budget": "unlimited",
             "workers": args.workers,
+            **({"execution_mode": "native_docker", "cpu_assignment": cpu_assignment} if native_docker else {}),
         },
     )
     report_file = output / "public25.json"
@@ -238,7 +252,10 @@ def campaign(args):
     atomic_json(report_file, campaign_report(games, finished))
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
         tasks = {
-            pool.submit(evaluate_game, output / game, game, runtime): game
+            pool.submit(
+                evaluate_game, output / game, game, runtime,
+                **({"native_docker": True, "cpu": cpu_assignment[game]} if native_docker else {}),
+            ): game
             for game in games
         }
         for task in as_completed(tasks):
@@ -264,6 +281,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--bundle", type=Path)
     parser.add_argument("--workers", type=int, default=25)
+    parser.add_argument("--native-docker", action="store_true", help="run in the existing container using its local loopback SDK")
     parser.add_argument(
         "--precompile-online",
         action="store_true",

@@ -3,6 +3,7 @@
 import json
 import os
 import shutil
+import signal
 import subprocess
 from contextlib import contextmanager
 from pathlib import Path
@@ -113,36 +114,65 @@ def solver_sandbox(
     )
 
 
+def limit_address_space(limit):
+    return ["/usr/bin/prlimit", f"--as={limit}", "--"] if limit is not None else []
+
+
+def optional_time(output=None):
+    if (executable := shutil.which("time")) is None:
+        return []
+    return [executable, "-v", *(["-o", str(output)] if output is not None else []), "--"]
+
+
+def stop_native_process(process):
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait()
+
+
 @contextmanager
 def environment_server(
-    root, runtime, server_config, games, work, log, *, startup_timeout=20
+    root, runtime, server_config, games, work, log, *, startup_timeout=20, native_docker=False
 ):
     python = Path(runtime["python"]["executable"])
-    python_distribution = python.resolve().parents[1]
     work.mkdir(parents=True)
-    cmd = sandbox(
-        [
-            str(python),
-            "-m",
-            "tddesc_env.serve",
-            "--config",
-            str(server_config),
-            "--games",
-            str(games),
-            "--work",
-            str(work),
-        ],
-        read=(
-            python.parent.parent,
-            python_distribution,
-            root / "python/src/tddesc_env",
-            server_config,
-            games,
-        ),
-        write=(work,),
-    )
+    cmd = [
+        str(python),
+        "-m",
+        "tddesc_env.serve",
+        "--config",
+        str(server_config),
+        "--games",
+        str(games),
+        "--work",
+        str(work),
+    ]
+    if not native_docker:
+        cmd = sandbox(
+            cmd,
+            read=(
+                python.parent.parent,
+                python.resolve().parents[1],
+                root / "python/src/tddesc_env",
+                server_config,
+                games,
+            ),
+            write=(work,),
+        )
     with log.open("wb") as output:
-        server = subprocess.Popen(cmd, cwd=root, stdout=output, stderr=output)
+        server = subprocess.Popen(
+            cmd, cwd=root, stdout=output, stderr=output,
+            env=clean_environment() if native_docker else None,
+        )
         try:
             deadline = monotonic() + startup_timeout
             ready = work / "ready.json"
