@@ -1271,6 +1271,9 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 isempty(tests) ? nothing : (action=item.action,intent=:apply_relation,tests,reads=String[],obligation=nothing)
             end
         end
+        if relation_tasks
+            relation_proposal = bind_transition_trials(relations,relation_proposal,obs,item.action,decision.groups;context)
+        end
         relation_proposal = bind_relation_reads(relations,relation_proposal,obs,item.action)
         role_proof = if !isnothing(relation_proposal) && haskey(backends,"factor_kernel")
             role_factor_proof!(backends["factor_kernel"],relation_proposal,obs,rec.before_ref;memo=factor_role_memo)

@@ -40,6 +40,7 @@ end
 OutcomeRelationWitness(steps,comparison,outcome) = OutcomeRelationWitness(steps,comparison,outcome,[comparison])
 
 mutable struct RelationAgenda
+    transitions::TransitionMemory
     samples::Vector{RelationSample}
     producers::Dict{String,RelationProducer}
     by_action::Dict{String,Vector{String}}
@@ -70,7 +71,7 @@ mutable struct RelationAgenda
     preparing::Union{Nothing,NamedTuple}
 end
 
-RelationAgenda() = RelationAgenda(RelationSample[],Dict(),Dict(),Dict(),Dict(),Dict(),Set(),Dict(),Dict(),Set(),Set(),Dict(),Set(),
+RelationAgenda() = RelationAgenda(TransitionMemory(),RelationSample[],Dict(),Dict(),Dict(),Dict(),Dict(),Set(),Dict(),Dict(),Set(),Set(),Dict(),Set(),
     Dict(),Dict(),Dict(),Dict(),Dict(),NamedTuple[],OutcomeRelationWitness[],RelationUseIndex(),Dict(),Set(),1,1,0,nothing,nothing)
 
 relation_context(obs) = semantic_hash([obs.levels_completed,size(last(obs.frames)),
@@ -437,6 +438,16 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
             end
         end
     end
+    transitions = observe_transitions!(agenda.transitions,prev,next,effects.event_id,effects.before_id,
+        proposal,groups,after_groups;context=sample.context)
+    if !isempty(transitions.checks)
+        feedback = merge(feedback,(transition_checks=transitions.checks,))
+        if proposal.intent in (:test_endpoint_transform,:apply_endpoint_transform)
+            statuses = getproperty.(transitions.checks,:status)
+            result = :refuted in statuses ? :refuted : :established in statuses ? :established : :unresolved
+            feedback = merge(feedback,(;result))
+        end
+    end
     contract = observed_producer!(agenda,sample,last(prev.frames),last(next.frames);groups)
     fact_flow = record_relation_use!(agenda,index,prev,next,proposal,contract,feedback,groups,after_groups,after_regions)
     public_outcome = record_public_outcome!(agenda,index,fact_flow)
@@ -483,7 +494,7 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
         attempt=sample.attempt,prior=sample.preceding == 0 ? nothing : relation_ref(agenda.samples[sample.preceding]),
         reached=(;advanced,state=next.state),binding,contact=isnothing(contact) ? nothing : contact.event,
         site_transitions=[row.observed for row in site_changes],producer=contract,feedback,failure,unresolved,
-        public_outcome,fact_flow)
+        public_outcome,fact_flow,transition_observations=transitions.learned)
 end
 
 function outcome_preparation(agenda,obs,decision,context)
@@ -1127,6 +1138,8 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
     isnothing(progress) || return progress
     preparation = outcome_preparation(agenda,obs,decision,context)
     isnothing(preparation) || return preparation
+    transform = transition_experiment(agenda,obs,decision,context)
+    isnothing(transform) || return transform
     if !isnothing(frontier) && (isnothing(history_model) || history_scope(agenda,context).receipts)
         contrast = frontier_history_probe(frontier,agenda,obs,context)
         isnothing(contrast) || return contrast
@@ -1276,7 +1289,7 @@ function task_arbitration(item,spatial,intervention,relation,experiment;
                 :continue_outcome_relation) ? 1 :
             relation.intent in (:test_preparation_omission,:test_concrete_effect,:distinguish_changed_context,:test_delayed_effect,
                 :test_history_response,:establish_preparation,:establish_observed_relation,:probe_observed_advancement,
-                :prepare_public_outcome,:establish_outcome_relation) ? 3 : 5
+                :prepare_public_outcome,:establish_outcome_relation,:test_endpoint_transform) ? 3 : 5
         reason = !isnothing(intervention) && relation.action == intervention.action &&
             relation.intent in (:test_concrete_effect,:test_delayed_effect) ?
             intervention.reason : string(relation.intent)
@@ -1302,7 +1315,7 @@ function task_arbitration(item,spatial,intervention,relation,experiment;
             continuing_policy || choice.priority <= 2
         elseif choice.source == :relation
             choice.priority <= 2 || relation.intent in
-                (:test_preparation_omission,:establish_preparation,:probe_observed_advancement,:prepare_public_outcome,:establish_outcome_relation) ||
+                (:test_preparation_omission,:establish_preparation,:probe_observed_advancement,:prepare_public_outcome,:establish_outcome_relation,:test_endpoint_transform) ||
                 (relation.intent == :test_concrete_effect && separates_current_effects(
                     get(relation,:obligation,nothing),get(relation,:tests,())))
         elseif choice.source == :experiment
@@ -1415,6 +1428,7 @@ function relation_task_record(proposal)
         for test in proposal.tests]
     comparisons = [q for test in proposal.tests for q in get(test,:comparisons,())]
     record = (;intent=proposal.intent,action=proposal.action,reads,contracts,obligation=proposal.obligation)
+    hasproperty(proposal,:transitions) && (record=merge(record,(transitions=proposal.transitions,)))
     if hasproperty(proposal,:revises_failure)
         record = merge(record,(;proposal.revises_failure))
     end
@@ -1467,6 +1481,11 @@ function relation_prediction(rec,item,prediction,task;role_proof=nothing,resourc
             values["relation-" * channel] = value
         end
     end
+    for trial in get(task,:transitions,())
+        claim = trial.expected
+        claim.known == 0 && continue
+        values["endpoint-" * trial.key] = claim
+    end
     if task.intent == :execute_relation_policy &&
             get(task.obligation,:public_outcome,nothing) == "advancement" &&
             task.obligation.scope == :observed_instance
@@ -1476,6 +1495,8 @@ function relation_prediction(rec,item,prediction,task;role_proof=nothing,resourc
     if isnothing(prediction)
         model_version = if length(task.contracts) == 1
             "relation-" * only(task.contracts).producer
+        elseif hasproperty(task,:transitions) && !isempty(task.transitions)
+            "endpoint-" * semantic_hash(sort!([t.version for t in task.transitions]))
         elseif !isnothing(representative)
             sources = sort!(unique(t.producer for t in task.contracts if t.scope in (:bound,:replicated)))
             "relation-" * semantic_hash(["matching-role-contracts",sources])
