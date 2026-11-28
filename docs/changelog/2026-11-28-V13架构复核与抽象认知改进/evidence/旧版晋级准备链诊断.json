@@ -1,0 +1,439 @@
+{
+  "revision": "2b546b235541b1e720296ff40b70f4cbac6f778f",
+  "model": "adjacent_preparation_with_nonterminal_comparison",
+  "counts": {
+    "local_effect_uncertain": 12,
+    "missing_producer": 1
+  },
+  "witnesses": [
+    {
+      "game": "g50t-5849a774",
+      "event": "e-517e649a5798efda-c000001535",
+      "level": 1,
+      "response_sha256": "efb9d055e7348fa779591ad62ef1f18edbae5cbb5c579cc36a73746db757d0b2",
+      "adjacent_model": {
+        "stop": "local_effect_uncertain",
+        "also_missing": [
+          "missing_producer"
+        ],
+        "event": "e-517e649a5798efda-c000001534",
+        "residual_pixels": 0,
+        "chain": []
+      },
+      "prefix_missing_relation_records": 0,
+      "recorded_relationship": null,
+      "permission_requirements": [],
+      "ultimate_task": null,
+      "contracts_at_dispatch": 0,
+      "typed_fact_reads": null,
+      "consumer_evidence": "no_relation_task"
+    },
+    {
+      "game": "lf52-271a04aa",
+      "event": "e-a352d43652711467-c000000019",
+      "level": 1,
+      "response_sha256": "cc184867734cd3e513b3134ea19bf34586b98a3256556a5607d1041f3c67be10",
+      "adjacent_model": {
+        "stop": "local_effect_uncertain",
+        "also_missing": [
+          "missing_producer"
+        ],
+        "event": "e-a352d43652711467-c000000018",
+        "residual_pixels": 1,
+        "chain": []
+      },
+      "prefix_missing_relation_records": 0,
+      "recorded_relationship": null,
+      "permission_requirements": [],
+      "ultimate_task": "probe_partition_binding",
+      "contracts_at_dispatch": 0,
+      "typed_fact_reads": null,
+      "consumer_evidence": "no_concrete_contract"
+    },
+    {
+      "game": "lp85-305b61c3",
+      "event": "e-6286746e3e5c3a88-c000000063",
+      "level": 1,
+      "response_sha256": "ac2ad79b4ded6a9488e91ee16c06d6b981af497e07462b63d8cbd48d96940677",
+      "adjacent_model": {
+        "stop": "missing_producer",
+        "also_missing": [],
+        "event": "e-6286746e3e5c3a88-c000000062",
+        "residual_pixels": 0,
+        "chain": []
+      },
+      "prefix_missing_relation_records": 0,
+      "recorded_relationship": null,
+      "permission_requirements": [],
+      "ultimate_task": "test_delayed_effect",
+      "contracts_at_dispatch": 0,
+      "typed_fact_reads": null,
+      "consumer_evidence": "no_concrete_contract"
+    },
+    {
+      "game": "ls20-9607627b",
+      "event": "e-0a1ac997674cc3ca-c000000026",
+      "level": 1,
+      "response_sha256": "702f528f96841dc4af5bcd3bdf39342cfa9c7ac8853d1a14776431656c6cbd04",
+      "adjacent_model": {
+        "stop": "local_effect_uncertain",
+        "also_missing": [
+          "missing_producer"
+        ],
+        "event": "e-0a1ac997674cc3ca-c000000019",
+        "residual_pixels": 8,
+        "chain": [
+          {
+            "event": "e-0a1ac997674cc3ca-c000000025",
+            "producer": "4efbedefc46bc35aa594f705590a39e8ce0e69b3ad6646336296b92ed9bfbe5a"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000024",
+            "producer": "9c7959b478cc134414317328be14f929e445a05e7e3ae03c00e7ea961bd20299"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000023",
+            "producer": "d66a824a86df60c2e7c8ee23eb83d5d11dcc7094482b8c4b6f3125b96e4da6b3"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000022",
+            "producer": "d66a824a86df60c2e7c8ee23eb83d5d11dcc7094482b8c4b6f3125b96e4da6b3"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000021",
+            "producer": "d66a824a86df60c2e7c8ee23eb83d5d11dcc7094482b8c4b6f3125b96e4da6b3"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000020",
+            "producer": "be96132924ba61041c60103fe122ad2c42c510cb19488ae1928febbe9d284b17"
+          }
+        ]
+      },
+      "prefix_missing_relation_records": 0,
+      "recorded_relationship": null,
+      "permission_requirements": [],
+      "ultimate_task": null,
+      "contracts_at_dispatch": 0,
+      "typed_fact_reads": null,
+      "consumer_evidence": "no_relation_task"
+    },
+    {
+      "game": "ls20-9607627b",
+      "event": "e-0a1ac997674cc3ca-c000000128",
+      "level": 2,
+      "response_sha256": "7eb361f986e4abd35f378afd05f97a196eb7318250201b1cf92b8403ed45678f",
+      "adjacent_model": {
+        "stop": "local_effect_uncertain",
+        "also_missing": [],
+        "event": "e-0a1ac997674cc3ca-c000000108",
+        "residual_pixels": 8,
+        "chain": [
+          {
+            "event": "e-0a1ac997674cc3ca-c000000127",
+            "producer": "f63e9abea45a6cb954f3d69e866a69c99e070444bab24b4b8c74d784b4e4c08d"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000126",
+            "producer": "0406d16eec185cbdd573fffe98d3405dcc5331980a7f660f2bb2a22214b45b80"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000125",
+            "producer": "0406d16eec185cbdd573fffe98d3405dcc5331980a7f660f2bb2a22214b45b80"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000124",
+            "producer": "0406d16eec185cbdd573fffe98d3405dcc5331980a7f660f2bb2a22214b45b80"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000123",
+            "producer": "a561f867d0d959fb0cf488d88a0f723c058365b31fe115c2b3409318e2ecdf8c"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000122",
+            "producer": "0406d16eec185cbdd573fffe98d3405dcc5331980a7f660f2bb2a22214b45b80"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000121",
+            "producer": "aa8c0829454974fe8bf30a11cd3731fa4175592a586dc4d6e6b8f2125e14badb"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000120",
+            "producer": "aa8c0829454974fe8bf30a11cd3731fa4175592a586dc4d6e6b8f2125e14badb"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000119",
+            "producer": "aa8c0829454974fe8bf30a11cd3731fa4175592a586dc4d6e6b8f2125e14badb"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000118",
+            "producer": "aa8c0829454974fe8bf30a11cd3731fa4175592a586dc4d6e6b8f2125e14badb"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000117",
+            "producer": "aa8c0829454974fe8bf30a11cd3731fa4175592a586dc4d6e6b8f2125e14badb"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000116",
+            "producer": "aa8c0829454974fe8bf30a11cd3731fa4175592a586dc4d6e6b8f2125e14badb"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000115",
+            "producer": "bb510b316b54b0a2588a0a3b3c4344d52e9e901797c40040d26ff456a57c3415"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000114",
+            "producer": "bb510b316b54b0a2588a0a3b3c4344d52e9e901797c40040d26ff456a57c3415"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000113",
+            "producer": "bb510b316b54b0a2588a0a3b3c4344d52e9e901797c40040d26ff456a57c3415"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000112",
+            "producer": "bb510b316b54b0a2588a0a3b3c4344d52e9e901797c40040d26ff456a57c3415"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000111",
+            "producer": "bb510b316b54b0a2588a0a3b3c4344d52e9e901797c40040d26ff456a57c3415"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000110",
+            "producer": "bb510b316b54b0a2588a0a3b3c4344d52e9e901797c40040d26ff456a57c3415"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000109",
+            "producer": "530e081cbd50f38be808af171fc66f972a2a2727da2b2691748de9c4d8466869"
+          }
+        ]
+      },
+      "prefix_missing_relation_records": 0,
+      "recorded_relationship": null,
+      "permission_requirements": [],
+      "ultimate_task": null,
+      "contracts_at_dispatch": 0,
+      "typed_fact_reads": null,
+      "consumer_evidence": "no_relation_task"
+    },
+    {
+      "game": "ls20-9607627b",
+      "event": "e-0a1ac997674cc3ca-c000000231",
+      "level": 3,
+      "response_sha256": "10aa195c4eede45c8c937e9caf729fde2a371c2145a51cc427958fbb0b967203",
+      "adjacent_model": {
+        "stop": "local_effect_uncertain",
+        "also_missing": [
+          "missing_producer"
+        ],
+        "event": "e-0a1ac997674cc3ca-c000000230",
+        "residual_pixels": 0,
+        "chain": []
+      },
+      "prefix_missing_relation_records": 0,
+      "recorded_relationship": null,
+      "permission_requirements": [],
+      "ultimate_task": null,
+      "contracts_at_dispatch": 0,
+      "typed_fact_reads": null,
+      "consumer_evidence": "no_relation_task"
+    },
+    {
+      "game": "ls20-9607627b",
+      "event": "e-0a1ac997674cc3ca-c000000317",
+      "level": 4,
+      "response_sha256": "a01d40a6119b2720e5b85689053f4814d3576c100edd71ef7386d29aee31ba37",
+      "adjacent_model": {
+        "stop": "local_effect_uncertain",
+        "also_missing": [
+          "missing_producer"
+        ],
+        "event": "e-0a1ac997674cc3ca-c000000304",
+        "residual_pixels": 0,
+        "chain": [
+          {
+            "event": "e-0a1ac997674cc3ca-c000000316",
+            "producer": "4115aea95326d1c6db3bb95cbd9d60eadfd7df6fb2289592ba3c6403eab774b0"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000315",
+            "producer": "0e653834b47e2918f457381aa95c65102fdbd633190bad239e3942e181b62d34"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000314",
+            "producer": "9c7959b478cc134414317328be14f929e445a05e7e3ae03c00e7ea961bd20299"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000313",
+            "producer": "9c7959b478cc134414317328be14f929e445a05e7e3ae03c00e7ea961bd20299"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000312",
+            "producer": "d66a824a86df60c2e7c8ee23eb83d5d11dcc7094482b8c4b6f3125b96e4da6b3"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000311",
+            "producer": "118e0efe4eda728fd64bfd028720852dc88d0b17b8a6c149371d9024c3cf277d"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000310",
+            "producer": "d66a824a86df60c2e7c8ee23eb83d5d11dcc7094482b8c4b6f3125b96e4da6b3"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000309",
+            "producer": "9c7959b478cc134414317328be14f929e445a05e7e3ae03c00e7ea961bd20299"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000308",
+            "producer": "9c7959b478cc134414317328be14f929e445a05e7e3ae03c00e7ea961bd20299"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000307",
+            "producer": "9c7959b478cc134414317328be14f929e445a05e7e3ae03c00e7ea961bd20299"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000306",
+            "producer": "9c7959b478cc134414317328be14f929e445a05e7e3ae03c00e7ea961bd20299"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000305",
+            "producer": "d66a824a86df60c2e7c8ee23eb83d5d11dcc7094482b8c4b6f3125b96e4da6b3"
+          }
+        ]
+      },
+      "prefix_missing_relation_records": 0,
+      "recorded_relationship": null,
+      "permission_requirements": [],
+      "ultimate_task": "apply_relation",
+      "contracts_at_dispatch": 1,
+      "typed_fact_reads": null,
+      "consumer_evidence": "concrete_contract"
+    },
+    {
+      "game": "ls20-9607627b",
+      "event": "e-0a1ac997674cc3ca-c000000384",
+      "level": 5,
+      "response_sha256": "391dc9589eca87388f2fa6d241a46d60231150fb2f9a7be37240f1066e50b825",
+      "adjacent_model": {
+        "stop": "local_effect_uncertain",
+        "also_missing": [
+          "missing_producer"
+        ],
+        "event": "e-0a1ac997674cc3ca-c000000383",
+        "residual_pixels": 4,
+        "chain": []
+      },
+      "prefix_missing_relation_records": 0,
+      "recorded_relationship": null,
+      "permission_requirements": [],
+      "ultimate_task": "apply_relation",
+      "contracts_at_dispatch": 1,
+      "typed_fact_reads": null,
+      "consumer_evidence": "concrete_contract"
+    },
+    {
+      "game": "ls20-9607627b",
+      "event": "e-0a1ac997674cc3ca-c000000498",
+      "level": 6,
+      "response_sha256": "cc9270b3e161e3aaeb9787b06ae0d0124fb43680381ee03b03cfe1893a779b96",
+      "adjacent_model": {
+        "stop": "local_effect_uncertain",
+        "also_missing": [
+          "missing_producer"
+        ],
+        "event": "e-0a1ac997674cc3ca-c000000497",
+        "residual_pixels": 8,
+        "chain": []
+      },
+      "prefix_missing_relation_records": 0,
+      "recorded_relationship": null,
+      "permission_requirements": [],
+      "ultimate_task": "apply_relation",
+      "contracts_at_dispatch": 1,
+      "typed_fact_reads": null,
+      "consumer_evidence": "concrete_contract"
+    },
+    {
+      "game": "ls20-9607627b",
+      "event": "e-0a1ac997674cc3ca-c000000952",
+      "level": 7,
+      "response_sha256": "5ebe1dd0efb99e17ed2d4af2d2efed78499946266ee5b5b239f0351548d8c485",
+      "adjacent_model": {
+        "stop": "local_effect_uncertain",
+        "also_missing": [],
+        "event": "e-0a1ac997674cc3ca-c000000951",
+        "residual_pixels": 251,
+        "chain": []
+      },
+      "prefix_missing_relation_records": 0,
+      "recorded_relationship": null,
+      "permission_requirements": [],
+      "ultimate_task": "apply_relation",
+      "contracts_at_dispatch": 2,
+      "typed_fact_reads": null,
+      "consumer_evidence": "concrete_contract"
+    },
+    {
+      "game": "r11l-aa269680",
+      "event": "e-d819c968f967fd93-c000000364",
+      "level": 1,
+      "response_sha256": "a4bd6964741355b153fbd3031b25513eaf5587bab6e4ca8fa1c782ad6483baca",
+      "adjacent_model": {
+        "stop": "local_effect_uncertain",
+        "also_missing": [
+          "missing_producer"
+        ],
+        "event": "e-d819c968f967fd93-c000000363",
+        "residual_pixels": 1,
+        "chain": []
+      },
+      "prefix_missing_relation_records": 0,
+      "recorded_relationship": null,
+      "permission_requirements": [],
+      "ultimate_task": null,
+      "contracts_at_dispatch": 0,
+      "typed_fact_reads": null,
+      "consumer_evidence": "no_relation_task"
+    },
+    {
+      "game": "sp80-0ee2d095",
+      "event": "e-e170ef8a0fa719a3-c000000511",
+      "level": 1,
+      "response_sha256": "019b4970509452aafc9837db385bbde54e73cfe044a2bd0b5cf856a24da5ad45",
+      "adjacent_model": {
+        "stop": "local_effect_uncertain",
+        "also_missing": [],
+        "event": "e-e170ef8a0fa719a3-c000000510",
+        "residual_pixels": 3,
+        "chain": []
+      },
+      "prefix_missing_relation_records": 0,
+      "recorded_relationship": null,
+      "permission_requirements": [],
+      "ultimate_task": null,
+      "contracts_at_dispatch": 0,
+      "typed_fact_reads": null,
+      "consumer_evidence": "no_relation_task"
+    },
+    {
+      "game": "vc33-9851e02b",
+      "event": "e-25eff4a173823bff-c000002958",
+      "level": 1,
+      "response_sha256": "c9825e20c514072a4ca7b0fbc7305e5eed657c2f3fba5f6797fcbf39d190613c",
+      "adjacent_model": {
+        "stop": "local_effect_uncertain",
+        "also_missing": [
+          "missing_producer"
+        ],
+        "event": "e-25eff4a173823bff-c000002957",
+        "residual_pixels": 1,
+        "chain": []
+      },
+      "prefix_missing_relation_records": 0,
+      "recorded_relationship": null,
+      "permission_requirements": [],
+      "ultimate_task": null,
+      "contracts_at_dispatch": 0,
+      "typed_fact_reads": null,
+      "consumer_evidence": "no_relation_task"
+    }
+  ]
+}
