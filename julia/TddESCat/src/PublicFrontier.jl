@@ -13,7 +13,10 @@ struct FrontierRoute
     cursor::Int
     target::FrontierState
     experiment::PublicActionKey
+    omission::Union{Nothing,NamedTuple}
 end
+
+FrontierRoute(steps,cursor,target,experiment) = FrontierRoute(steps,cursor,target,experiment,nothing)
 
 mutable struct PublicFrontier
     options::Dict{String,Vector{PublicActionKey}}
@@ -213,28 +216,48 @@ function frontier_successor(agenda,indices)
     return next
 end
 
-function frontier_path(search,agenda,start;include_configurations=false)
+function frontier_omission_at(agenda,context,previous,available)
+    pending = get(agenda.uses.omissions,context,nothing)
+    isnothing(pending) && return nothing
+    for (key,obligation) in sort!(collect(pending);by=p->(last(p).consumer,first(p)))
+        first(key) in available || continue
+        compatible_omission_history(agenda,context,previous,obligation) || continue
+        observed_failure(agenda,context,key,previous) && continue
+        return (;experiment=key,omission=obligation)
+    end
+    return nothing
+end
+
+function frontier_experiment(search,agenda,node,incoming;include_configurations,seek_omission)
+    row = agenda.samples[incoming]
+    delta = get(row.effects.public_delta,"available_actions",nothing)
+    available = isnothing(delta) ? row.available : delta["after"]
+    seek_omission && return frontier_omission_at(agenda,first(node),incoming,available)
+    untried = frontier_untried(search,node)
+    if !isempty(untried)
+        return (;experiment=first(untried),omission=nothing)
+    end
+    include_configurations || return nothing
+    key = frontier_new_configuration(search,node,available)
+    return isnothing(key) ? nothing : (;experiment=key,omission=nothing)
+end
+
+function frontier_path(search,agenda,start;include_configurations=false,seek_omission=false)
+    haskey(search.outcomes,start) || return nothing
+    oldest = seek_omission ? minimum((trial.consumer for pending in values(agenda.uses.omissions)
+        for trial in values(pending));init=typemax(Int)) : 0
     queue = FrontierState[start]
     parents = Dict{FrontierState,Union{Nothing,Tuple{FrontierState,Int}}}(start=>nothing)
+    best = nothing
     for node in queue
         if node != start
-            untried = frontier_untried(search,node)
-            experiment = isempty(untried) ? nothing : first(untried)
-            if isnothing(experiment) && include_configurations
-                _, index = parents[node]
-                incoming = agenda.samples[index]
-                delta = get(incoming.effects.public_delta,"available_actions",nothing)
-                available = isnothing(delta) ? incoming.available : delta["after"]
-                experiment = frontier_new_configuration(search,node,available)
-            end
-            if !isnothing(experiment)
-                route = Int[]
-                cursor = node
-                while cursor != start
-                    cursor,index = parents[cursor]
-                    push!(route,index)
-                end
-                return (;route=reverse!(route),target=node,experiment)
+            _, incoming = parents[node]
+            target = frontier_experiment(search,agenda,node,incoming;include_configurations,seek_omission)
+            if !isnothing(target) && (isnothing(best) || target.omission.consumer < best.omission.consumer)
+                best = (;target=node,target.experiment,target.omission)
+                # Coverage takes the nearest opportunity. For pending diagnoses
+                # retain the oldest reachable obligation, with shortest path on ties.
+                (!seek_omission || target.omission.consumer == oldest) && break
             end
         end
         outcomes = get(search.outcomes,node,nothing)
@@ -248,15 +271,34 @@ function frontier_path(search,agenda,start;include_configurations=false)
             push!(queue,successor)
         end
     end
-    return nothing
+    isnothing(best) && return nothing
+    route = Int[]
+    cursor = best.target
+    while cursor != start
+        cursor,index = parents[cursor]
+        push!(route,index)
+    end
+    return merge(best,(;route=reverse!(route)))
 end
 
-function frontier_route_step(search,agenda,obs,node,route,preferred,history_reads)
+function frontier_route_step(search,agenda,obs,decision,node,route,preferred,history_reads)
     path = relation_ref.(agenda.samples[route.steps])
     plan_refs = unique([ref for index in route.steps for ref in relation_refs(agenda.samples[index])])
     reads = unique([history_reads;plan_refs])
     target,experiment = first(route.target),concrete_action(route.experiment)
+    if !isnothing(route.omission)
+        pending = get(agenda.uses.omissions,target,nothing)
+        (isnothing(pending) || get(pending,route.experiment,nothing) != route.omission) && return nothing
+        append!(reads,omission_evidence_refs(agenda,route.omission))
+        unique!(reads)
+    end
     if route.cursor > length(route.steps)
+        if !isnothing(route.omission)
+            node == route.target || return nothing
+            proposal = omitted_preparation_experiment(agenda,obs,decision,target)
+            (isnothing(proposal) || proposal.obligation != route.omission) && return nothing
+            return merge(proposal,(;reads=unique([reads;proposal.reads])))
+        end
         tried = get(search.outcomes,node,nothing)
         node == route.target && (isnothing(tried) || !haskey(tried,route.experiment)) &&
             first(route.experiment) in obs.available_actions || return nothing
@@ -274,7 +316,32 @@ function frontier_route_step(search,agenda,obs,node,route,preferred,history_read
     frontier_successor(agenda,observed) == expected || return nothing
     obligation = (;expected=edge.next_context,advanced=false,target,future_experiment=experiment,
         path,step=route.cursor,baseline=preferred)
+    if !isnothing(route.omission)
+        obligation = merge(obligation,(;purpose=:test_preparation_omission,
+            writer=relation_ref(agenda.samples[route.omission.writer]),
+            consumer=relation_ref(agenda.samples[route.omission.consumer])))
+    end
     return (;action,intent=:explore_observed_frontier_path,tests=NamedTuple[],reads,obligation,route)
+end
+
+function frontier_omission_route(search,agenda,obs,decision,preferred,node,history_reads)
+    isempty(agenda.uses.omissions) && return nothing
+    found = frontier_path(search,agenda,node;seek_omission=true)
+    isnothing(found) && return nothing
+    route = FrontierRoute(found.route,1,found.target,found.experiment,found.omission)
+    return frontier_route_step(search,agenda,obs,decision,node,route,preferred,history_reads)
+end
+
+function current_omission_experiment(search,agenda,obs,decision,context)
+    trial = omitted_preparation_experiment(agenda,obs,decision,context)
+    (isnothing(trial) || isnothing(search)) && return trial
+    route = search.route
+    if !isnothing(route) && route.cursor > length(route.steps) && route.omission == trial.obligation &&
+            route.target == frontier_state(agenda,context,agenda.previous)
+        path_reads = [ref for i in route.steps for ref in relation_refs(agenda.samples[i])]
+        return merge(trial,(;reads=unique([trial.reads;path_reads])))
+    end
+    return trial
 end
 
 function confirm_frontier_route!(search,agenda,proposal)
@@ -294,7 +361,7 @@ function confirm_frontier_route!(search,agenda,proposal)
         frontier_state(agenda,observed.next_context,observed_index) ==
             frontier_state(agenda,expected.next_context,expected_index)
     matches || return (;status=:withdrawn,step=route.cursor)
-    search.route = FrontierRoute(route.steps,route.cursor+1,route.target,route.experiment)
+    search.route = FrontierRoute(route.steps,route.cursor+1,route.target,route.experiment,route.omission)
     return (;status=:confirmed,step=route.cursor,next=search.route.cursor)
 end
 
@@ -305,9 +372,11 @@ function frontier_choice(search,agenda,obs,decision,intervention,preferred)
     live_history = frontier_prior(agenda,agenda.previous,history_scope(agenda,context).width)
     history_reads = relation_ref.(agenda.samples[live_history])
     if !isnothing(search.route)
-        next = frontier_route_step(search,agenda,obs,node,search.route,preferred,history_reads)
+        next = frontier_route_step(search,agenda,obs,decision,node,search.route,preferred,history_reads)
         isnothing(next) || return next
     end
+    directed = frontier_omission_route(search,agenda,obs,decision,preferred,node,history_reads)
+    isnothing(directed) || return directed
     repeated = get(get(search.outcomes,node,Dict()),action_key(preferred),nothing)
     isnothing(repeated) && return nothing
     latest = agenda.samples[last(repeated)]
@@ -336,5 +405,5 @@ function frontier_choice(search,agenda,obs,decision,intervention,preferred)
         isnothing(found) && return nothing
     end
     route = FrontierRoute(found.route,1,found.target,found.experiment)
-    return frontier_route_step(search,agenda,obs,node,route,preferred,history_reads)
+    return frontier_route_step(search,agenda,obs,decision,node,route,preferred,history_reads)
 end

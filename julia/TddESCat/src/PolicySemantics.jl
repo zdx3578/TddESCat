@@ -233,11 +233,19 @@ function validate_policy_bodies!(selected,released,prepared,available_after)
             scope = semantic_hash(policy.tree)
             body_record = Dict("tree"=>policy.tree,"definitions"=>refs,"scope"=>scope,
                 "structure"=>episode.structure,"structure_source"=>"confirmed_task_trajectory",
-                "public_outcomes"=>policy_outcome_steps(policy.tree))
+                "public_outcomes"=>policy_outcome_steps(policy.tree),"preparation_lookback"=>preparation_lookback(policy.tree))
             result = get!(selected,scope,LearnedPolicy(id,definition,depths[definition],corpus.model,
                 body_record,String[],available_after))
             if any(>(1),diff(episode.members))
                 result.body["dependency_source"] = "witnessed_role_dependency"
+            end
+            if hasproperty(episode,:preparations)
+                reader = last(episode.members)
+                row = prepared.agenda.samples[reader]
+                if !row.advanced
+                    input = (;reader,event=relation_ref(row),inputs=episode.preparations)
+                    push!(get!(Vector{NamedTuple},result.body,"preparation_trials"),input)
+                end
             end
             preconditions = observed_policy_preconditions(episode,prepared.agenda)
             if !isempty(preconditions)

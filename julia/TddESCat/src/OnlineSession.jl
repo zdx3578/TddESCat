@@ -9,9 +9,10 @@ struct PublicTrial
     action::Dict{String,Int}
     effects::Union{Nothing,PublicEffects}
     assessments::IdDict{JointMechanism,Union{Nothing,JointTrialAssessment}}
+    role_trials::IdDict{JointMechanism,Vector{NamedTuple}}
 end
 
-PublicTrial(sample,action,effects) = PublicTrial(sample,action,effects,IdDict())
+PublicTrial(sample,action,effects) = PublicTrial(sample,action,effects,IdDict(),IdDict())
 PublicTrial(sample,action) = PublicTrial(sample,action,nothing)
 
 struct ActiveMechanism
@@ -130,6 +131,68 @@ function measured_scope(fragments)
     return (ids,Tuple(part.value for part in fragments if part.family == :translation))
 end
 
+function role_contrasts(rule,trial)
+    effects = trial.effects
+    (isnothing(effects) || rule.action_id != trial.action["id"] || rule.action_id == 6 ||
+        length(rule.effects) != 1 || only(rule.effects).family != :translation ||
+        !endpoint_effects_observed(effects) || scene_translation_unresolved(effects) ||
+        haskey(effects.public_delta,"levels_completed") || haskey(effects.public_delta,"state")) &&
+        return NamedTuple[]
+    return get!(trial.role_trials,rule) do
+        model = only(rule.effects)
+        sample = trial.sample
+        groups = public_components(sample.before)
+        shapes = model.enclosed ? [e.target for e in enclosure_pairs(groups)] : groups
+        prototype = position_offsets(model.template)
+        candidates = [s for s in shapes if length(s) == length(prototype) && position_offsets(s) == prototype]
+        # Labels describe individual aligned roles within an actually ambiguous scene.
+        length(candidates) >= 2 || return NamedTuple[]
+        delta = Tuple(model.values)
+        after = nothing
+        rows = NamedTuple[]
+        for shape in candidates
+            part = (;family=:translation,basis=shape,value=anchor(shape),expected=delta)
+            destination_colors(sample.before,[part]) == rule.entry_colors || continue
+            changes = [f for f in effects.effects if f.family == :translation && f.before == shape]
+            verdict = if length(changes) == 1
+                Tuple(only(changes).values) == delta
+            elseif isempty(changes) && effects.complete && isempty(effects.residual)
+                # A remaining source and absent destination are an observable non-move.
+                isnothing(after) && (after = Set(public_components(sample.after)))
+                target = [(x+delta[1],y+delta[2],c) for (x,y,c) in shape]
+                shape in after && target ∉ after || continue
+                false
+            else
+                continue
+            end
+            push!(rows,(;event=sample.event_id,before=sample.before_id,origin=part.value,color=first(shape)[3],
+                verdict,pixels=Dict(role_boundary_pixels(shape,sample.before))))
+        end
+        rows
+    end
+end
+
+function fit_role_boundary(rule,trials)
+    rows = [r for t in trials for r in role_contrasts(rule,t)]
+    positives = filter(r->r.verdict,rows)
+    length(unique(r.origin for r in positives)) >= 2 && length(unique(r.event for r in positives)) >= 2 ||
+        return nothing
+    colors = sort!(unique(r.color for r in positives))
+    negatives = filter(r->!r.verdict && r.color in colors,rows)
+    isempty(negatives) && return nothing
+    # Keep every equally consistent literal. An unseen pixel or disagreement
+    # between surviving explanations makes the new role undecided.
+    atoms = Tuple{Pixel,UInt8}[]
+    for (offset,pigment) in first(positives).pixels
+        all(r->get(r.pixels,offset,nothing) == pigment,positives) || continue
+        all(r->haskey(r.pixels,offset) && r.pixels[offset] != pigment,negatives) || continue
+        push!(atoms,(offset,pigment))
+    end
+    isempty(atoms) && return nothing
+    reads = sort!(unique([ref for r in vcat(positives,negatives) for ref in (r.before,r.event)]))
+    return (;predicate=RoleBoundary(sort!(atoms),colors,reads),support=unique(r.event for r in positives))
+end
+
 function fit_joint_condition(rule, trials, limits)
     chosen = JointTrialAssessment[]
     rows = MotionExample[]
@@ -147,6 +210,15 @@ function fit_joint_condition(rule, trials, limits)
     for i in support
         scope = chosen[i].meter_scope
         isnothing(scope) || push!(scopes,scope)
+    end
+    role = fit_role_boundary(rule,trials)
+    if !isnothing(role)
+        role_truth(i) = evaluate_predicate(role.predicate,rows[i].before,chosen[i].binding,(0,0),())
+        if all(i->role_truth(i) == proven,support) && all(i->role_truth(i) == disproven,broken)
+            condition = GuardSearch(MotionPredicate[role.predicate],unique([ids[support];setdiff(role.support,ids[broken])]),
+                ids[broken],String[],true,true,length(role.predicate.offsets))
+            return ActiveMechanism(rule,condition,ids[broken],unknowns,scopes)
+        end
     end
     if isempty(broken)
         condition = GuardSearch(MotionPredicate[],ids[support],String[],String[],true,!isempty(support),1)
@@ -182,7 +254,7 @@ end
 
 function update_joint_condition(current, rule, trial, trials, limits)
     if !isnothing(current) && isempty(current.counterexamples) && isempty(current.condition.atoms) &&
-            current.condition.complete
+            current.condition.complete && isempty(role_contrasts(rule,trial))
         evaluated = evaluate_joint_trial(rule,trial)
         isnothing(evaluated) && return current
         ref = trial.sample.event_id
@@ -263,8 +335,9 @@ function candidate_evaluation(active, before, groups, enclosure, action, history
     binding_guard = isempty(active.condition.atoms) || !active.condition.feasible ? nothing :
         part -> conjunction(active.condition.atoms,before,MotionBinding(part.basis,part.value),
             part.expected,history;transients)
+    role_condition = role_boundary_condition(active.condition)
     result = evaluate_joint_rule(rule,before,groups,enclosure,action;
-        meters,observed_click,trained_click,role_index,relative_transfer,binding_guard)
+        meters,observed_click,trained_click,role_index,relative_transfer,binding_guard,role_condition)
     assessable_binding(result) || return result
     scope = measured_scope(result.fragments)
     if !isnothing(scope) && scope ∉ active.meter_scopes
@@ -499,6 +572,9 @@ end
 
 function recovery_reads(rec, model)
     own_sources = [model.rule.training_event; model.condition.support; model.counterexamples]
+    for atom in model.condition.atoms
+        atom isa RoleBoundary && append!(own_sources,atom.reads)
+    end
     count = maximum((atom isa HistorySuffix ? length(atom.actions) : atom isa RecentAction ? 1 : 0
         for atom in model.condition.atoms);init=0)
     recent = min(count,length(rec.confirmed_refs))
@@ -521,8 +597,51 @@ function revise_observed_conditions!(knowledge,agenda,proposal,observed,limits)
     revisions = NamedTuple[]
     tests = isnothing(proposal) ? () : proposal.tests
     checked = isnothing(observed.feedback) ? () : observed.feedback.tests
-    isempty(knowledge.observed_conditions) && !any(row->row.status == :refuted,checked) && return revisions
     trial = last(knowledge.trials)
+    # Directly observed ambiguous transitions can teach which role responded
+    # even when no earlier proposal was bindable.
+    if !isnothing(observed.producer)
+        source = agenda.producers[observed.producer.key].rule
+        key = relation_condition_key(source)
+        direct = role_contrasts(source,trial)
+        if !haskey(knowledge.observed_conditions,key) && any(r->r.verdict,direct) &&
+                any(r->!r.verdict,direct)
+            learned = fit_joint_condition(source,knowledge.trials,limits)
+            if any(atom->atom isa RoleBoundary,learned.condition.atoms)
+                knowledge.observed_conditions[key] = learned
+                push!(revisions,(;producer=observed.producer.key,event=observed.event,previous=nothing,
+                    version=active_id(learned),support=learned.condition.support,excluded=learned.condition.excluded,
+                    atoms=predicate_record.(learned.condition.atoms),status=:compared_roles))
+            end
+        end
+    end
+    for (key,earlier) in collect(knowledge.observed_conditions)
+        at = findfirst(atom->atom isa RoleBoundary,earlier.condition.atoms)
+        isnothing(at) && continue
+        rows = role_contrasts(earlier.rule,trial)
+        isempty(rows) && continue
+        atom = earlier.condition.atoms[at]
+        # Unknown observations are open. A directly observed disagreement
+        # with an admissible appearance triggers re-fitting before the next step.
+        contradicted = any(rows) do r
+            r.color in atom.colors || return false
+            any(atom.offsets) do (offset,pigment)
+                haskey(r.pixels,offset) && (r.pixels[offset] == pigment) != r.verdict
+            end
+        end
+        contradicted || continue
+        updated = fit_joint_condition(earlier.rule,knowledge.trials,limits)
+        if updated.condition.feasible && !isempty(updated.condition.atoms)
+            knowledge.observed_conditions[key] = updated
+        else
+            delete!(knowledge.observed_conditions,key)
+        end
+        push!(revisions,(;producer=key,event=observed.event,previous=active_id(earlier),
+            version=haskey(knowledge.observed_conditions,key) ? active_id(updated) : nothing,
+            support=updated.condition.support,excluded=updated.condition.excluded,
+            atoms=predicate_record.(updated.condition.atoms),status=:rechecked_roles))
+    end
+    isempty(knowledge.observed_conditions) && !any(row->row.status == :refuted,checked) && return revisions
     ref = trial.sample.event_id
     observed.event == ref || error("An effect condition requires the matching confirmed trial")
     published = Set(relation_condition_key(model.rule) for model in knowledge.active)

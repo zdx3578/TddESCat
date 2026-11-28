@@ -210,7 +210,10 @@ function sequential_replay(root,selection)
                     push!(output,(;game,event=ref,before=before_ref,source=row["source"],alternatives=length(tests),
                         source_scope=isnothing(at) ? :unavailable : tests[at].scope,
                         source_status=isnothing(at) ? :untested : observed.feedback.tests[at].status,
-                        admitted,admitted_source=admitted && !isnothing(at),
+                        source_channels=isnothing(at) ? nothing : tests[at].expected,
+                        candidates=[(;t.key,t.scope,t.expected,t.projection_scope,role_boundary=any(p->get(p,:contrast_binding,false),t.fragments),
+                            pointer=[c.comparison for c in t.conditions if haskey(c,:comparison)]) for t in tests],
+                        admitted,admitted_source=admitted && !isnothing(at) && tests[at].scope in (:bound,:replicated),
                         revisions=[(;r.status,r.producer,r.event) for r in revisions]))
                 end
             end

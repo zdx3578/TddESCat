@@ -1,0 +1,901 @@
+{
+  "scope": "相同归档的13个晋级窗，每窗从空议程开始。窗口无新派发。可达指已确认公开转移构成的当前前缀图。SDK部分是受控环境，未运行正式公开游戏。",
+  "replay": {
+    "baseline_sha256": "4d16c3c8112d853f5c9ce4cdcbaa152a6ec7979db157fdc13d2295a72a8e1e1d",
+    "archive_revision": "2b546b235541b1e720296ff40b70f4cbac6f778f",
+    "baseline_replay_revision": "f563a15fd73de5331cd2d4c7867f2df415a13c3a",
+    "implementation_base": "f563a15fd73de5331cd2d4c7867f2df415a13c3a",
+    "source_sha256": {
+      "RelationUse.jl": "48f86c6e018025b95d4e98d685cf8b95e63ce223ad34c7f1ee90a85472770207",
+      "PublicFrontier.jl": "7b5b465ac0da275a1491b7ad56b6a3eface1c8a7dcfc0d370403f7389815f283",
+      "replay_relation_omissions.jl": "d66a477964b114c723cc695ac209eb70a1cd822f553b3ec1712073ce60aa5588"
+    },
+    "max_predecessor_actions": 16,
+    "grounded_frames": 707,
+    "baseline_endpoints_with_live_role": 10,
+    "baseline_endpoints_with_observed_use": 0,
+    "windows": 13,
+    "truncated_predecessor": 12,
+    "all_steps": {
+      "observations": 205,
+      "with_prior_facts": 147,
+      "new_experiments": 45,
+      "observations_with_new_experiment": 42,
+      "single_factor": 1,
+      "uncontrolled_or_joint": 44,
+      "multiple_candidates": 37,
+      "uncontrolled_pixels": 44,
+      "other_action_domains": 0,
+      "existing_confounded_comparisons": 7,
+      "prestate_offer": 0,
+      "reachable_prior_route": 0,
+      "differing_hypothetical_route": 0,
+      "differing_hypothetical_offer": 0,
+      "exact_comparisons": 0,
+      "observed_uses": 186,
+      "outcome_witnesses": 0
+    },
+    "endpoints": {
+      "observations": 13,
+      "with_prior_facts": 11,
+      "new_experiments": 2,
+      "observations_with_new_experiment": 2,
+      "single_factor": 0,
+      "uncontrolled_or_joint": 2,
+      "multiple_candidates": 1,
+      "uncontrolled_pixels": 2,
+      "other_action_domains": 0,
+      "existing_confounded_comparisons": 7,
+      "prestate_offer": 0,
+      "reachable_prior_route": 0,
+      "differing_hypothetical_route": 0,
+      "differing_hypothetical_offer": 0,
+      "exact_comparisons": 0,
+      "observed_uses": 0,
+      "outcome_witnesses": 0
+    },
+    "endpoint_traces": [
+      {
+        "game": "g50t-5849a774",
+        "level": 1,
+        "run": "v13-composed-g50t-cold-recovery",
+        "attempt": "original",
+        "first_event": "e-517e649a5798efda-c000001519",
+        "first_sha256": "0d0ed0868f9f70f62909174a207f73d06e1770ea671cb412d997d109930f0827",
+        "truncated_predecessor": true,
+        "endpoint": "e-517e649a5798efda-c000001535",
+        "endpoint_sha256": "efb9d055e7348fa779591ad62ef1f18edbae5cbb5c579cc36a73746db757d0b2",
+        "action": {
+          "id": 4
+        },
+        "grounded_frames": 151,
+        "eligible_before": 5,
+        "observed_reads": 0,
+        "public_outcome": "advancement",
+        "preparation_status": "no_observed_consumer",
+        "exact_comparisons": 0,
+        "proposed": [],
+        "confounded_comparisons": []
+      },
+      {
+        "game": "lf52-271a04aa",
+        "level": 1,
+        "run": "v13-public25-composed",
+        "attempt": "original",
+        "first_event": "e-a352d43652711467-c000000003",
+        "first_sha256": "2c800626f2ee2271900798377eeb9686cb15357f9709cf2c4721b1f6207db375",
+        "truncated_predecessor": true,
+        "endpoint": "e-a352d43652711467-c000000019",
+        "endpoint_sha256": "cc184867734cd3e513b3134ea19bf34586b98a3256556a5607d1041f3c67be10",
+        "action": {
+          "id": 6,
+          "x": 41,
+          "y": 42
+        },
+        "grounded_frames": 139,
+        "eligible_before": 0,
+        "observed_reads": 0,
+        "public_outcome": "advancement",
+        "preparation_status": "missing_producer",
+        "exact_comparisons": 0,
+        "proposed": [],
+        "confounded_comparisons": []
+      },
+      {
+        "game": "lp85-305b61c3",
+        "level": 1,
+        "run": "v13-public25-composed",
+        "attempt": "original",
+        "first_event": "e-6286746e3e5c3a88-c000000047",
+        "first_sha256": "f87a5be474bef82ca75fcaa26fe27efd6c2b65af1bd45362208e47dbe81895ed",
+        "truncated_predecessor": true,
+        "endpoint": "e-6286746e3e5c3a88-c000000063",
+        "endpoint_sha256": "ac2ad79b4ded6a9488e91ee16c06d6b981af497e07462b63d8cbd48d96940677",
+        "action": {
+          "id": 6,
+          "x": 4,
+          "y": 32
+        },
+        "grounded_frames": 18,
+        "eligible_before": 20,
+        "observed_reads": 0,
+        "public_outcome": "advancement",
+        "preparation_status": "condition_unknown",
+        "exact_comparisons": 0,
+        "proposed": [],
+        "confounded_comparisons": [
+          {
+            "comparison_event": "e-6286746e3e5c3a88-c000000054",
+            "status": "other_response",
+            "comparison_context": "257508a87591a745983a9797a2f2904bb39d2101de30e119dca40787b74480df",
+            "observed_before": "e-6286746e3e5c3a88-c000000053",
+            "prepared_before": "e-6286746e3e5c3a88-c000000062",
+            "available_added": [],
+            "available_removed": [],
+            "uncontrolled_pixels": 266,
+            "candidates": [
+              {
+                "writer_event": "e-6286746e3e5c3a88-c000000054",
+                "output_port": 18,
+                "relation": "pigment-b3aad53290266dc28a633d866a2345c63861497829e5468c1c5b53d6b2a59a5f",
+                "producer": null
+              },
+              {
+                "writer_event": "e-6286746e3e5c3a88-c000000054",
+                "output_port": 19,
+                "relation": "pigment-c6b3f4e268998c6bc743bea88761f46b0fd6373b454a05f1ab11795f01b5819e",
+                "producer": null
+              },
+              {
+                "writer_event": "e-6286746e3e5c3a88-c000000059",
+                "output_port": 18,
+                "relation": "pigment-99be44072099704d382e853bc719e5ee0a9b27094f78919a497bf2ce07fddad5",
+                "producer": null
+              },
+              {
+                "writer_event": "e-6286746e3e5c3a88-c000000059",
+                "output_port": 19,
+                "relation": "pigment-b3aad53290266dc28a633d866a2345c63861497829e5468c1c5b53d6b2a59a5f",
+                "producer": null
+              }
+            ]
+          },
+          {
+            "comparison_event": "e-6286746e3e5c3a88-c000000059",
+            "status": "other_response",
+            "comparison_context": "92c6bf61fd24299743638bc6143a7b96a63907735a08ae3215fa33f0f743e112",
+            "observed_before": "e-6286746e3e5c3a88-c000000058",
+            "prepared_before": "e-6286746e3e5c3a88-c000000062",
+            "available_added": [],
+            "available_removed": [],
+            "uncontrolled_pixels": 5,
+            "candidates": [
+              {
+                "writer_event": "e-6286746e3e5c3a88-c000000059",
+                "output_port": 2,
+                "relation": "pigment-62f06363337f256fb8c6201b0e2d3613f41dc944b2ba497aa56007e6a82266c6",
+                "producer": null
+              },
+              {
+                "writer_event": "e-6286746e3e5c3a88-c000000059",
+                "output_port": 3,
+                "relation": "pigment-b8a3ec605fa2e9d1079c5f0f3f6c8e194c5fd10da73b962e407f2d97f83c7c5d",
+                "producer": null
+              },
+              {
+                "writer_event": "e-6286746e3e5c3a88-c000000059",
+                "output_port": 4,
+                "relation": "pigment-e8ebc70e144c672d043c3416b8ddc330af45d670def2d1db37432e427f0574fd",
+                "producer": null
+              },
+              {
+                "writer_event": "e-6286746e3e5c3a88-c000000059",
+                "output_port": 5,
+                "relation": "pigment-69d8713eafb9cec62d711003ab674536f580f63b71c1cbaa48916fbb7426adfe",
+                "producer": null
+              },
+              {
+                "writer_event": "e-6286746e3e5c3a88-c000000059",
+                "output_port": 6,
+                "relation": "pigment-fecf40a591ce7516bc8b965f929265a31d84fd59b68e5b83de1b4bb8c21be148",
+                "producer": null
+              },
+              {
+                "writer_event": "e-6286746e3e5c3a88-c000000059",
+                "output_port": 7,
+                "relation": "pigment-5d4ca0be9bb70f2db27d8aba26312b086a16330716f40508152c71f42bb1527a",
+                "producer": null
+              },
+              {
+                "writer_event": "e-6286746e3e5c3a88-c000000059",
+                "output_port": 8,
+                "relation": "pigment-6c8466acdc111d9efa333b7d9f3365dab96ea18d7ebe1b9b1f5674b44ed425c2",
+                "producer": null
+              },
+              {
+                "writer_event": "e-6286746e3e5c3a88-c000000059",
+                "output_port": 9,
+                "relation": "pigment-c6b3f4e268998c6bc743bea88761f46b0fd6373b454a05f1ab11795f01b5819e",
+                "producer": null
+              },
+              {
+                "writer_event": "e-6286746e3e5c3a88-c000000059",
+                "output_port": 10,
+                "relation": "pigment-69d8713eafb9cec62d711003ab674536f580f63b71c1cbaa48916fbb7426adfe",
+                "producer": null
+              },
+              {
+                "writer_event": "e-6286746e3e5c3a88-c000000059",
+                "output_port": 11,
+                "relation": "pigment-4117ac54eb0bc915e818de46b8a14ab7d590fa18d3ac3eb02ec4ec9bac1d5315",
+                "producer": null
+              },
+              {
+                "writer_event": "e-6286746e3e5c3a88-c000000059",
+                "output_port": 12,
+                "relation": "pigment-65d1b40373fff1170d2da508a6a0b1e3d17f58afd74cbd3e1b64bfa0ab925f9e",
+                "producer": null
+              },
+              {
+                "writer_event": "e-6286746e3e5c3a88-c000000059",
+                "output_port": 13,
+                "relation": "pigment-99be44072099704d382e853bc719e5ee0a9b27094f78919a497bf2ce07fddad5",
+                "producer": null
+              },
+              {
+                "writer_event": "e-6286746e3e5c3a88-c000000059",
+                "output_port": 14,
+                "relation": "pigment-c6b3f4e268998c6bc743bea88761f46b0fd6373b454a05f1ab11795f01b5819e",
+                "producer": null
+              },
+              {
+                "writer_event": "e-6286746e3e5c3a88-c000000059",
+                "output_port": 15,
+                "relation": "pigment-74830deb7f4121fd288bb52750f86ef4246eaa48f16e8543bd57e9e69fd0f79d",
+                "producer": null
+              },
+              {
+                "writer_event": "e-6286746e3e5c3a88-c000000059",
+                "output_port": 16,
+                "relation": "pigment-65d1b40373fff1170d2da508a6a0b1e3d17f58afd74cbd3e1b64bfa0ab925f9e",
+                "producer": null
+              },
+              {
+                "writer_event": "e-6286746e3e5c3a88-c000000059",
+                "output_port": 17,
+                "relation": "pigment-69d8713eafb9cec62d711003ab674536f580f63b71c1cbaa48916fbb7426adfe",
+                "producer": null
+              },
+              {
+                "writer_event": "e-6286746e3e5c3a88-c000000059",
+                "output_port": 18,
+                "relation": "pigment-99be44072099704d382e853bc719e5ee0a9b27094f78919a497bf2ce07fddad5",
+                "producer": null
+              },
+              {
+                "writer_event": "e-6286746e3e5c3a88-c000000059",
+                "output_port": 19,
+                "relation": "pigment-b3aad53290266dc28a633d866a2345c63861497829e5468c1c5b53d6b2a59a5f",
+                "producer": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "game": "ls20-9607627b",
+        "level": 1,
+        "run": "v13-public25-composed",
+        "attempt": "original",
+        "first_event": "e-0a1ac997674cc3ca-c000000010",
+        "first_sha256": "acf08df8ca9aae28951136ba635f91ccbe243259114b462afaa1ba572bcc68a7",
+        "truncated_predecessor": true,
+        "endpoint": "e-0a1ac997674cc3ca-c000000026",
+        "endpoint_sha256": "702f528f96841dc4af5bcd3bdf39342cfa9c7ac8853d1a14776431656c6cbd04",
+        "action": {
+          "id": 1
+        },
+        "grounded_frames": 28,
+        "eligible_before": 3,
+        "observed_reads": 0,
+        "public_outcome": "advancement",
+        "preparation_status": "condition_unknown",
+        "exact_comparisons": 0,
+        "proposed": [],
+        "confounded_comparisons": [
+          {
+            "comparison_event": "e-0a1ac997674cc3ca-c000000025",
+            "status": "other_response",
+            "comparison_context": "6bd632803f02e1f8235291a80f6bbd96b31348073972fad13b70c0ee5c1ea881",
+            "observed_before": "e-0a1ac997674cc3ca-c000000024",
+            "prepared_before": "e-0a1ac997674cc3ca-c000000025",
+            "available_added": [],
+            "available_removed": [],
+            "uncontrolled_pixels": 2,
+            "candidates": [
+              {
+                "writer_event": "e-0a1ac997674cc3ca-c000000025",
+                "output_port": 1,
+                "relation": "translation-5feb60188b23440e4cad69ceea0279f402df0161fc041a1c2a156f098eb042be",
+                "producer": "6f0263f861cf55d24a8e5c1c93b9ea5dc9fe250082c12891b5bcbd147e7398af"
+              },
+              {
+                "writer_event": "e-0a1ac997674cc3ca-c000000025",
+                "output_port": 2,
+                "relation": "translation-bbec8b9ae163d40688d9058d87ee0aa4d00ad64131994b37fde423529e728fb4",
+                "producer": "6f0263f861cf55d24a8e5c1c93b9ea5dc9fe250082c12891b5bcbd147e7398af"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "game": "ls20-9607627b",
+        "level": 2,
+        "run": "v13-public25-composed",
+        "attempt": "original",
+        "first_event": "e-0a1ac997674cc3ca-c000000112",
+        "first_sha256": "c4d8d48c48dceea36368185741ebab1d087cd8b0a81ef09f65e007a5b53f9887",
+        "truncated_predecessor": true,
+        "endpoint": "e-0a1ac997674cc3ca-c000000128",
+        "endpoint_sha256": "7eb361f986e4abd35f378afd05f97a196eb7318250201b1cf92b8403ed45678f",
+        "action": {
+          "id": 2
+        },
+        "grounded_frames": 18,
+        "eligible_before": 2,
+        "observed_reads": 0,
+        "public_outcome": "advancement",
+        "preparation_status": "condition_unknown",
+        "exact_comparisons": 0,
+        "proposed": [],
+        "confounded_comparisons": [
+          {
+            "comparison_event": "e-0a1ac997674cc3ca-c000000127",
+            "status": "other_response",
+            "comparison_context": "023d974b75422827a8bf162b60e4bc2cf61f889503c3051b4cd7412152d21a1b",
+            "observed_before": "e-0a1ac997674cc3ca-c000000126",
+            "prepared_before": "e-0a1ac997674cc3ca-c000000127",
+            "available_added": [],
+            "available_removed": [],
+            "uncontrolled_pixels": 4,
+            "candidates": [
+              {
+                "writer_event": "e-0a1ac997674cc3ca-c000000127",
+                "output_port": 2,
+                "relation": "translation-a6c137a7505b5dc4bd08dafedfde3420a741468e731cc7fbd0db67a135c3df78",
+                "producer": "f63e9abea45a6cb954f3d69e866a69c99e070444bab24b4b8c74d784b4e4c08d"
+              },
+              {
+                "writer_event": "e-0a1ac997674cc3ca-c000000127",
+                "output_port": 3,
+                "relation": "translation-c9d453b54afb8fa95f974ac5886815dedb953b5c7eafa410cd166ebea14800b6",
+                "producer": "f63e9abea45a6cb954f3d69e866a69c99e070444bab24b4b8c74d784b4e4c08d"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "game": "ls20-9607627b",
+        "level": 3,
+        "run": "v13-public25-composed",
+        "attempt": "original",
+        "first_event": "e-0a1ac997674cc3ca-c000000215",
+        "first_sha256": "068d5d9f930bdd1c9f1d5457733f8ff13ac40786d49dbca7865c33900f97ac54",
+        "truncated_predecessor": true,
+        "endpoint": "e-0a1ac997674cc3ca-c000000231",
+        "endpoint_sha256": "10aa195c4eede45c8c937e9caf729fde2a371c2145a51cc427958fbb0b967203",
+        "action": {
+          "id": 2
+        },
+        "grounded_frames": 34,
+        "eligible_before": 3,
+        "observed_reads": 0,
+        "public_outcome": "advancement",
+        "preparation_status": "no_observed_consumer",
+        "exact_comparisons": 0,
+        "proposed": [
+          {
+            "context": "d03c25a66ef82cff34ef6eed58e6496310dbbf36db93763844bce3d6c84b4169",
+            "action": {
+              "id": 2
+            },
+            "candidates": [
+              {
+                "writer_event": "e-0a1ac997674cc3ca-c000000230",
+                "output_port": 1,
+                "relation": "translation-2f3ea688a7692644f8de92810b2f311b43439aadabf525e0e46f85ecbdd2bfdd",
+                "producer": "268ec03a063d840db3a61d339d66bbdfe0c84a04571f4a817860cfd37b98be89"
+              },
+              {
+                "writer_event": "e-0a1ac997674cc3ca-c000000230",
+                "output_port": 2,
+                "relation": "translation-1d21c97636e06d962f856afa86808e3b1afcda0a019a6eb67fad4d8841e53aaa",
+                "producer": "268ec03a063d840db3a61d339d66bbdfe0c84a04571f4a817860cfd37b98be89"
+              }
+            ],
+            "isolated": false,
+            "observed_before": "e-0a1ac997674cc3ca-c000000229",
+            "prepared_before": "e-0a1ac997674cc3ca-c000000230",
+            "uncontrolled_pixels": 4,
+            "available_added": [],
+            "available_removed": []
+          }
+        ],
+        "confounded_comparisons": []
+      },
+      {
+        "game": "ls20-9607627b",
+        "level": 4,
+        "run": "v13-public25-composed",
+        "attempt": "original",
+        "first_event": "e-0a1ac997674cc3ca-c000000301",
+        "first_sha256": "1fff64205c02fdd5d82fc936ebdad3d49b44194a1e6e4ae87adb1dc8ce4c0c0d",
+        "truncated_predecessor": true,
+        "endpoint": "e-0a1ac997674cc3ca-c000000317",
+        "endpoint_sha256": "a01d40a6119b2720e5b85689053f4814d3576c100edd71ef7386d29aee31ba37",
+        "action": {
+          "id": 3
+        },
+        "grounded_frames": 50,
+        "eligible_before": 2,
+        "observed_reads": 0,
+        "public_outcome": "advancement",
+        "preparation_status": "condition_unknown",
+        "exact_comparisons": 0,
+        "proposed": [],
+        "confounded_comparisons": [
+          {
+            "comparison_event": "e-0a1ac997674cc3ca-c000000316",
+            "status": "other_response",
+            "comparison_context": "9c02dbea09d17e122d915da14465c5cf994459a73503ae096df417e72229a81e",
+            "observed_before": "e-0a1ac997674cc3ca-c000000315",
+            "prepared_before": "e-0a1ac997674cc3ca-c000000316",
+            "available_added": [],
+            "available_removed": [],
+            "uncontrolled_pixels": 2,
+            "candidates": [
+              {
+                "writer_event": "e-0a1ac997674cc3ca-c000000316",
+                "output_port": 2,
+                "relation": "translation-c80e6584f97869182cc30396d895943a96e03b936c5b69c60c2ea305d3062653",
+                "producer": "4115aea95326d1c6db3bb95cbd9d60eadfd7df6fb2289592ba3c6403eab774b0"
+              },
+              {
+                "writer_event": "e-0a1ac997674cc3ca-c000000316",
+                "output_port": 3,
+                "relation": "translation-b58096fd6eb527495f1fafcb326125b4aa602ae9b76c00de3fe33ae9b588cf44",
+                "producer": "4115aea95326d1c6db3bb95cbd9d60eadfd7df6fb2289592ba3c6403eab774b0"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "game": "ls20-9607627b",
+        "level": 5,
+        "run": "v13-public25-composed",
+        "attempt": "original",
+        "first_event": "e-0a1ac997674cc3ca-c000000368",
+        "first_sha256": "0efd1bc3e34dfccfec4fb71242d1d88aad4da084846411a9da6b920eafb407ee",
+        "truncated_predecessor": true,
+        "endpoint": "e-0a1ac997674cc3ca-c000000384",
+        "endpoint_sha256": "391dc9589eca87388f2fa6d241a46d60231150fb2f9a7be37240f1066e50b825",
+        "action": {
+          "id": 1
+        },
+        "grounded_frames": 34,
+        "eligible_before": 1,
+        "observed_reads": 0,
+        "public_outcome": "advancement",
+        "preparation_status": "no_observed_consumer",
+        "exact_comparisons": 0,
+        "proposed": [],
+        "confounded_comparisons": []
+      },
+      {
+        "game": "ls20-9607627b",
+        "level": 6,
+        "run": "v13-public25-composed",
+        "attempt": "original",
+        "first_event": "e-0a1ac997674cc3ca-c000000482",
+        "first_sha256": "5e0c8da3661c33844f53bb817dd6cf4a568f3d4f8a00839dd1ce4a148d904f95",
+        "truncated_predecessor": true,
+        "endpoint": "e-0a1ac997674cc3ca-c000000498",
+        "endpoint_sha256": "cc9270b3e161e3aaeb9787b06ae0d0124fb43680381ee03b03cfe1893a779b96",
+        "action": {
+          "id": 2
+        },
+        "grounded_frames": 34,
+        "eligible_before": 0,
+        "observed_reads": 0,
+        "public_outcome": "advancement",
+        "preparation_status": "missing_producer",
+        "exact_comparisons": 0,
+        "proposed": [],
+        "confounded_comparisons": []
+      },
+      {
+        "game": "ls20-9607627b",
+        "level": 7,
+        "run": "v13-public25-composed",
+        "attempt": "original",
+        "first_event": "e-0a1ac997674cc3ca-c000000936",
+        "first_sha256": "2e18afd2b331cf4c34c1ef13fabee6089206194816f319a5a37d2d5d9b18a23a",
+        "truncated_predecessor": true,
+        "endpoint": "e-0a1ac997674cc3ca-c000000952",
+        "endpoint_sha256": "5ebe1dd0efb99e17ed2d4af2d2efed78499946266ee5b5b239f0351548d8c485",
+        "action": {
+          "id": 2
+        },
+        "grounded_frames": 49,
+        "eligible_before": 4,
+        "observed_reads": 0,
+        "public_outcome": "win",
+        "preparation_status": "condition_unknown",
+        "exact_comparisons": 0,
+        "proposed": [],
+        "confounded_comparisons": [
+          {
+            "comparison_event": "e-0a1ac997674cc3ca-c000000951",
+            "status": "other_response",
+            "comparison_context": "db7463af6127007205bc5804666014ac588a56c8784197ec097b2b286151face",
+            "observed_before": "e-0a1ac997674cc3ca-c000000950",
+            "prepared_before": "e-0a1ac997674cc3ca-c000000951",
+            "available_added": [],
+            "available_removed": [],
+            "uncontrolled_pixels": 278,
+            "candidates": [
+              {
+                "writer_event": "e-0a1ac997674cc3ca-c000000951",
+                "output_port": 1,
+                "relation": "translation-a6c137a7505b5dc4bd08dafedfde3420a741468e731cc7fbd0db67a135c3df78",
+                "producer": "ec58ee02ae3930b1efd60c3b1206943f7ca49237d524a1f8993e20296038a4a3"
+              },
+              {
+                "writer_event": "e-0a1ac997674cc3ca-c000000951",
+                "output_port": 2,
+                "relation": "translation-c9d453b54afb8fa95f974ac5886815dedb953b5c7eafa410cd166ebea14800b6",
+                "producer": "ec58ee02ae3930b1efd60c3b1206943f7ca49237d524a1f8993e20296038a4a3"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "game": "r11l-aa269680",
+        "level": 1,
+        "run": "v13-public25-composed",
+        "attempt": "original",
+        "first_event": "e-d819c968f967fd93-c000000348",
+        "first_sha256": "d53aa1f08053b7abf72d225312ad7037b4cc8e50a98e95a67eac22c0a24cd1fc",
+        "truncated_predecessor": true,
+        "endpoint": "e-d819c968f967fd93-c000000364",
+        "endpoint_sha256": "a4bd6964741355b153fbd3031b25513eaf5587bab6e4ca8fa1c782ad6483baca",
+        "action": {
+          "id": 6,
+          "x": 56,
+          "y": 16
+        },
+        "grounded_frames": 51,
+        "eligible_before": 2,
+        "observed_reads": 0,
+        "public_outcome": "advancement",
+        "preparation_status": "no_observed_consumer",
+        "exact_comparisons": 0,
+        "proposed": [],
+        "confounded_comparisons": []
+      },
+      {
+        "game": "sp80-0ee2d095",
+        "level": 1,
+        "run": "v13-composed-cold-recovery-transport-later",
+        "attempt": "original",
+        "first_event": "e-e170ef8a0fa719a3-c000000498",
+        "first_sha256": "8f71e4341fe1c83fdaa3471ed91d28444dc2046fd67468f7d5092dc2a4d0c175",
+        "truncated_predecessor": false,
+        "endpoint": "e-e170ef8a0fa719a3-c000000511",
+        "endpoint_sha256": "019b4970509452aafc9837db385bbde54e73cfe044a2bd0b5cf856a24da5ad45",
+        "action": {
+          "id": 5
+        },
+        "grounded_frames": 83,
+        "eligible_before": 1,
+        "observed_reads": 0,
+        "public_outcome": "advancement",
+        "preparation_status": "no_observed_consumer",
+        "exact_comparisons": 0,
+        "proposed": [
+          {
+            "context": "b4ee05583cba2e9a35f518f0673f1d4b0d9f93e01e4e09c4d3efd4ef70e94e34",
+            "action": {
+              "id": 5
+            },
+            "candidates": [
+              {
+                "writer_event": "e-e170ef8a0fa719a3-c000000510",
+                "output_port": 1,
+                "relation": "translation-fef5d998a82acc4452fc2ef3c3692c81123dd15e499ac790440bcde5418732d2",
+                "producer": "e9a57b9a46dc0f061e4b33d9ede2fed714dd06f8ca6b2e1dcf318d881452f659"
+              }
+            ],
+            "isolated": false,
+            "observed_before": "e-e170ef8a0fa719a3-c000000509",
+            "prepared_before": "e-e170ef8a0fa719a3-c000000510",
+            "uncontrolled_pixels": 3,
+            "available_added": [],
+            "available_removed": []
+          }
+        ],
+        "confounded_comparisons": []
+      },
+      {
+        "game": "vc33-9851e02b",
+        "level": 1,
+        "run": "v13-public25-composed",
+        "attempt": "original",
+        "first_event": "e-25eff4a173823bff-c000002942",
+        "first_sha256": "2a6ec0fbfad139c579a9696b517cb79d7b810cceac8c20fce6451ec869b46556",
+        "truncated_predecessor": true,
+        "endpoint": "e-25eff4a173823bff-c000002958",
+        "endpoint_sha256": "c9825e20c514072a4ca7b0fbc7305e5eed657c2f3fba5f6797fcbf39d190613c",
+        "action": {
+          "id": 6,
+          "x": 61,
+          "y": 33
+        },
+        "grounded_frames": 18,
+        "eligible_before": 2,
+        "observed_reads": 0,
+        "public_outcome": "advancement",
+        "preparation_status": "condition_unknown",
+        "exact_comparisons": 0,
+        "proposed": [],
+        "confounded_comparisons": [
+          {
+            "comparison_event": "e-25eff4a173823bff-c000002952",
+            "status": "other_response",
+            "comparison_context": "702ed6cca3e8922b8e0eef376cb51ab15f51af0802008cb5784f260bc63511a1",
+            "observed_before": "e-25eff4a173823bff-c000002951",
+            "prepared_before": "e-25eff4a173823bff-c000002957",
+            "available_added": [],
+            "available_removed": [],
+            "uncontrolled_pixels": 219,
+            "candidates": [
+              {
+                "writer_event": "e-25eff4a173823bff-c000002952",
+                "output_port": 1,
+                "relation": "translation-9c6229b58af53747ca342176334fc3afc4ae3e79714268218c27160a125660a0",
+                "producer": "7e56e80507e590e88f939e6d7fc442571f7da826ddcfcbb3a6bff380a15c4f00"
+              },
+              {
+                "writer_event": "e-25eff4a173823bff-c000002952",
+                "output_port": 2,
+                "relation": "translation-ddc71b5d6e391c626e1d6be5af26c31c81abcf56a67c84a9b5fc24d57f8484b9",
+                "producer": "7e56e80507e590e88f939e6d7fc442571f7da826ddcfcbb3a6bff380a15c4f00"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "controlled_sdk": {
+    "mode": "partial-omission",
+    "solver_fixture": "tests/julia/partial_omission_public.jl",
+    "independent_checker": "tests/bench/check_unified_relations.py::verify(partial-omission)",
+    "checked_events": [
+      "e-91c20c24fbad0e04-c000000003",
+      "e-91c20c24fbad0e04-c000000004",
+      "e-91c20c24fbad0e04-c000000006",
+      "e-91c20c24fbad0e04-c000000008"
+    ],
+    "confirmed": [
+      {
+        "event_id": "e-91c20c24fbad0e04-c000000002",
+        "before_ref": null,
+        "action": {
+          "id": 0
+        },
+        "response_blob": "cfc4d65c9814e5d79a9313afd2ba4863814aa6b8f51248d4f721ead7e7a49354",
+        "frame_count": 1
+      },
+      {
+        "event_id": "e-91c20c24fbad0e04-c000000003",
+        "before_ref": "e-91c20c24fbad0e04-c000000002",
+        "action": {
+          "id": 1
+        },
+        "response_blob": "0ad791248623d52e90854da547d1d9d1eeb349f6e96d79332bf94974195d4632",
+        "frame_count": 1
+      },
+      {
+        "event_id": "e-91c20c24fbad0e04-c000000004",
+        "before_ref": "e-91c20c24fbad0e04-c000000003",
+        "action": {
+          "id": 6,
+          "x": 44,
+          "y": 40
+        },
+        "response_blob": "f57cbd52038b16571687240ac588bd146c6f2906f99b1e743099d079395c6739",
+        "frame_count": 1
+      },
+      {
+        "event_id": "e-91c20c24fbad0e04-c000000005",
+        "before_ref": "e-91c20c24fbad0e04-c000000004",
+        "action": {
+          "id": 0
+        },
+        "response_blob": "e3f059e643a6c32dff5985d6c5069e3b34e2a812a58919660ce4ed143c5f6b33",
+        "frame_count": 1
+      },
+      {
+        "event_id": "e-91c20c24fbad0e04-c000000006",
+        "before_ref": "e-91c20c24fbad0e04-c000000005",
+        "action": {
+          "id": 6,
+          "x": 44,
+          "y": 40
+        },
+        "response_blob": "78c9239a89e5fc9d0fd714d1170cc621dff54356bcb4d644c43c26c9be241fb3",
+        "frame_count": 1
+      },
+      {
+        "event_id": "e-91c20c24fbad0e04-c000000007",
+        "before_ref": "e-91c20c24fbad0e04-c000000006",
+        "action": {
+          "id": 1
+        },
+        "response_blob": "0ad791248623d52e90854da547d1d9d1eeb349f6e96d79332bf94974195d4632",
+        "frame_count": 1
+      },
+      {
+        "event_id": "e-91c20c24fbad0e04-c000000008",
+        "before_ref": "e-91c20c24fbad0e04-c000000007",
+        "action": {
+          "id": 6,
+          "x": 44,
+          "y": 40
+        },
+        "response_blob": "f57cbd52038b16571687240ac588bd146c6f2906f99b1e743099d079395c6739",
+        "frame_count": 1
+      }
+    ],
+    "ordinary_action": {
+      "id": 1
+    },
+    "chosen": {
+      "id": 6,
+      "x": 44,
+      "y": 40
+    },
+    "intent": "test_preparation_omission",
+    "historical_basis": [
+      {
+        "writer": 1,
+        "writer_event": "e-91c20c24fbad0e04-c000000003",
+        "kind": "role_support",
+        "producer": "ad61ae389b19d6efa8abaf18453342e9904b4afc025cf0980d6b21de417c038d",
+        "relation": "pigment-c7bd097e875c35a80eca97ff6a2d1ad9ebcc07f13ab281b464c15423b5ba3115",
+        "output_port": 1,
+        "action": null,
+        "input_port": 0,
+        "usage": "omission_test",
+        "comparison": 0,
+        "tested_producer": null,
+        "since": 1,
+        "through": 1,
+        "reads": [
+          "e-91c20c24fbad0e04-c000000002",
+          "e-91c20c24fbad0e04-c000000003",
+          "e-91c20c24fbad0e04-c000000004"
+        ],
+        "scope": "historical_contrast",
+        "baseline": "e-91c20c24fbad0e04-c000000004"
+      },
+      {
+        "writer": 1,
+        "writer_event": "e-91c20c24fbad0e04-c000000003",
+        "kind": "role_support",
+        "producer": "ad61ae389b19d6efa8abaf18453342e9904b4afc025cf0980d6b21de417c038d",
+        "relation": "pigment-e13eef499c1ebd110a977792b563ff92a37b71a05a6c48a3c0a1dbbbb7418a09",
+        "output_port": 2,
+        "action": null,
+        "input_port": 0,
+        "usage": "omission_test",
+        "comparison": 0,
+        "tested_producer": null,
+        "since": 1,
+        "through": 1,
+        "reads": [
+          "e-91c20c24fbad0e04-c000000002",
+          "e-91c20c24fbad0e04-c000000003",
+          "e-91c20c24fbad0e04-c000000004"
+        ],
+        "scope": "historical_contrast",
+        "baseline": "e-91c20c24fbad0e04-c000000004"
+      }
+    ],
+    "first_outcome": "win",
+    "omission_feedback": {
+      "status": "changed_to_no_effect",
+      "writer": 1,
+      "consumer": "e-91c20c24fbad0e04-c000000004",
+      "baseline_effects": 0,
+      "candidates": [
+        {
+          "writer": 1,
+          "output_port": 1,
+          "producer": "ad61ae389b19d6efa8abaf18453342e9904b4afc025cf0980d6b21de417c038d",
+          "relation": "pigment-c7bd097e875c35a80eca97ff6a2d1ad9ebcc07f13ab281b464c15423b5ba3115"
+        },
+        {
+          "writer": 1,
+          "output_port": 2,
+          "producer": "ad61ae389b19d6efa8abaf18453342e9904b4afc025cf0980d6b21de417c038d",
+          "relation": "pigment-e13eef499c1ebd110a977792b563ff92a37b71a05a6c48a3c0a1dbbbb7418a09"
+        }
+      ],
+      "uncontrolled": {
+        "pixel_spans": [
+          [
+            28,
+            27,
+            27,
+            0,
+            8
+          ]
+        ],
+        "available_added": [],
+        "available_removed": [],
+        "observed_before": "e-91c20c24fbad0e04-c000000002",
+        "prepared_before": "e-91c20c24fbad0e04-c000000003"
+      },
+      "isolated": false
+    },
+    "repeat_result": {
+      "index": 5,
+      "result": "win",
+      "preparation_status": "condition_unknown",
+      "event": "e-91c20c24fbad0e04-c000000008",
+      "before": "e-91c20c24fbad0e04-c000000007",
+      "attempt": 3,
+      "level": 0,
+      "preparation": null,
+      "requirements": [],
+      "dependency": null,
+      "relationship": null,
+      "local_effects_complete": true
+    }
+  },
+  "index_probe": {
+    "scope": "ls20 同一150回执前缀，Julia单进程预热后重复3次；区域和效果已预计算，observer仅统计 observe_relations! 内部。",
+    "samples": [
+      {
+        "writes": 288,
+        "edges": 277,
+        "receipts": 150,
+        "observer_seconds": 0.050562913,
+        "fact_index_seconds": 0.005472882,
+        "other_observer_seconds": 0.045090031
+      },
+      {
+        "writes": 288,
+        "edges": 277,
+        "receipts": 150,
+        "observer_seconds": 0.050906139,
+        "fact_index_seconds": 0.005609021,
+        "other_observer_seconds": 0.045297118
+      },
+      {
+        "writes": 288,
+        "edges": 277,
+        "receipts": 150,
+        "observer_seconds": 0.05152263,
+        "fact_index_seconds": 0.005520345,
+        "other_observer_seconds": 0.046002285
+      }
+    ]
+  }
+}

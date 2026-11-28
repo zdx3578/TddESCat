@@ -106,7 +106,9 @@ def backend_receipts(public):
         counts["statistical_dispatch_changes"] += (
             isinstance(obligation, dict) and obligation.get("circuit") is not None
         )
-        if isinstance(obligation, dict) and (history := obligation.get("history")):
+        history = obligation.get("history") if isinstance(obligation, dict) else None
+        # Concrete experiments also quote their observed action prefix under "history".
+        if isinstance(history, dict) and isinstance(history.get("changed_action"), bool):
             counts["history_dispatches"] += 1
             counts["history_dispatch_changes"] += history["changed_action"]
     return dict(counts)

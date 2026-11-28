@@ -307,8 +307,8 @@ function destination_colors(frame,movers)
     return sort!(unique(UInt8[frame[y+1,x+1] for (x,y) in setdiff(destination,prior)]))
 end
 
-function joint_motion_fragments(rule,movers,frame,groups,enclosure,index,guard)
-    rows = motion_role_bindings(rule,movers,groups,enclosure,index)
+function joint_motion_fragments(rule,movers,frame,groups,enclosure,index,guard;
+                                rows=motion_role_bindings(rule,movers,groups,enclosure,index))
     isempty(rows) && return nothing
     fragments = [[motion_fragment(rule.effects[id],shape,index,true) for (id,shape) in zip(movers,row)] for row in rows]
     length(rows) == 1 && return any(isnothing,only(fragments)) ? nothing : only(fragments)
@@ -339,7 +339,10 @@ function joint_motion_fragments(rule,movers,frame,groups,enclosure,index,guard)
     alternatives = Tuple(sort!([isnothing(c) ? (:outside,) : Tuple(Int.(c)) for c in colors];by=repr))
     layout = Tuple(sort!([(Tuple(anchor.(row)),isnothing(c) ? nothing : Tuple(c))
         for (row,c) in zip(rows,colors)];by=first))
-    return [merge(part,(;entry_alternatives=alternatives,rival_layout=layout)) for part in fragments[only(accepted)]]
+    rivals = length(movers) == 1 ? [(support=only(row),bounds=(extrema(first,only(row))...,
+        extrema(cell->cell[2],only(row))...)) for row in rows] : nothing
+    return [merge(part,(;entry_alternatives=alternatives,rival_layout=layout,rival_regions=rivals))
+        for part in fragments[only(accepted)]]
 end
 
 visible_support(frame,visibility) = all(cell -> checkbounds(Bool,frame,cell[2]+1,cell[1]+1) &&
@@ -415,7 +418,7 @@ end
 click_role_signature(binding,point) = merge(binding,(;click=relative_click(point,binding.origin,binding.unit)))
 
 function evaluate_joint_rule(rule, before, groups, enclosure, action; meters=(), relative_transfer=false,
-                             observed_click=nothing, trained_click=nothing,role_index=nothing,binding_guard=nothing)
+                             observed_click=nothing, trained_click=nothing,role_index=nothing,binding_guard=nothing,role_condition=nothing)
     clicked = nothing
     support = nothing
     relative = false
@@ -446,7 +449,16 @@ function evaluate_joint_rule(rule, before, groups, enclosure, action; meters=(),
         fill(nothing,length(rule.effects))
     fragments = Union{Nothing,NamedTuple}[result_model(effect,before,groups,enclosure,action;meters,clicked,position,shift,role_index)
         for (effect,position) in zip(rule.effects,positions)]
-    if !relative && any(isnothing,fragments)
+    if !isnothing(role_condition)
+        model = only(rule.effects)
+        domain = model.enclosed ? [pair.target for pair in enclosure] : groups
+        # Color rebinding stays within directly witnessed appearances and geometry.
+        shapes = [s for s in domain if length(s) == length(model.template) &&
+            position_offsets(s) == position_offsets(model.template)]
+        rows = [[s] for s in shapes]
+        bound = joint_motion_fragments(rule,[1],before,groups,enclosure,role_index,binding_guard;rows)
+        fragments[1] = isnothing(bound) ? nothing : merge(only(bound),(;contrast_binding=true))
+    elseif !relative && any(isnothing,fragments)
         movers = findall(effect->effect.family == :translation,rule.effects)
         if any(i->isnothing(fragments[i]),movers)
             bound = joint_motion_fragments(rule,movers,before,groups,enclosure,role_index,binding_guard)
@@ -546,8 +558,19 @@ function measure_joint(choice, after;effects=nothing,groups=nothing)
             corresponding = if get(part,:relative,false)
                 destination = part.value .+ part.expected
                 # Other identical supports do not certify that the bound one moved.
-                at_origin = model_binding(model,groups,targets;position=part.value)
-                at_target = model_binding(model,groups,targets;position=destination)
+                if get(part,:contrast_binding,false)
+                    domain = model.enclosed ? targets : groups
+                    template = shape_template(part.basis)
+                    matched = [shape for shape in domain if length(shape) == length(template) &&
+                        shape_template(shape) == template]
+                    at_origin = findfirst(shape->anchor(shape) == part.value,matched)
+                    at_target = findfirst(shape->anchor(shape) == destination,matched)
+                    at_origin = isnothing(at_origin) ? nothing : matched[at_origin]
+                    at_target = isnothing(at_target) ? nothing : matched[at_target]
+                else
+                    at_origin = model_binding(model,groups,targets;position=part.value)
+                    at_target = model_binding(model,groups,targets;position=destination)
+                end
                 isnothing(at_origin) && !isnothing(at_target) && at_target in remaining ?
                     at_target : !isnothing(at_origin) && isnothing(at_target) ? at_origin : nothing
             else

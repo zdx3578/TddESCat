@@ -38,11 +38,26 @@ const CLICK_TARGET = MODE == "role-outcome" || FAILED_COMPARISON
             reopen()
         end
         initial_action = REBOUND_EFFECT ? TC.click_action((9,11)) : Dict("id"=>5)
+        omissions = String[]
+        if MODE=="outcome-relation-chain"
+            dispatch(initial_action)
+            without_second = dispatch(target)
+            reopen()
+            dispatch(Dict("id"=>7))
+            without_first = dispatch(target)
+            @test !without_first.reached.advanced && !without_second.reached.advanced
+            append!(omissions,[without_first.event,without_second.event])
+            reopen()
+        end
         preparation = dispatch(initial_action)
         second_source = MODE == "outcome-relation-chain" ? dispatch(Dict("id"=>7)) : nothing
         progress = dispatch(target)
         @test rec.observation.levels_completed == 1
-        @test progress.public_outcome.relationship.comparison == comparison.event
+        if isempty(omissions)
+            @test progress.public_outcome.relationship.comparison == comparison.event
+        else
+            @test progress.public_outcome.relationship.comparisons == omissions
+        end
         @test progress.public_outcome.relationship.preparation == preparation.event
         omitted_live = nothing
         rebound = CLICK_TARGET ? TC.click_action((39,11)) : target
@@ -119,7 +134,7 @@ const CLICK_TARGET = MODE == "role-outcome" || FAILED_COMPARISON
         @test rec.observation.state == "WIN" && rec.observation.levels_completed == 2
         @test close_scorecard!(rec)["completion"] == "confirmed"
         TC.atomic_json(TC.store_path(store,MODE * ".json"),
-            (;comparison,preparation,second_source,progress,setup=(;setup.task,setup.baseline,effect),
+            (;comparison,omissions,preparation,second_source,progress,setup=(;setup.task,setup.baseline,effect),
                 additional,appearance_witnesses,omitted_live,follow=(;follow.task,win)))
         @test last(recover_run(store)).event["event_id"] == win.event
     end

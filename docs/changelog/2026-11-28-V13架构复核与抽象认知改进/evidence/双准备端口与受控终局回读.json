@@ -1,0 +1,253 @@
+{
+  "范围": "三关受控公开 SDK 环境。前两关给定训练干预，第三关两个远端准备的重新绑定、事前读取与目标点击由学得程序决定。真实公开游戏的通关收益尚待对照。",
+  "基线提交": "f563a15fd73de5331cd2d4c7867f2df415a13c3a",
+  "复现命令": [
+    "mkdir -p .runtime/multi-preparation-check",
+    ".venv/bin/python -m tests.bench.check_unified_relations --case config/bench_server.toml \"$PWD/.runtime/multi-preparation-check\" multi-preparation-policy 998"
+  ],
+  "程序发布": {
+    "publication": "085a10700c73c0cfe959b24ab687a2428bca9c8346212955a7c6b54209acbd13",
+    "definition": "lib_9b76399a0273b203cdf4a404ad430c6f405c31f378b683a8e748af726e3fd414",
+    "depth": 1,
+    "training_event_refs": 16,
+    "relative_writer_slots": [
+      [
+        2,
+        1,
+        false,
+        []
+      ],
+      [
+        1,
+        1,
+        false,
+        []
+      ]
+    ]
+  },
+  "公共回执对照": [
+    {
+      "outcome": {
+        "event": "e-0263097a1434e44e-c000000011",
+        "action": {
+          "id": 6,
+          "x": 9,
+          "y": 11
+        },
+        "response_sha256": "935c40b4226a8fcae2710817441de3f6274609a145e5e8e2bacbecd04ab37a8d",
+        "completed_levels": 1,
+        "state": "NOT_FINISHED"
+      },
+      "omissions": [
+        {
+          "event": "e-0263097a1434e44e-c000000007",
+          "action": {
+            "id": 6,
+            "x": 9,
+            "y": 11
+          },
+          "response_sha256": "ef5aa1f761d5fa3686c967b4eb8fb75579121a2e71af15faa1bc9bb08e65754c",
+          "completed_levels": 0,
+          "state": "NOT_FINISHED"
+        },
+        {
+          "event": "e-0263097a1434e44e-c000000004",
+          "action": {
+            "id": 6,
+            "x": 9,
+            "y": 11
+          },
+          "response_sha256": "b0e4489e79ee5d4c7fe65ddc6ed891edb1a502beaa660c3083265b9893fee591",
+          "completed_levels": 0,
+          "state": "NOT_FINISHED"
+        }
+      ]
+    },
+    {
+      "outcome": {
+        "event": "e-0263097a1434e44e-c000000020",
+        "action": {
+          "id": 6,
+          "x": 39,
+          "y": 11
+        },
+        "response_sha256": "4ceae776a4c83626aa5099b0105d7e1dca0fcb43e06ee0ca8ec7b0ce0a5dbeaf",
+        "completed_levels": 2,
+        "state": "NOT_FINISHED"
+      },
+      "omissions": [
+        {
+          "event": "e-0263097a1434e44e-c000000016",
+          "action": {
+            "id": 6,
+            "x": 39,
+            "y": 11
+          },
+          "response_sha256": "75e2b4345d6432a52b28f3bbe8bafb0c1aee475facb015d5167934311209a4bf",
+          "completed_levels": 1,
+          "state": "NOT_FINISHED"
+        },
+        {
+          "event": "e-0263097a1434e44e-c000000013",
+          "action": {
+            "id": 6,
+            "x": 39,
+            "y": 11
+          },
+          "response_sha256": "c687ccaaccf33c2602d6d6e550cfbe9c717a52390fb0b69bceb3d07f53ea1949",
+          "completed_levels": 1,
+          "state": "NOT_FINISHED"
+        }
+      ]
+    }
+  ],
+  "第三关准备": [
+    {
+      "writer": "e-0263097a1434e44e-c000000021",
+      "port": 1,
+      "usage": "omission_contrast",
+      "support": "26ecdff03d5dd0c2984f65ecbceb3ad597e2ff43c49e11e90c3d3618dc175a3f",
+      "event": "e-0263097a1434e44e-c000000021",
+      "action": {
+        "id": 5
+      },
+      "response_sha256": "a3faec8e677d90381800e76e1e540d6074fa5802c7def97c7a999f8bd1a74c0d",
+      "completed_levels": 2,
+      "state": "NOT_FINISHED",
+      "binding_scope": "unverified",
+      "prediction": {
+        "guard_truth": "unknown",
+        "predicted_values": {},
+        "created_before_command": {
+          "command_id": "c000000021",
+          "sequence": 21
+        },
+        "reads": 17
+      }
+    },
+    {
+      "writer": "e-0263097a1434e44e-c000000022",
+      "port": 1,
+      "usage": "omission_contrast",
+      "support": "1de53571fd98a7557ff54658645b5adb9300cea06037e6cb4388153e9e006c3e",
+      "event": "e-0263097a1434e44e-c000000022",
+      "action": {
+        "id": 7
+      },
+      "response_sha256": "2dc45304b09fe3c9b7873b4c36727151ee677a1fdaf9f4f1d659a05f472c8a0a",
+      "completed_levels": 2,
+      "state": "NOT_FINISHED",
+      "binding_scope": "unverified",
+      "prediction": {
+        "guard_truth": "unknown",
+        "predicted_values": {},
+        "created_before_command": {
+          "command_id": "c000000022",
+          "sequence": 22
+        },
+        "reads": 19
+      }
+    }
+  ],
+  "第三关结果": {
+    "event": "e-0263097a1434e44e-c000000023",
+    "action": {
+      "id": 6,
+      "x": 24,
+      "y": 11
+    },
+    "response_sha256": "2ccc518a77c336676654f90cb53603cf5adf601c841942951ecfea97206b7369",
+    "completed_levels": 3,
+    "state": "WIN",
+    "goal_scope": "hypothesis",
+    "prediction": {
+      "guard_truth": "unknown",
+      "predicted_values": {},
+      "created_before_command": {
+        "command_id": "c000000023",
+        "sequence": 23
+      },
+      "reads": 18
+    }
+  },
+  "独立回读": {
+    "verified": true,
+    "assertions_julia": 47,
+    "程序外检查": [
+      "四次省略对照与对应正例的动作、绑定相同，每次恰好只相差一个2×2远端角色。",
+      "从两个实时写者的四个变化像素各自重建具体着色角色，核对写者、端口、SHA-256及目标预测读取。",
+      "最后一关两次准备的条件仍未知，目标事前无必然晋级预测。最后一帧回执为WIN，完成数为3。"
+    ]
+  },
+  "普通结果续步回归": {
+    "样本": "内存内构造公开帧与回执",
+    "命令": "julia --project=julia/TddESCat tests/julia/outcome_preparation_continuity.jl",
+    "通过": 23,
+    "正常双准备目标读取": [
+      "live-a",
+      "live-b"
+    ],
+    "第二步中间帧打断并复原第一角色": {
+      "第二步局部结果": "established",
+      "第一角色连续性": "unknown",
+      "允许原计划目标续步": false
+    },
+    "经训练与当前共同见证的角色改写后读取": [
+      "live-b"
+    ]
+  },
+  "普通结果续步SDK": {
+    "outcome-relation-chain": {
+      "julia_assertions": 40,
+      "independent_verifier": "passed",
+      "terminal": "WIN",
+      "levels_completed": 2,
+      "terminal_response_sha256": "a4e12251c459ceb3ffc88362c1c8d79cba8b11f84c8f6f900e46780bbd28e05d",
+      "confirmed_role_reads": [
+        {
+          "writer": "e-095a719d91b11a79-c000000013",
+          "port": 1,
+          "usage": "outcome_preparation",
+          "support": "26ecdff03d5dd0c2984f65ecbceb3ad597e2ff43c49e11e90c3d3618dc175a3f"
+        },
+        {
+          "writer": "e-095a719d91b11a79-c000000014",
+          "port": 1,
+          "usage": "outcome_preparation",
+          "support": "1de53571fd98a7557ff54658645b5adb9300cea06037e6cb4388153e9e006c3e"
+        }
+      ]
+    },
+    "outcome-role-equivalence": {
+      "julia_assertions": 34,
+      "independent_verifier": "passed",
+      "terminal": "WIN",
+      "levels_completed": 2,
+      "terminal_response_sha256": "b6848aee298d31f2dcaf53a810803ebf8bd21a8e67f32a9ac8547d277a1c0957",
+      "confirmed_role_reads": [
+        {
+          "writer": "e-901148207d5e8ee1-c000000008",
+          "port": 1,
+          "usage": "outcome_preparation",
+          "support": "b5a5564718847f3737c4140202ec0297e7cd57d10f52966045bfe0cb534e56ee"
+        }
+      ]
+    },
+    "outcome-chain": {
+      "范围": "旧版连续公开许可变更路径，在线学习自动运行",
+      "independent_verifier": "passed",
+      "terminal": "WIN",
+      "levels_completed": 2,
+      "terminal_response_sha256": "eb86049f1f801b24289b676115fb4b76823e2de80ad5f1538462bfd1d261a9ed",
+      "events": 7,
+      "evidence": [
+        "e-2de2dc647f9a4565-c000000003",
+        "e-2de2dc647f9a4565-c000000004",
+        "e-2de2dc647f9a4565-c000000005",
+        "e-2de2dc647f9a4565-c000000006",
+        "e-2de2dc647f9a4565-c000000007",
+        "e-2de2dc647f9a4565-c000000008"
+      ]
+    }
+  }
+}

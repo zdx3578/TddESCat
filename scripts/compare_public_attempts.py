@@ -242,7 +242,7 @@ def branch_after_choice(public, start, rest, before_response):
                 key in active or historical,
                 f"Read after loss of support at {observed['event_id']}: {key}",
             )
-            if edge["usage"] == "task_read" or historical:
+            if edge["usage"] in {"task_read", "policy_preparation_read", "outcome_preparation_read"} or historical:
                 require(
                     edge in declared,
                     f"Task read missing before dispatch at {observed['event_id']}",

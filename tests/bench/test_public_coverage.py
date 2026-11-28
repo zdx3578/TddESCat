@@ -1,3 +1,4 @@
+from collections import Counter
 import json
 from hashlib import sha256
 from pathlib import Path
@@ -6,11 +7,42 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
-from scripts import evaluate_public24
+from scripts import evaluate_public24, evaluate_public25
 from tests.bench.public_coverage import PublicCoverage
 
 
 class PublicCoverageTest(TestCase):
+    def test_multiple_live_reads_are_counted_once_per_confirmed_task(self):
+        coverage, counts = PublicCoverage(), Counter()
+        coverage.followup_events.add("clicked-writer")
+        action = {"id": 3}
+        event = {"event_id": "target", "action": action}
+        reads = [
+            {"usage": "policy_preparation_read", "writer_event": "clicked-writer", "output_port": 1},
+            {"usage": "policy_preparation_read", "writer_event": "other-writer", "output_port": 2},
+        ]
+        historical = {"usage": "omission_contrast", "writer_event": "earlier"}
+        task = {"action": action, "fact_reads": reads}
+        flow = {"inputs": [historical, *reads], "proposed_omissions": [{"isolated": False}]}
+        coverage.record_preparation_use(event, task, {"fact_flow": flow}, counts, True)
+        self.assertEqual(counts["live_preparation_writers_read"], 2)
+        self.assertEqual(counts["tasks_reading_multiple_preparations"], 1)
+        self.assertEqual(counts["advancements_after_live_followup_read"], 1)
+        self.assertEqual((counts["omission_candidates"], counts["omission_dispatched"]), (1, 0))
+        with self.assertRaises(AssertionError):
+            coverage.record_preparation_use(event, {"action": action}, {"fact_flow": flow}, Counter(), True)
+
+    def test_history_statistic_separates_action_prefix_from_model_use(self):
+        with TemporaryDirectory() as directory:
+            public = Path(directory)
+            decisions = public / "decisions"
+            decisions.mkdir()
+            for i, history in enumerate(([[6, 10, 20]], {"changed_action": False}, {"changed_action": True})):
+                task = {"obligation": {"history": history}}
+                (decisions / f"{i}.json").write_text(json.dumps({"public_relation_task": task}))
+            counts = evaluate_public25.backend_receipts(public)
+        self.assertEqual((counts["history_dispatches"], counts["history_dispatch_changes"]), (2, 1))
+
     def test_competing_predictions_report_a_distinguished_effect(self):
         coverage = PublicCoverage()
         action = {"id": 6, "x": 10, "y": 20}

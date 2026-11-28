@@ -103,10 +103,8 @@ function factor_frame_formula(frame,encoding::FiniteEncoding)
 end
 
 function role_factor_proof!(worker,proposal,obs,snapshot;memo=nothing)
-    tests = proposal.tests
-    length(tests) == 1 || return nothing
-    test = only(tests)
-    test.scope in (:bound,:replicated) || return nothing
+    test = agreed_role_contract(proposal.tests)
+    isnothing(test) && return nothing
     before = last(obs.frames)
     supports = [part.basis for part in test.fragments if part.family in (:pigment,:translation)]
     isempty(supports) && return nothing

@@ -32,11 +32,23 @@ function bind_relation_reads(agenda,proposal,obs,action)
     if proposal.intent == :test_preparation_omission
         trial = proposal.obligation
         relation_context(obs) == trial.comparison_context || error("Omission context changed before dispatch")
-        fact = (;trial.writer,kind=:role_support,trial.producer,trial.relation,trial.output_port,action=nothing)
-        edge = input_edge(agenda,fact,0,:omission_test)
         original = agenda.samples[trial.consumer]
-        push!(edges,merge(edge,(scope=:historical_contrast,through=trial.writer,
-            baseline=relation_ref(original),reads=unique([edge.reads;relation_refs(original)]))))
+        for cause in trial.candidates
+            fact = (;cause.writer,kind=:role_support,cause.producer,cause.relation,cause.output_port,action=nothing)
+            edge = input_edge(agenda,fact,0,:omission_test)
+            push!(edges,merge(edge,(scope=:historical_contrast,through=cause.writer,
+                baseline=relation_ref(original),reads=unique([edge.reads;relation_refs(original)]))))
+        end
+    elseif proposal.intent in (:execute_relation_policy,:continue_outcome_preparation,:continue_outcome_relation) &&
+            !isnothing(proposal.obligation)
+        usage = proposal.intent==:execute_relation_policy ? :policy_preparation_read : :outcome_preparation_read
+        for role in get(proposal.obligation,:role_reads,())
+            for (shape,fact) in agenda.uses.roles
+                fact.output_port == role.port && relation_ref(agenda.samples[fact.writer]) == role.writer || continue
+                semantic_hash(shape) == role.support || continue
+                push!(edges,input_edge(agenda,fact,0,usage))
+            end
+        end
     end
     for test in proposal.tests, (port,part) in enumerate(test.fragments)
         part.family in (:pigment,:translation,:selection) || continue
@@ -85,8 +97,7 @@ end
 
 function omitted_context(agenda,sample,frame,fact,source)
     isempty(fact.patch) && return nothing
-    sample.available == source.available || return nothing
-    sample.context == source.next_context && return source.context
+    fact.isolated && sample.context == source.next_context && return source.context
     isempty(agenda.uses.omission_screens) && return nothing
     screen = screen_signature(agenda.uses,sample.context,frame) ⊻ fact.patch_delta
     (sample.level,action_key(sample.effects.action),screen) in agenda.uses.omission_screens || return nothing
@@ -110,83 +121,178 @@ function withdraw_omitted_outcomes!(agenda,index)
     counter = agenda.samples[index]
     withdrawn = NamedTuple[]
     filter!(agenda.outcome_relations) do witness
-        compared = agenda.samples[witness.comparison]
         prior = agenda.samples[witness.outcome]
-        compared.context == counter.context && action_key(compared.effects.action)==action_key(counter.effects.action) &&
-            same_relation_response(prior,counter) || return true
-        refined_history(history_scope(agenda,counter.context)) &&
-            relation_history_key(agenda,counter.context,counter.preceding) !=
-            relation_history_key(agenda,counter.context,compared.preceding) && return true
+        same_relation_response(prior,counter) || return true
+        at = findfirst(witness.comparisons) do i
+            compared = agenda.samples[i]
+            compared.context == counter.context && action_key(compared.effects.action)==action_key(counter.effects.action) &&
+                (!refined_history(history_scope(agenda,counter.context)) ||
+                relation_history_key(agenda,counter.context,counter.preceding)==relation_history_key(agenda,counter.context,compared.preceding))
+        end
+        isnothing(at) && return true
+        comparison = witness.comparisons[at]
         inputs = relation_inputs(agenda,witness.outcome)
-        edge = findfirst(f->f.usage==:omission_contrast && f.comparison==witness.comparison,inputs)
+        edge = findfirst(f->f.usage==:omission_contrast && f.comparison==comparison,inputs)
         isnothing(edge) && return true
         push!(withdrawn,(;preparation=inputs[edge].writer_event,outcome=relation_ref(prior),
-            comparison=relation_ref(compared),counterexample=relation_ref(counter),reason=:outcome_without_preparation))
+            comparison=relation_ref(agenda.samples[comparison]),counterexample=relation_ref(counter),reason=:outcome_without_preparation))
         return false
     end
     return withdrawn
 end
 
-function omission_inputs!(edges,agenda,index,before,contract,before_groups)
-    sample = agenda.samples[index]
-    if sample.unchanged && !sample.advanced && sample.state == "NOT_FINISHED"
-        screen = screen_signature(agenda.uses,sample.context,last(before.frames))
-        push!(agenda.uses.omission_screens,(sample.level,action_key(sample.effects.action),screen))
-        return false
-    end
-    (sample.advanced || !isnothing(contract)) || return false
-    sample.state == "GAME_OVER" && return false
-    action = action_key(sample.effects.action)
-    comparisons = NamedTuple[]
-    unresolved = false
-    selected_points = nothing
-    for fact in values(agenda.uses.roles)
-        writer = agenda.samples[fact.writer]
-        missing = omitted_context(agenda,sample,last(before.frames),fact,writer)
-        isnothing(missing) && continue
-        seen = get(agenda.visits,(missing,action),Int[])
-        if refined_history(history_scope(agenda,missing))
-            if missing != writer.context
-                unresolved = true
-                continue
-            end
-            history = relation_history_key(agenda,missing,writer.preceding)
-            seen = filter(i->relation_history_key(agenda,missing,agenda.samples[i].preceding) == history,seen)
-        end
-        at = findlast(seen) do i
-            row = agenda.samples[i]
-            i < index && row.level == sample.level && row.unchanged && !row.advanced &&
-                row.state == "NOT_FINISHED" && !isnothing(row.binding) == !isnothing(sample.binding) &&
-                (isnothing(row.binding) || row.binding.appearance == sample.binding.appearance)
-        end
-        if !isnothing(at)
-            if any(i->i<index && same_relation_response(sample,agenda.samples[i]),seen)
-                unresolved = true
-                continue
-            end
-            push!(comparisons,input_edge(agenda,fact,0,:omission_contrast;comparison=seen[at]))
-        elseif isempty(seen) && missing == writer.context
-            # This counterfactual is known reachable at the writer's original state.
-            # Schedule a real omission only where the same target was available.
-            if !isnothing(sample.binding)
-                if isnothing(selected_points)
-                    groups = isnothing(before_groups) ? public_components(last(before.frames)) : before_groups
-                    role = point_component(groups,action[2:3])
-                    isnothing(role) && continue
-                    selected_points = effect_points(role)
+# Exact row spans outside the omitted fact footprints. Coordinates use the public zero-based frame.
+function uncontrolled_spans(before,prepared,covered)
+    spans = NTuple{5,Int}[]
+    for y in axes(before,1)
+        for x in axes(before,2)
+            a,b = before[y,x],prepared[y,x]
+            a == b && continue
+            (x-1,y-1) in covered && continue
+            if !isempty(spans)
+                v,left,right,old,new = last(spans)
+                if v == y-1 && right == x-2 && old == a && new == b
+                    spans[end] = (v,left,x-1,old,new)
+                    continue
                 end
-                any(row->(row[1],row[2]) in selected_points,fact.patch) && continue
             end
-            pending = get!(Dict{PublicActionKey,NamedTuple},agenda.uses.omissions,missing)
-            get!(pending,action) do
-                (;writer=fact.writer,consumer=index,output_port=fact.output_port,producer=fact.producer,
-                    relation=fact.relation,comparison_context=missing)
+            push!(spans,(y-1,x-1,x-1,Int(a),Int(b)))
+        end
+    end
+    return spans
+end
+
+function omission_trial(agenda,index,context_writer,frame,roles,groups)
+    row = agenda.samples[index]
+    prior = agenda.samples[context_writer.writer]
+    before = context_writer.source_frame
+    size(before)==size(frame) || return nothing
+    if row.effects.action["id"] == 6
+        isnothing(row.binding) && return nothing
+        point = action_key(row.effects.action)[2:3]
+        selected = point_component(groups,point)
+        isnothing(selected) && return nothing
+        # Identical support plus an unchanged surrounding boundary proves the click still binds.
+        footprint = effect_points(selected)
+        for (x,y,color) in selected
+            before[y+1,x+1] == color || return nothing
+            for (dx,dy) in FOUR_NEIGHBORS
+                u,v = x+dx,y+dy
+                if (u,v) ∉ footprint && checkbounds(Bool,before,v+1,u+1) && before[v+1,u+1] == color
+                    return nothing
+                end
             end
         end
     end
-    # Multiple independent omissions with distinct witnesses remain competing explanations.
-    !unresolved && length(comparisons)==1 && push!(edges,only(comparisons))
-    return unresolved || length(comparisons)>1
+    candidates = NamedTuple[]
+    covered = Set{Pixel}()
+    for fact in roles
+        isempty(fact.patch) && continue
+        all(fact.patch) do (x,y,a,b)
+            before[y+1,x+1]==a && frame[y+1,x+1]==b
+        end || continue
+        push!(candidates,(;fact.writer,fact.output_port,fact.producer,fact.relation))
+        union!(covered,((x,y) for (x,y,_,_) in fact.patch))
+    end
+    # The proposed context must really omit its named preparation in the final public observation.
+    any(f->f.writer==context_writer.writer && f.output_port==context_writer.output_port,candidates) || return nothing
+    sort!(candidates;by=f->(f.writer,f.output_port))
+    spans = uncontrolled_spans(before,frame,covered)
+    added = sort(setdiff(row.available,prior.available))
+    removed = sort(setdiff(prior.available,row.available))
+    uncontrolled = (;pixel_spans=spans,available_added=added,available_removed=removed,
+        observed_before=prior.effects.before_id,prepared_before=row.effects.before_id)
+    isolated = length(candidates)==1 && isempty(spans) && isempty(added) && isempty(removed)
+    return (;context_writer.writer,context_writer.output_port,context_writer.producer,context_writer.relation,
+        consumer=index,comparison_context=prior.context,candidates,uncontrolled,isolated)
+end
+
+function comparable_visits(agenda,context,action,writer)
+    seen = get(agenda.visits,(context,action),Int[])
+    refined_history(history_scope(agenda,context)) || return seen
+    context == writer.context || return Int[]
+    history = relation_history_key(agenda,context,writer.preceding)
+    return filter(i->relation_history_key(agenda,context,agenda.samples[i].preceding)==history,seen)
+end
+
+function omission_inputs!(edges,agenda,index,before,contract,before_groups)
+    row = agenda.samples[index]
+    proposed = NamedTuple[]
+    confounded = NamedTuple[]
+    empty_result = (;ambiguous=false,proposed,confounded)
+    action = action_key(row.effects.action)
+    frame = last(before.frames)
+    if row.unchanged && !row.advanced && row.state == "NOT_FINISHED"
+        screen = screen_signature(agenda.uses,row.context,frame)
+        push!(agenda.uses.omission_screens,(row.level,action,screen))
+        return empty_result
+    end
+    (row.advanced || row.state=="WIN" || !isnothing(contract)) || return empty_result
+    row.state == "GAME_OVER" && return empty_result
+    roles = sort!(collect(values(agenda.uses.roles));by=f->(f.writer,f.output_port))
+    comparisons = NamedTuple[]
+    conflicted = false
+    inspected = Set{String}()
+    for fact in roles
+        isempty(fact.patch) && continue
+        writer = agenda.samples[fact.writer]
+        missing = omitted_context(agenda,row,frame,fact,writer)
+        if !isnothing(fact.producer) && !isnothing(missing) && missing != row.context
+            seen = comparable_visits(agenda,missing,action,writer)
+            at = findlast(seen) do i
+                other = agenda.samples[i]
+                i < index && other.level == row.level && other.unchanged && !other.advanced &&
+                    other.state=="NOT_FINISHED" && !isnothing(other.binding)==!isnothing(row.binding) &&
+                    (isnothing(other.binding) || other.binding.appearance==row.binding.appearance)
+            end
+            if !isnothing(at)
+                if any(i->i<index && same_relation_response(row,agenda.samples[i]),seen)
+                    conflicted = true
+                else
+                    push!(comparisons,input_edge(agenda,fact,0,:omission_contrast;comparison=seen[at]))
+                end
+            end
+        end
+
+        # Source contexts are publicly reached. A partial inverse can motivate a test there even
+        # when it cannot explain the complete transition. Keep joint omissions and residuals visible.
+        context = writer.context
+        context == row.context && continue
+        action[1] in writer.available || continue
+        context in inspected && continue
+        pending = get(agenda.uses.omissions,context,nothing)
+        !isnothing(pending) && haskey(pending,action) && continue
+        seen = comparable_visits(agenda,context,action,writer)
+        !isempty(seen) && !row.advanced && row.state!="WIN" && continue
+        groups = before_groups
+        if action[1]==6 && isnothing(groups)
+            before_groups = groups = public_components(frame)
+        end
+        trial = omission_trial(agenda,index,fact,frame,roles,groups)
+        isnothing(trial) && continue
+        push!(inspected,context)
+        if isempty(seen)
+            obligations = get!(Dict{PublicActionKey,NamedTuple},agenda.uses.omissions,context)
+            obligations[action] = trial
+            push!(proposed,(;context,action=concrete_action(action),trial.candidates,trial.isolated,
+                observed_before=trial.uncontrolled.observed_before,prepared_before=trial.uncontrolled.prepared_before,
+                uncontrolled_pixels=sum((r[3]-r[2]+1 for r in trial.uncontrolled.pixel_spans);init=0),
+                trial.uncontrolled.available_added,trial.uncontrolled.available_removed))
+        elseif !trial.isolated
+            prior = last(seen)
+            compared = agenda.samples[prior]
+            status = same_relation_response(row,compared) ? :same_response :
+                compared.unchanged ? :unchanged_observation : :other_response
+            push!(confounded,(;trial,comparison=prior,event=relation_ref(compared),status))
+        end
+    end
+    # Each admitted input must have its own single-factor omission. An alias sharing
+    # one comparison or a success without the factor prevents that attribution.
+    independent = allunique([agenda.samples[e.comparison].context for e in comparisons])
+    if independent && !conflicted
+        append!(edges,sort!(comparisons;by=e->(e.writer,e.output_port)))
+    end
+    return (;ambiguous=conflicted || !independent || isempty(comparisons) && !isempty(confounded),proposed,confounded)
 end
 
 function compatible_omission_history(agenda,context,previous,obligation)
@@ -195,18 +301,26 @@ function compatible_omission_history(agenda,context,previous,obligation)
     return relation_history_key(agenda,context,previous) == relation_history_key(agenda,context,writer.preceding)
 end
 
+function omission_evidence_refs(agenda,obligation)
+    sources = [obligation.writer,obligation.consumer]
+    append!(sources,(fact.writer for fact in obligation.candidates))
+    return unique([ref for i in unique(sources) for ref in relation_refs(agenda.samples[i])])
+end
+
 function omitted_preparation_experiment(agenda,obs,decision,context)
     pending = get(agenda.uses.omissions,context,nothing)
     isnothing(pending) && return nothing
     for (action,obligation) in sort!(collect(pending);by=item->last(item).consumer)
         compatible_omission_history(agenda,context,agenda.previous,obligation) || continue
         source = agenda.samples[obligation.consumer]
-        option = findfirst(item->action_key(item.action)==action,decision.ranked)
-        isnothing(option) && continue
-        actual = decision.ranked[option].action
+        action[1] in obs.available_actions || continue
+        if action[1]==6 && !checkbounds(Bool,last(obs.frames),action[3]+1,action[2]+1)
+            continue
+        end
+        actual = concrete_action(action)
         matches_outcome_binding(source,actual,decision.groups) || continue
         observed_failure(agenda,context,action,agenda.previous) && continue
-        reads = unique([relation_refs(agenda.samples[obligation.writer]);relation_refs(source)])
+        reads = omission_evidence_refs(agenda,obligation)
         return (;action=actual,intent=:test_preparation_omission,tests=NamedTuple[],reads,obligation)
     end
     return nothing
@@ -255,27 +369,34 @@ function record_relation_use!(agenda,index,before,after,proposal,contract,feedba
     unresolved_conditions = !isnothing(proposal) &&
         any(test->test.scope==:unverified,proposal.tests)
     edges = observed_inputs!(copy(task_inputs),agenda,sample)
-    ambiguous_omission = omission_inputs!(edges,agenda,index,before,contract,before_groups)
+    omissions = omission_inputs!(edges,agenda,index,before,contract,before_groups)
+    ambiguous_omission = omissions.ambiguous
     unresolved_conditions |= ambiguous_omission
     isempty(edges) || (agenda.uses.inputs[index]=edges)
     lost,groups = invalidate_relation_facts!(agenda,sample,before,after,after_groups,after_regions)
     created = NamedTuple[]
     if sample.state=="NOT_FINISHED" && !sample.advanced
+        isolated = length(sample.effects.effects)==1 && sample.effects.complete &&
+            isempty(sample.effects.residual) && Set(before.available_actions)==Set(after.available_actions)
         function write_fact(kind,port,producer,relation,action,key,table,patch)
             fact = (;kind,writer=index,output_port=port,producer,relation,action)
             patch_delta = foldl(patch;init=zero(UInt)) do delta,row
                 x,y,old,new=row
                 delta ⊻ hash((x,y,old)) ⊻ hash((x,y,new))
             end
-            table[key] = merge(fact,(;patch,patch_delta))
+            table[key] = merge(fact,(;patch,patch_delta,isolated,source_frame=kind==:role_support ? last(before.frames) : nothing))
             push!(created,merge(fact,(writer_event=relation_ref(sample),)))
         end
         for id in observed_action_gain(sample)
             write_fact(:available_action,0,nothing,"available_action",id,id,agenda.uses.permissions,PixelChange[])
         end
-        if !isnothing(contract) && !scene_translation_unresolved(sample.effects)
+        # An exact in-place colour change is observable even if other correspondences
+        # remain unresolved. Without a joint producer it may only motivate an experiment.
+        partial_pigment = isnothing(contract)
+        if !scene_translation_unresolved(sample.effects)
             for (port,effect) in enumerate(sample.effects.effects)
                 effect.family in (:pigment,:translation) || continue
+                partial_pigment && effect.family != :pigment && continue
                 if !isnothing(after_regions)
                     view = last(after_regions.frames)
                     x,y,_ = first(effect.after)
@@ -284,13 +405,12 @@ function record_relation_use!(agenda,index,before,after,proposal,contract,feedba
                     groups = Set(isnothing(after_groups) ? public_components(last(after.frames)) : after_groups)
                 end
                 isnothing(groups) || effect.after in groups || continue
-                patch = PixelChange[]
-                if length(sample.effects.effects)==1 && sample.effects.complete && isempty(sample.effects.residual) &&
-                        before.available_actions==after.available_actions
-                    a,b=last(before.frames),last(after.frames)
-                    append!(patch,((x,y,a[y+1,x+1],b[y+1,x+1]) for (x,y) in effect.changed))
-                end
-                write_fact(:role_support,port,contract.key,contract.relations[port],nothing,
+                a,b = last(before.frames),last(after.frames)
+                patch = PixelChange[(x,y,a[y+1,x+1],b[y+1,x+1]) for (x,y) in effect.changed]
+                producer = partial_pigment ? nothing : contract.key
+                relation = partial_pigment ? effect_relation(effect.family,shape_template(effect.before),effect.values) :
+                    contract.relations[port]
+                write_fact(:role_support,port,producer,relation,nothing,
                     effect.after,agenda.uses.roles,patch)
             end
         end
@@ -309,5 +429,6 @@ function record_relation_use!(agenda,index,before,after,proposal,contract,feedba
             tests=[(;row.producer,row.status) for row in feedback.tests])
     end
     return (;established=created,invalidated=lost,inputs=edges,confirmed_task,eligible_before,
-        unresolved_conditions,ambiguous_omission)
+        unresolved_conditions,ambiguous_omission,proposed_omissions=omissions.proposed,
+        confounded_omissions=omissions.confounded)
 end

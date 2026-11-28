@@ -25,7 +25,7 @@ from tests.bench.check_online import online_config
 from tests.bench.measurement_audit import receipts
 
 
-OUTCOME_POLICY_MODES = ("outcome-policy", "outcome-policy-failure", "outcome-availability-policy", "outcome-distractor-policy")
+OUTCOME_POLICY_MODES = ("outcome-policy", "outcome-policy-failure", "outcome-availability-policy", "outcome-distractor-policy", "multi-preparation-policy")
 
 
 FIXTURE = """
@@ -73,13 +73,18 @@ class Fixture(ARCBaseGame):
             "outcome-failure-contrast": [5, 6],
             "outcome-policy": [1, 2, 5, 6, 7], "outcome-policy-failure": [1, 2, 5, 6, 7],
             "outcome-availability-policy": [5],
+            "multi-preparation-policy": [1, 2, 5, 6, 7],
             "primitive-outcome": [2, 5], "outcome-relation-chain": [2, 5, 7],
             "bridge-partition": [5], "concrete-object-followup": [5, 6],
             "frontier-dispatch": [1, 2], "policy-yield": [1, 2],
             "relation-use": [1, 2, 3, 4],
+            "partial-omission": [1, 6],
             "frontier-route": [2], "frontier-remote-coordinate": [2],
             "sequence-experiment": [1, 2, 3], "mixed-sequence": [1, 2, 3, 6],
             "circuit-role": [6, 7], "coordinate-restart": [6]}
+        if MODE == "partial-omission":
+            frame[20:23, 12:15] = 3
+            frame[28:30, 25:27] = 8
         if MODE == "outcome-relation-chain":
             frame[50:52, 48:50] = 3
         if MODE == "outcome-role-equivalence":
@@ -109,7 +114,7 @@ class Fixture(ARCBaseGame):
             frame[10:13, 8:11] = 0
             frame[10:13, 38:41] = 4
             levels.append(Level(sprites=[Sprite(frame, name="board")]))
-        if MODE in ("outcome-policy", "outcome-policy-failure", "outcome-availability-policy"):
+        if MODE in ("outcome-policy", "outcome-policy-failure", "outcome-availability-policy", "multi-preparation-policy"):
             levels = []
             for left in (8, 38, 23):
                 board = frame.copy()
@@ -145,7 +150,15 @@ class Fixture(ARCBaseGame):
             self.complete_action()
             return
         pixels = self.current_level.get_sprites_by_name("board")[0].pixels
-        if MODE == "relation-use":
+        if MODE == "partial-omission":
+            if action == 1:
+                pixels[10:13, 8:11] = 5
+                pixels[20:23, 12:15] = 7
+                pixels[28, 27] = 8
+            elif action == 6 and pixels[10, 8] == 5 and pixels[20, 12] == 7:
+                if (self.action.data["x"], self.action.data["y"]) == (44, 40):
+                    self.next_level()
+        elif MODE == "relation-use":
             if action == 1:
                 pixels[10:13, 8:11] = 3
             elif action == 2 and pixels[10, 8] == 3:
@@ -255,6 +268,13 @@ class Fixture(ARCBaseGame):
             if action == 5:
                 self._available_actions = [6]
             elif pixels[self.action.data["y"], self.action.data["x"]] == 4:
+                self.next_level()
+        elif MODE == "multi-preparation-policy":
+            if action in (2, 5):
+                pixels[40:42, 44:46] = 7 if action == 5 else 2
+            elif action in (1, 7):
+                pixels[50:52, 48:50] = 8 if action == 7 else 3
+            elif (pixels[40, 44], pixels[50, 48]) == (7, 8) and pixels[self.action.data["y"], self.action.data["x"]] == 4:
                 self.next_level()
         elif MODE in ("outcome-policy", "outcome-policy-failure"):
             if action == 1:
@@ -412,7 +432,11 @@ def capture(
     folder = games / game
     folder.mkdir(parents=True)
     write_json(folder / "metadata.json", dict(game_id=game, class_name="Fixture"))
-    fixture_mode = {"history-dispatch": "history-continuation", "outcome-distractor-policy": "outcome-policy"}.get(mode, mode)
+    fixture_mode = {
+        "history-dispatch": "history-continuation",
+        "outcome-distractor-policy": "outcome-policy",
+        "reachable-omission": "relation-use",
+    }.get(mode, mode)
     (folder / "fixture.py").write_text(
         f"MODE = {fixture_mode!r}\nGAME = {game!r}\n{fixture}"
     )
@@ -432,6 +456,8 @@ def capture(
         "effect-condition-contrast",
         "frontier-dispatch",
         "relation-use",
+        "partial-omission",
+        "reachable-omission",
         "policy-yield",
         "frontier-route",
         "frontier-remote-coordinate",
@@ -483,6 +509,8 @@ def capture(
         agent.write_text(settings + additions)
         direct_tests = {
             "relation-use": "relation_use_public.jl",
+            "partial-omission": "partial_omission_public.jl",
+            "reachable-omission": "reachable_omission_public.jl",
             "advancement-refutation": "advancement_refutation_public.jl",
             "concrete-object-followup": "concrete_object_followup_public.jl",
             "history-dispatch": "history_public.jl",
@@ -507,7 +535,8 @@ def capture(
             "mixed-sequence": "sequence_experiment_public.jl",
         }
         if mode in OUTCOME_POLICY_MODES:
-            script = root / "tests/julia/outcome_policy_public.jl"
+            name = "multi_preparation_public.jl" if mode == "multi-preparation-policy" else "outcome_policy_public.jl"
+            script = root / "tests/julia" / name
             paths = public_settings(root, agent, tomllib.loads(agent.read_text()))
             original = public_run.solver_command
 
@@ -515,6 +544,8 @@ def capture(
                 command = julia_command(
                     base, toolchain, script, str(settings), mode, str(store), str(base)
                 )
+                if mode == "multi-preparation-policy":
+                    command.insert(1, "--compiled-modules=existing")
                 return original(
                     base,
                     toolchain,
@@ -611,6 +642,52 @@ def observed_steps(public):
 
 
 def verify(mode, public):
+    if mode == "reachable-omission":
+        rows = list(receipts(public).values())
+        assert [e["action"]["id"] for e, _ in rows] == [0, 4, 4, 1, 2, 3, 4, 1, 0, 4, 4, 2]
+        frames = [reply["frame"][-1] for _, reply in rows]
+        assert frames[1] == frames[6] == frames[9] and frames[2] == frames[8] == frames[10] == frames[11]
+        assert frames[3][10][8] == 3 and frames[4][40][44] == 7
+        assert all(reply["levels_completed"] == 0 for _, reply in rows)
+        records = read(public / "reachable-omission.json")
+        route, trial = records["route"], records["trial"]
+        assert route["action"] == rows[10][0]["action"] and route["action"] != records["baseline"]
+        assert route["obligation"]["purpose"] == trial["intent"] == "test_preparation_omission"
+        assert route["obligation"]["future_experiment"] == trial["action"] == rows[11][0]["action"]
+        assert route["obligation"]["path"] == [rows[2][0]["event_id"]]
+        assert route["obligation"]["consumer"] == rows[4][0]["event_id"]
+        assert records["feedback"]["omission"]["status"] == "changed_to_no_effect"
+        for step, record in ((10, route), (11, trial)):
+            command = rows[step][0]["command_ref"]
+            prediction = read(public / "predictions" / (command + ".json"))
+            assert prediction["action"] == record["action"] and record["intent"] in prediction["assumptions"]
+            assert prediction["guard_truth"] == "unknown" and not prediction["predicted_values"]
+            assert set(record["reads"]) <= set(prediction["event_reads"])
+            assert set(record["reads"]) <= {e["event_id"] for e, _ in rows[:step]}
+        return [rows[i][0]["event_id"] for i in (2, 3, 4, 10, 11)]
+    if mode == "partial-omission":
+        result = read(public / "partial-omission.json")
+        rows = list(receipts(public).values())
+        assert [e["action"]["id"] for e, _ in rows] == [0, 1, 6, 0, 6, 1, 6]
+        frame = [o["frame"][-1] for _, o in rows]
+        assert frame[0] == frame[3] == frame[4] and frame[1] == frame[5]
+        assert all(rows[i][1]["state"] == "WIN" for i in (2, 6))
+        assert rows[4][1]["state"] == "NOT_FINISHED"
+        assert all(rows[i][0]["action"] == {"id": 6, "x": 44, "y": 40} for i in (2, 4, 6))
+        delta = {(x, y, a, b) for y, (left, right) in enumerate(zip(frame[0], frame[1], strict=True))
+                 for x, (a,b) in enumerate(zip(left,right,strict=True)) if a != b}
+        known = {(x,y,4,5) for y in range(10,13) for x in range(8,11)}
+        known |= {(x,y,3,7) for y in range(20,23) for x in range(12,15)}
+        assert delta - known == {(27,28,0,8)} and known <= delta
+        trial = result["task"]["obligation"]
+        assert trial["uncontrolled"]["pixel_spans"] == [[28,27,27,0,8]]
+        assert len(trial["candidates"]) == 2 and trial["isolated"] is False
+        assert result["task"]["fact_reads"] == result["comparison"]["fact_flow"]["inputs"]
+        assert all(e["writer_event"] == rows[1][0]["event_id"] for e in result["task"]["fact_reads"])
+        assert result["repeat"]["public_outcome"]["relationship"] is None
+        assert result["repeat"]["public_outcome"]["preparation_status"] == "condition_unknown"
+        assert result["repeat"]["fact_flow"]["confounded_omissions"][0]["event"] == rows[4][0]["event_id"]
+        return [rows[i][0]["event_id"] for i in (1,2,4,6)]
     if mode == "relation-use":
         report = read(public / "relation-use.json")
         events = list(receipts(public).values())
@@ -755,6 +832,41 @@ def verify(mode, public):
         assert before_measured[40][44] != before_selected[40][44]
         assert outcome["state"] == "WIN"
         return [report["measured"], report["selected"]]
+    if mode == "multi-preparation-policy":
+        report = read(public / "multi-preparation.json")
+        trace = receipts(public)
+        for row in report["training"]:
+            target, reply = trace[row["outcome"]]
+            _, both = trace[target["before_ref"]]
+            for comparison, absent, (left, top) in zip(row["comparisons"], ((2, 8), (7, 3)), ((44, 40), (48, 50))):
+                event, held = trace[comparison]
+                assert event["action"] == target["action"]
+                _, before = trace[event["before_ref"]]
+                assert (before["frame"][-1][40][44], before["frame"][-1][50][48]) == absent
+                assert before["frame"][-1] == held["frame"][-1]
+                differences = {(x, y) for y, line in enumerate(both["frame"][-1]) for x, v in enumerate(line)
+                               if v != before["frame"][-1][y][x]}
+                assert differences == {(left + dx, top + dy) for dx in (0, 1) for dy in (0, 1)}
+                assert held["levels_completed"] + 1 == reply["levels_completed"]
+        assert [trace[r["writer"]][0]["action"]["id"] for r in report["role_reads"]] == [5, 7]
+        for role in report["role_reads"]:
+            writer, written = trace[role["writer"]]
+            _, before = trace[writer["before_ref"]]
+            support = sorted((x, y, value) for y, line in enumerate(written["frame"][-1])
+                             for x, value in enumerate(line) if value != before["frame"][-1][y][x])
+            assert len(support) == 4 and role["port"] == 1 and role["usage"] == "omission_contrast"
+            assert sha256(json.dumps(support, separators=(",", ":")).encode()).hexdigest() == role["support"]
+            prediction = read(public / "predictions" / (writer["prediction_ref"] + ".json"))
+            assert prediction["created_before_command"] and prediction["guard_truth"] == "unknown"
+        event, final = trace[report["final"]]
+        _, prepared = trace[event["before_ref"]]
+        assert (prepared["frame"][-1][40][44], prepared["frame"][-1][50][48]) == (7, 8)
+        assert event["action"] == {"id": 6, "x": 24, "y": 11}
+        assert final["state"] == "WIN" and final["levels_completed"] == 3
+        prediction = read(public / "predictions" / (event["prediction_ref"] + ".json"))
+        assert prediction["guard_truth"] == "unknown" and "public_advancement" not in prediction["predicted_values"]
+        assert all(r["writer"] in prediction["event_reads"] for r in report["role_reads"])
+        return {"mode": mode, "verified": True}
     if mode in OUTCOME_POLICY_MODES:
         record = read(public / "outcome-policy.json")
         trace = receipts(public)
@@ -940,7 +1052,17 @@ def verify(mode, public):
         proof = record["progress"]["public_outcome"]["relationship"]
         effect, win = setup["effect"]["event"], follow["win"]["event"]
         assert proof["status"] == "hypothesis"
-        assert proof["comparison"] == comparison and proof["preparation"] == preparation
+        assert proof["preparation"] == preparation
+        if mode == "outcome-relation-chain":
+            assert proof["comparisons"] == record["omissions"]
+            for ref, expected in zip(proof["comparisons"], ((2, 8), (7, 3))):
+                event, held = trace[ref]
+                origin = trace[event["before_ref"]][1]
+                assert event["action"] == trace[original][0]["action"]
+                assert (origin["frame"][-1][40][44], origin["frame"][-1][50][48]) == expected
+                assert origin["frame"] == held["frame"] and origin["levels_completed"] == held["levels_completed"]
+        else:
+            assert proof["comparison"] == comparison
         assert trace[comparison][0]["action"] == trace[original][0]["action"]
         before = [trace[trace[ref][0]["before_ref"]][1]["frame"][-1] for ref in (comparison, preparation)]
         assert before[0] == before[1] and trace[comparison][1]["levels_completed"] == 0
@@ -965,6 +1087,15 @@ def verify(mode, public):
             assert trace[second][1]["frame"][-1][40][44] == 7
             assert additional["task"]["obligation"]["confirmed"] == [effect]
             required.append(second)
+            role_reads = follow["task"]["obligation"]["role_reads"]
+            assert [row["writer"] for row in role_reads] == required
+            for row in role_reads:
+                writer, written = trace[row["writer"]]
+                previous = trace[writer["before_ref"]][1]["frame"][-1]
+                support = sorted((x, y, value) for y, line in enumerate(written["frame"][-1])
+                                 for x, value in enumerate(line) if value != previous[y][x])
+                assert row["port"] == 1 and row["usage"] == "outcome_preparation"
+                assert sha256(json.dumps(support, separators=(",", ":")).encode()).hexdigest() == row["support"]
             uses.append((second, additional["task"]))
         assert follow["task"]["obligation"]["established"] == required[-1]
         assert follow["task"]["obligation"]["confirmed"] == required
@@ -1361,6 +1492,8 @@ def main(config, run):
         "sequence-experiment",
         "mixed-sequence",
         "relation-use",
+        "partial-omission",
+        "reachable-omission",
     )
     with ThreadPoolExecutor(max_workers=len(modes)) as pool:
         cases = {
@@ -1393,12 +1526,15 @@ if __name__ == "__main__":
             in (
                 *OUTCOME_POLICY_MODES,
                 "relation-use",
+                "partial-omission",
+                "reachable-omission",
                 "progress-restart",
                 "restart-choices",
                 "history-refinement",
                 "history-continuation",
                 "outcome-preparation",
                 "outcome-chain",
+                "outcome-relation-chain",
                 "role-outcome",
                 "outcome-role-equivalence",
                 "outcome-failure-contrast",

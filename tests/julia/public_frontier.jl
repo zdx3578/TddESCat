@@ -227,3 +227,129 @@ end
         program=true,continuing_contact=false,conditional=false,object_probes=false)
     @test ordinary.choice.source == :program && ordinary.choice.action == action
 end
+
+@testset "Reach a witnessed comparison before spending another unbound coverage action" begin
+    agenda, search = TC.RelationAgenda(), TC.PublicFrontier()
+    options = [1,2,3,4]
+    origin = zeros(UInt8,18,18)
+    origin[3:4,3:4] .= 0x02
+    origin[12:13,12:13] .= 0x05
+    side = copy(origin); side[8:9,8:9] .= 0x09
+    prepared = copy(origin); prepared[3:4,3:4] .= 0x03
+    result = copy(prepared); result[12:13,12:13] .= 0x06
+    current = recorded("first-reset",nothing,side,0,options)
+    ranked = [(action=Dict("id"=>i),rank=(0,i)) for i in options]
+    function observe(frame,action,ref;proposal=nothing)
+        before = current
+        TC.frontier_options!(search,TC.relation_context(before.observation),ranked,nothing)
+        current = recorded(ref,before.event["event_id"],frame,action,options)
+        out = TC.observe_relations!(agenda,before,current,TC.observed_effects(before,current),nothing,NamedTuple[],proposal)
+        TC.frontier_observe!(search,agenda)
+        return out
+    end
+    observe(origin,3,"reach-comparison")
+    observe(prepared,1,"build")
+    observe(result,2,"consume")
+    TC.begin_relation_attempt!(agenda,nothing)
+    current = recorded("new-reset",nothing,side,0,options)
+    decision() = (;ranked,groups=TC.public_components(last(current.observation.frames)))
+    preferred = Dict("id"=>4)
+    view = (;search,agenda,observation=current.observation,decision=decision(),context=TC.relation_context(current.observation))
+    selected = TC.task_arbitration((;action=preferred,reason="coverage"),nothing,nothing,nothing,nothing;
+        program=false,continuing_contact=false,conditional=false,object_probes=false,frontier=view)
+    route = selected.frontier_task
+    @test selected.choice.action == Dict("id"=>3)
+    @test route.intent == :explore_observed_frontier_path
+    @test route.obligation.purpose == :test_preparation_omission
+    @test route.obligation.consumer == "consume"
+    @test all(in(route.reads),["reach-comparison","build","consume"])
+    @test isnothing(search.route)
+    contrast = (;intent=:test_concrete_effect,action=preferred,obligation=(comparison=:distinguish_concrete_effects,),
+        tests=[(expected=Dict("motion"=>1),),(expected=Dict("motion"=>-1),)])
+    urgent = TC.task_arbitration((;action=preferred,reason="coverage"),nothing,nothing,contrast,nothing;
+        program=false,continuing_contact=false,conditional=false,object_probes=false,frontier=view)
+    @test urgent.choice.action == preferred && isnothing(urgent.frontier_task)
+    restart_agenda, restart_search = deepcopy(agenda), deepcopy(search)
+    loss = recorded("loss","new-reset",side,4,options;state="GAME_OVER")
+    TC.observe_relations!(restart_agenda,current,loss,TC.observed_effects(current,loss),nothing,NamedTuple[],nothing)
+    TC.frontier_observe!(restart_search,restart_agenda)
+    retry = TC.failure_retry!(restart_agenda;frontier=restart_search)
+    @test !isnothing(retry)
+    TC.begin_relation_attempt!(restart_agenda,retry;observation=current.observation)
+    revision = TC.relation_experiment(restart_agenda,current.observation,decision(),nothing,view.context;
+        frontier=restart_search)
+    @test revision.intent == :explore_observed_frontier_path && revision.action == Dict("id"=>3)
+    @test "loss" in revision.reads && "consume" in revision.reads
+    recovering_view = merge(view,(;agenda=restart_agenda,search=restart_search))
+    recovery = TC.task_arbitration((;action=preferred,reason="coverage"),nothing,nothing,revision,nothing;
+        program=false,continuing_contact=false,conditional=false,object_probes=false,frontier=recovering_view)
+    @test recovery.choice.action == revision.action && isnothing(recovery.frontier_task)
+    @test TC.relation_task_record(revision).revises_failure == "loss"
+    arrived = recorded("after-reopen","new-reset",origin,3,options)
+    step = TC.observe_relations!(restart_agenda,current,arrived,TC.observed_effects(current,arrived),nothing,NamedTuple[],revision)
+    TC.finish_relation_dispatch!(restart_agenda,revision;feedback=step.feedback)
+    TC.frontier_observe!(restart_search,restart_agenda)
+    @test TC.confirm_frontier_route!(restart_search,restart_agenda,revision).status == :confirmed
+    @test restart_agenda.restart.event == "loss"
+    arrived_view = (;ranked,groups=TC.public_components(origin))
+    last_trial = TC.relation_experiment(restart_agenda,arrived.observation,arrived_view,nothing,
+        TC.relation_context(arrived.observation);frontier=restart_search)
+    @test last_trial.intent == :test_preparation_omission && last_trial.revises_failure == "loss"
+    @test all(in(last_trial.reads),["loss","reach-comparison","consume"])
+    # Removing the underlying experiment invalidates a previously quoted route.
+    other = deepcopy(agenda)
+    empty!(other.uses.omissions)
+    @test isnothing(TC.frontier_route_step(search,other,current.observation,decision(),
+        TC.frontier_state(other,view.context,other.previous),route.route,preferred,String[]))
+    observe(origin,3,"return-to-comparison";proposal=route)
+    @test TC.confirm_frontier_route!(search,agenda,route).status == :confirmed
+    trial = TC.frontier_choice(search,agenda,current.observation,decision(),nothing,preferred)
+    @test trial.intent == :test_preparation_omission && trial.action == Dict("id"=>2)
+    trial = TC.bind_relation_reads(agenda,trial,current.observation,trial.action)
+    @test any(edge->edge.usage==:omission_test && edge.writer_event=="build",trial.fact_reads)
+    response = observe(origin,2,"omitted";proposal=trial)
+    @test response.feedback.omission.status == :changed_to_no_effect
+    @test isempty(get(agenda.uses.omissions,route.obligation.target,Dict()))
+end
+
+@testset "A reachable older comparison keeps its turn across newly discovered short routes" begin
+    agenda,search = TC.RelationAgenda(),TC.PublicFrontier()
+    available = collect(1:4)
+    function scene(mark)
+        frame = zeros(UInt8,18,18)
+        frame[3:4,3:4] .= 0x02
+        frame[12:13,12:13] .= 0x05
+        frame[8:9,8:9] .= mark
+        return frame
+    end
+    current = recorded("first",nothing,scene(8),0,available)
+    function dispatch(frame,id)
+        before = current
+        current = recorded("turn-$(length(agenda.samples)+1)",before.event["event_id"],frame,id,available)
+        TC.observe_relations!(agenda,before,current,TC.observed_effects(before,current),nothing,NamedTuple[],nothing)
+        TC.frontier_observe!(search,agenda)
+    end
+    function reopen(frame,id)
+        TC.begin_relation_attempt!(agenda,nothing)
+        current = recorded("reset-$id",nothing,frame,0,available)
+    end
+    for mark in (8,7)
+        reopen(scene(mark),mark)
+        prepared = scene(mark); prepared[3:4,3:4] .= 0x03
+        response = copy(prepared); response[12:13,12:13] .= 0x06
+        dispatch(prepared,1)
+        dispatch(response,2)
+    end
+    reopen(scene(0),1)
+    dispatch(scene(9),3)
+    dispatch(scene(8),4)
+    reopen(scene(0),2)
+    dispatch(scene(7),2)
+    reopen(scene(0),3)
+    node = TC.frontier_state(agenda,TC.relation_context(current.observation),agenda.previous)
+    older = TC.frontier_path(search,agenda,node;seek_omission=true)
+    @test older.route == [5,6] && older.omission.consumer == 2
+    delete!(agenda.uses.omissions[first(older.target)],older.experiment)
+    newer = TC.frontier_path(search,agenda,node;seek_omission=true)
+    @test newer.route == [7] && newer.omission.consumer == 4
+end

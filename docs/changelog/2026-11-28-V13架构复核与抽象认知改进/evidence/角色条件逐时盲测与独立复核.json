@@ -1,0 +1,1010 @@
+{
+  "schema_version": 2,
+  "archive": "v13-public25-composed",
+  "preregistered_input": "竞争绑定公开前缀.json",
+  "input_sha256": "465d68d24d998bc4c33672ab564f49584d32b84d372bd682fd8079c23062f3d6",
+  "historical_actions_fixed": true,
+  "live_actions_sent": 0,
+  "queries": 24,
+  "source_feedback": {
+    "established": 12,
+    "refuted": 4,
+    "untested": 8
+  },
+  "frozen_admitted_source": 0,
+  "admitted_source": 0,
+  "admitted_supported": 0,
+  "replay": "tests/julia/competitive_role_replay.jl <archive> <input> sequential",
+  "independent": "python -m tests.bench.replay_competing_pointer <archive> <replay-json>",
+  "check": "从每笔动作之前的原帧计算前一点击的角色和区域。从色块补集的四邻域连通性区分内部孔与通向外界的凹口。Python 独立枚举与每个正反回执一致的区域组合，随后核对留出回执的局部实际位移。",
+  "limited_scope": "24 个冻结查询的正式来源预测为 0。留出 67 保留一项待检验的具体位移；4 种与训练一致的条件中 2 种允许该位移，实际测得方向相同。其余动作没有新增此类正式晋级或通关证据。",
+  "results": [
+    {
+      "game": "ka59-9f096b4a",
+      "event": "e-4d6c3962855fcc62-c000000013",
+      "before": "e-4d6c3962855fcc62-c000000012",
+      "source": "e-4d6c3962855fcc62-c000000005",
+      "alternatives": 1,
+      "source_scope": "unverified",
+      "source_status": "established",
+      "source_channels": {
+        "translation-18-27": [
+          0,
+          3
+        ]
+      },
+      "candidates": [
+        {
+          "key": "dd295c5cb4e74a743bf181a571b9bed1863fa8a35730bddfd2cfc79880b42e19",
+          "scope": "unverified",
+          "expected": {
+            "translation-18-27": [
+              0,
+              3
+            ]
+          },
+          "projection_scope": "not_requested",
+          "role_boundary": false,
+          "pointer": []
+        }
+      ],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": []
+    },
+    {
+      "game": "ka59-9f096b4a",
+      "event": "e-4d6c3962855fcc62-c000000025",
+      "before": "e-4d6c3962855fcc62-c000000024",
+      "source": "e-4d6c3962855fcc62-c000000005",
+      "alternatives": 2,
+      "source_scope": "unverified",
+      "source_status": "established",
+      "source_channels": {
+        "translation-18-21": [
+          0,
+          3
+        ]
+      },
+      "candidates": [
+        {
+          "key": "dd295c5cb4e74a743bf181a571b9bed1863fa8a35730bddfd2cfc79880b42e19",
+          "scope": "unverified",
+          "expected": {
+            "translation-18-21": [
+              0,
+              3
+            ]
+          },
+          "projection_scope": "not_requested",
+          "role_boundary": false,
+          "pointer": []
+        },
+        {
+          "key": "40e47a55b00f17a387f417a0396169daa8dc60bc8771321ce3a448cf5ef1f83c",
+          "scope": "unverified",
+          "expected": {
+            "translation-18-21": [
+              0,
+              3
+            ],
+            "translation-19-22": [
+              0,
+              3
+            ]
+          },
+          "projection_scope": "not_requested",
+          "role_boundary": false,
+          "pointer": []
+        }
+      ],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": []
+    },
+    {
+      "game": "ka59-9f096b4a",
+      "event": "e-4d6c3962855fcc62-c000000029",
+      "before": "e-4d6c3962855fcc62-c000000028",
+      "source": "e-4d6c3962855fcc62-c000000005",
+      "alternatives": 2,
+      "source_scope": "unverified",
+      "source_status": "established",
+      "source_channels": {
+        "translation-15-24": [
+          0,
+          3
+        ]
+      },
+      "candidates": [
+        {
+          "key": "dd295c5cb4e74a743bf181a571b9bed1863fa8a35730bddfd2cfc79880b42e19",
+          "scope": "unverified",
+          "expected": {
+            "translation-15-24": [
+              0,
+              3
+            ]
+          },
+          "projection_scope": "not_requested",
+          "role_boundary": false,
+          "pointer": []
+        },
+        {
+          "key": "40e47a55b00f17a387f417a0396169daa8dc60bc8771321ce3a448cf5ef1f83c",
+          "scope": "unverified",
+          "expected": {
+            "translation-15-24": [
+              0,
+              3
+            ],
+            "translation-16-25": [
+              0,
+              3
+            ]
+          },
+          "projection_scope": "not_requested",
+          "role_boundary": false,
+          "pointer": []
+        }
+      ],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": []
+    },
+    {
+      "game": "ka59-9f096b4a",
+      "event": "e-4d6c3962855fcc62-c000000047",
+      "before": "e-4d6c3962855fcc62-c000000046",
+      "source": "e-4d6c3962855fcc62-c000000005",
+      "alternatives": 3,
+      "source_scope": "unverified",
+      "source_status": "refuted",
+      "source_channels": {
+        "translation-18-30": [
+          0,
+          3
+        ]
+      },
+      "candidates": [
+        {
+          "key": "dd295c5cb4e74a743bf181a571b9bed1863fa8a35730bddfd2cfc79880b42e19",
+          "scope": "unverified",
+          "expected": {
+            "translation-18-30": [
+              0,
+              3
+            ]
+          },
+          "projection_scope": "not_requested",
+          "role_boundary": false,
+          "pointer": []
+        },
+        {
+          "key": "40e47a55b00f17a387f417a0396169daa8dc60bc8771321ce3a448cf5ef1f83c",
+          "scope": "unverified",
+          "expected": {
+            "translation-18-30": [
+              0,
+              3
+            ],
+            "translation-19-31": [
+              0,
+              3
+            ]
+          },
+          "projection_scope": "not_requested",
+          "role_boundary": false,
+          "pointer": []
+        },
+        {
+          "key": "95896c26167d475e322019e49dbee3f826c91b3458523f63ded5e4a63e2b5ca2",
+          "scope": "unverified",
+          "expected": {
+            "translation-18-30": [
+              0,
+              3
+            ],
+            "translation-19-31": [
+              0,
+              3
+            ]
+          },
+          "projection_scope": "not_requested",
+          "role_boundary": false,
+          "pointer": []
+        }
+      ],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": [
+        {
+          "status": "repaired",
+          "producer": "dd295c5cb4e74a743bf181a571b9bed1863fa8a35730bddfd2cfc79880b42e19",
+          "event": "e-4d6c3962855fcc62-c000000047"
+        },
+        {
+          "status": "repaired",
+          "producer": "40e47a55b00f17a387f417a0396169daa8dc60bc8771321ce3a448cf5ef1f83c",
+          "event": "e-4d6c3962855fcc62-c000000047"
+        },
+        {
+          "status": "repaired",
+          "producer": "95896c26167d475e322019e49dbee3f826c91b3458523f63ded5e4a63e2b5ca2",
+          "event": "e-4d6c3962855fcc62-c000000047"
+        }
+      ]
+    },
+    {
+      "game": "ka59-9f096b4a",
+      "event": "e-4d6c3962855fcc62-c000000052",
+      "before": "e-4d6c3962855fcc62-c000000051",
+      "source": "e-4d6c3962855fcc62-c000000005",
+      "alternatives": 0,
+      "source_scope": "unavailable",
+      "source_status": "untested",
+      "source_channels": null,
+      "candidates": [],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": []
+    },
+    {
+      "game": "ka59-9f096b4a",
+      "event": "e-4d6c3962855fcc62-c000000057",
+      "before": "e-4d6c3962855fcc62-c000000056",
+      "source": "e-4d6c3962855fcc62-c000000005",
+      "alternatives": 0,
+      "source_scope": "unavailable",
+      "source_status": "untested",
+      "source_channels": null,
+      "candidates": [],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": []
+    },
+    {
+      "game": "ka59-9f096b4a",
+      "event": "e-4d6c3962855fcc62-c000000067",
+      "before": "e-4d6c3962855fcc62-c000000066",
+      "source": "e-4d6c3962855fcc62-c000000005",
+      "alternatives": 1,
+      "source_scope": "unverified",
+      "source_status": "established",
+      "source_channels": {
+        "translation-15-24": [
+          0,
+          3
+        ]
+      },
+      "candidates": [
+        {
+          "key": "dd295c5cb4e74a743bf181a571b9bed1863fa8a35730bddfd2cfc79880b42e19",
+          "scope": "unverified",
+          "expected": {
+            "translation-15-24": [
+              0,
+              3
+            ]
+          },
+          "projection_scope": "candidate_motion_channel",
+          "role_boundary": false,
+          "pointer": [
+            {
+              "kind": "preceding_click_in_competing_region",
+              "observed": {
+                "owner": "bound",
+                "zone": "hole"
+              },
+              "hypotheses": [
+                {
+                  "owner": "bound",
+                  "zones": [
+                    "support"
+                  ],
+                  "accepts": false
+                },
+                {
+                  "owner": "bound",
+                  "zones": [
+                    "support",
+                    "hole"
+                  ],
+                  "accepts": true
+                },
+                {
+                  "owner": "bound",
+                  "zones": [
+                    "support",
+                    "box_gap"
+                  ],
+                  "accepts": false
+                },
+                {
+                  "owner": "bound",
+                  "zones": [
+                    "support",
+                    "hole",
+                    "box_gap"
+                  ],
+                  "accepts": true
+                }
+              ],
+              "agreement": "split",
+              "replicated": false,
+              "supports": [
+                "e-4d6c3962855fcc62-c000000025",
+                "e-4d6c3962855fcc62-c000000029"
+              ],
+              "excludes": [
+                "e-4d6c3962855fcc62-c000000047"
+              ],
+              "reads": [
+                "e-4d6c3962855fcc62-c000000024",
+                "e-4d6c3962855fcc62-c000000025",
+                "e-4d6c3962855fcc62-c000000023",
+                "e-4d6c3962855fcc62-c000000028",
+                "e-4d6c3962855fcc62-c000000029",
+                "e-4d6c3962855fcc62-c000000027",
+                "e-4d6c3962855fcc62-c000000046",
+                "e-4d6c3962855fcc62-c000000047",
+                "e-4d6c3962855fcc62-c000000045",
+                "e-4d6c3962855fcc62-c000000065",
+                "e-4d6c3962855fcc62-c000000066"
+              ]
+            }
+          ]
+        }
+      ],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": [
+        {
+          "status": "unresolved",
+          "producer": "40e47a55b00f17a387f417a0396169daa8dc60bc8771321ce3a448cf5ef1f83c",
+          "event": "e-4d6c3962855fcc62-c000000067"
+        }
+      ]
+    },
+    {
+      "game": "ka59-9f096b4a",
+      "event": "e-4d6c3962855fcc62-c000000083",
+      "before": "e-4d6c3962855fcc62-c000000082",
+      "source": "e-4d6c3962855fcc62-c000000005",
+      "alternatives": 1,
+      "source_scope": "unverified",
+      "source_status": "established",
+      "source_channels": {
+        "translation-21-27": [
+          0,
+          3
+        ]
+      },
+      "candidates": [
+        {
+          "key": "dd295c5cb4e74a743bf181a571b9bed1863fa8a35730bddfd2cfc79880b42e19",
+          "scope": "unverified",
+          "expected": {
+            "translation-21-27": [
+              0,
+              3
+            ]
+          },
+          "projection_scope": "not_requested",
+          "role_boundary": false,
+          "pointer": []
+        }
+      ],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": [
+        {
+          "status": "unresolved",
+          "producer": "40e47a55b00f17a387f417a0396169daa8dc60bc8771321ce3a448cf5ef1f83c",
+          "event": "e-4d6c3962855fcc62-c000000083"
+        }
+      ]
+    },
+    {
+      "game": "m0r0-dadda488",
+      "event": "e-e69500bd5c44011a-c000000051",
+      "before": "e-e69500bd5c44011a-c000000050",
+      "source": "e-e69500bd5c44011a-c000000035",
+      "alternatives": 1,
+      "source_scope": "unverified",
+      "source_status": "established",
+      "source_channels": {
+        "translation-44-49": [
+          -5,
+          0
+        ]
+      },
+      "candidates": [
+        {
+          "key": "19f6f233501991090381b60c4d5346fb6ac31a4fe50ebeb790bbe524acbe28d7",
+          "scope": "unverified",
+          "expected": {
+            "translation-44-49": [
+              -5,
+              0
+            ]
+          },
+          "projection_scope": "not_requested",
+          "role_boundary": false,
+          "pointer": []
+        }
+      ],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": []
+    },
+    {
+      "game": "m0r0-dadda488",
+      "event": "e-e69500bd5c44011a-c000000057",
+      "before": "e-e69500bd5c44011a-c000000056",
+      "source": "e-e69500bd5c44011a-c000000035",
+      "alternatives": 1,
+      "source_scope": "unverified",
+      "source_status": "established",
+      "source_channels": {
+        "translation-44-49": [
+          -5,
+          0
+        ]
+      },
+      "candidates": [
+        {
+          "key": "19f6f233501991090381b60c4d5346fb6ac31a4fe50ebeb790bbe524acbe28d7",
+          "scope": "unverified",
+          "expected": {
+            "translation-44-49": [
+              -5,
+              0
+            ]
+          },
+          "projection_scope": "not_requested",
+          "role_boundary": false,
+          "pointer": []
+        }
+      ],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": []
+    },
+    {
+      "game": "m0r0-dadda488",
+      "event": "e-e69500bd5c44011a-c000000067",
+      "before": "e-e69500bd5c44011a-c000000066",
+      "source": "e-e69500bd5c44011a-c000000035",
+      "alternatives": 1,
+      "source_scope": "unverified",
+      "source_status": "established",
+      "source_channels": {
+        "translation-49-49": [
+          -5,
+          0
+        ]
+      },
+      "candidates": [
+        {
+          "key": "19f6f233501991090381b60c4d5346fb6ac31a4fe50ebeb790bbe524acbe28d7",
+          "scope": "unverified",
+          "expected": {
+            "translation-49-49": [
+              -5,
+              0
+            ]
+          },
+          "projection_scope": "not_requested",
+          "role_boundary": false,
+          "pointer": []
+        }
+      ],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": []
+    },
+    {
+      "game": "m0r0-dadda488",
+      "event": "e-e69500bd5c44011a-c000000081",
+      "before": "e-e69500bd5c44011a-c000000080",
+      "source": "e-e69500bd5c44011a-c000000061",
+      "alternatives": 1,
+      "source_scope": "unverified",
+      "source_status": "established",
+      "source_channels": {
+        "translation-34-49": [
+          5,
+          0
+        ]
+      },
+      "candidates": [
+        {
+          "key": "bd2b96c732fc943ff1bfe2e923881bc17ca872dd13d0121a59219a73d945d270",
+          "scope": "unverified",
+          "expected": {
+            "translation-34-49": [
+              5,
+              0
+            ]
+          },
+          "projection_scope": "not_requested",
+          "role_boundary": false,
+          "pointer": []
+        }
+      ],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": []
+    },
+    {
+      "game": "m0r0-dadda488",
+      "event": "e-e69500bd5c44011a-c000000178",
+      "before": "e-e69500bd5c44011a-c000000177",
+      "source": "e-e69500bd5c44011a-c000000033",
+      "alternatives": 1,
+      "source_scope": "unverified",
+      "source_status": "established",
+      "source_channels": {
+        "translation-19-44": [
+          0,
+          -5
+        ]
+      },
+      "candidates": [
+        {
+          "key": "1dfb6d1589860dce85f35b103d52042ac7ee19065a3b6b9e8fe1c199efd2cc0b",
+          "scope": "unverified",
+          "expected": {
+            "translation-19-44": [
+              0,
+              -5
+            ]
+          },
+          "projection_scope": "not_requested",
+          "role_boundary": false,
+          "pointer": []
+        }
+      ],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": []
+    },
+    {
+      "game": "m0r0-dadda488",
+      "event": "e-e69500bd5c44011a-c000000187",
+      "before": "e-e69500bd5c44011a-c000000186",
+      "source": "e-e69500bd5c44011a-c000000061",
+      "alternatives": 1,
+      "source_scope": "unverified",
+      "source_status": "refuted",
+      "source_channels": {
+        "translation-14-49": [
+          5,
+          0
+        ]
+      },
+      "candidates": [
+        {
+          "key": "bd2b96c732fc943ff1bfe2e923881bc17ca872dd13d0121a59219a73d945d270",
+          "scope": "unverified",
+          "expected": {
+            "translation-14-49": [
+              5,
+              0
+            ]
+          },
+          "projection_scope": "not_requested",
+          "role_boundary": false,
+          "pointer": []
+        }
+      ],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": [
+        {
+          "status": "repaired",
+          "producer": "bd2b96c732fc943ff1bfe2e923881bc17ca872dd13d0121a59219a73d945d270",
+          "event": "e-e69500bd5c44011a-c000000187"
+        }
+      ]
+    },
+    {
+      "game": "m0r0-dadda488",
+      "event": "e-e69500bd5c44011a-c000000188",
+      "before": "e-e69500bd5c44011a-c000000187",
+      "source": "e-e69500bd5c44011a-c000000035",
+      "alternatives": 1,
+      "source_scope": "unverified",
+      "source_status": "established",
+      "source_channels": {
+        "translation-44-54": [
+          -5,
+          0
+        ]
+      },
+      "candidates": [
+        {
+          "key": "19f6f233501991090381b60c4d5346fb6ac31a4fe50ebeb790bbe524acbe28d7",
+          "scope": "unverified",
+          "expected": {
+            "translation-44-54": [
+              -5,
+              0
+            ]
+          },
+          "projection_scope": "not_requested",
+          "role_boundary": false,
+          "pointer": []
+        }
+      ],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": []
+    },
+    {
+      "game": "m0r0-dadda488",
+      "event": "e-e69500bd5c44011a-c000000198",
+      "before": "e-e69500bd5c44011a-c000000197",
+      "source": "e-e69500bd5c44011a-c000000187",
+      "alternatives": 1,
+      "source_scope": "unverified",
+      "source_status": "established",
+      "source_channels": {
+        "translation-19-44": [
+          -5,
+          0
+        ]
+      },
+      "candidates": [
+        {
+          "key": "e44a5d35457b133df44e0865ed4f3dd8e985c18e63d42386f81f806233ad2284",
+          "scope": "unverified",
+          "expected": {
+            "translation-19-44": [
+              -5,
+              0
+            ]
+          },
+          "projection_scope": "not_requested",
+          "role_boundary": false,
+          "pointer": []
+        }
+      ],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": []
+    },
+    {
+      "game": "su15-4c352900",
+      "event": "e-bc94e240b4071f6d-c000000033",
+      "before": "e-bc94e240b4071f6d-c000000032",
+      "source": "e-bc94e240b4071f6d-c000000031",
+      "alternatives": 1,
+      "source_scope": "unverified",
+      "source_status": "refuted",
+      "source_channels": {
+        "translation-3-58": [
+          -2,
+          2
+        ]
+      },
+      "candidates": [
+        {
+          "key": "f48855c60bbcd6fd608e638798e74045b2e8b67396bfdbcda12b70c624ebf2e7",
+          "scope": "unverified",
+          "expected": {
+            "translation-3-58": [
+              -2,
+              2
+            ]
+          },
+          "projection_scope": "not_requested",
+          "role_boundary": false,
+          "pointer": []
+        }
+      ],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": [
+        {
+          "status": "unresolved",
+          "producer": "f48855c60bbcd6fd608e638798e74045b2e8b67396bfdbcda12b70c624ebf2e7",
+          "event": "e-bc94e240b4071f6d-c000000033"
+        }
+      ]
+    },
+    {
+      "game": "su15-4c352900",
+      "event": "e-bc94e240b4071f6d-c000000034",
+      "before": "e-bc94e240b4071f6d-c000000033",
+      "source": "e-bc94e240b4071f6d-c000000031",
+      "alternatives": 1,
+      "source_scope": "unverified",
+      "source_status": "refuted",
+      "source_channels": {
+        "translation-3-58": [
+          -2,
+          2
+        ]
+      },
+      "candidates": [
+        {
+          "key": "f48855c60bbcd6fd608e638798e74045b2e8b67396bfdbcda12b70c624ebf2e7",
+          "scope": "unverified",
+          "expected": {
+            "translation-3-58": [
+              -2,
+              2
+            ]
+          },
+          "projection_scope": "not_requested",
+          "role_boundary": false,
+          "pointer": []
+        }
+      ],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": [
+        {
+          "status": "unresolved",
+          "producer": "f48855c60bbcd6fd608e638798e74045b2e8b67396bfdbcda12b70c624ebf2e7",
+          "event": "e-bc94e240b4071f6d-c000000034"
+        }
+      ]
+    },
+    {
+      "game": "su15-4c352900",
+      "event": "e-bc94e240b4071f6d-c000000040",
+      "before": "e-bc94e240b4071f6d-c000000039",
+      "source": "e-bc94e240b4071f6d-c000000031",
+      "alternatives": 0,
+      "source_scope": "unavailable",
+      "source_status": "untested",
+      "source_channels": null,
+      "candidates": [],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": []
+    },
+    {
+      "game": "su15-4c352900",
+      "event": "e-bc94e240b4071f6d-c000000041",
+      "before": "e-bc94e240b4071f6d-c000000040",
+      "source": "e-bc94e240b4071f6d-c000000031",
+      "alternatives": 0,
+      "source_scope": "unavailable",
+      "source_status": "untested",
+      "source_channels": null,
+      "candidates": [],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": []
+    },
+    {
+      "game": "su15-4c352900",
+      "event": "e-bc94e240b4071f6d-c000000044",
+      "before": "e-bc94e240b4071f6d-c000000043",
+      "source": "e-bc94e240b4071f6d-c000000031",
+      "alternatives": 0,
+      "source_scope": "unavailable",
+      "source_status": "untested",
+      "source_channels": null,
+      "candidates": [],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": []
+    },
+    {
+      "game": "su15-4c352900",
+      "event": "e-bc94e240b4071f6d-c000000045",
+      "before": "e-bc94e240b4071f6d-c000000044",
+      "source": "e-bc94e240b4071f6d-c000000031",
+      "alternatives": 0,
+      "source_scope": "unavailable",
+      "source_status": "untested",
+      "source_channels": null,
+      "candidates": [],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": []
+    },
+    {
+      "game": "su15-4c352900",
+      "event": "e-bc94e240b4071f6d-c000000048",
+      "before": "e-bc94e240b4071f6d-c000000047",
+      "source": "e-bc94e240b4071f6d-c000000031",
+      "alternatives": 0,
+      "source_scope": "unavailable",
+      "source_status": "untested",
+      "source_channels": null,
+      "candidates": [],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": []
+    },
+    {
+      "game": "su15-4c352900",
+      "event": "e-bc94e240b4071f6d-c000000049",
+      "before": "e-bc94e240b4071f6d-c000000048",
+      "source": "e-bc94e240b4071f6d-c000000031",
+      "alternatives": 0,
+      "source_scope": "unavailable",
+      "source_status": "untested",
+      "source_channels": null,
+      "candidates": [],
+      "admitted": false,
+      "admitted_source": false,
+      "revisions": []
+    }
+  ],
+  "independent_checks": [
+    {
+      "game": "ka59-9f096b4a",
+      "producer": "dd295c5cb4e74a743bf181a571b9bed1863fa8a35730bddfd2cfc79880b42e19",
+      "scope": "unverified",
+      "supports": [
+        {
+          "event": "e-4d6c3962855fcc62-c000000025",
+          "sequence": 25,
+          "before": "e-4d6c3962855fcc62-c000000024",
+          "before_screen_domain_sha256": "b7e6e34c9fd9f0cc8664fdf5747fda163bfcfb2cffcfc23e0c8ef85426b657e5",
+          "pointer": [
+            18,
+            22
+          ],
+          "pointer_color": 14,
+          "role_color": 14,
+          "role_pixels": 8,
+          "observed_class": {
+            "owner": "bound",
+            "zone": "support"
+          },
+          "action": {
+            "id": 2
+          },
+          "origin": [
+            18,
+            21
+          ],
+          "expected": [
+            0,
+            3
+          ],
+          "measured": [
+            0,
+            3
+          ],
+          "response_sha256": "d5c2af4b093a24d852d98c9f5ed39755b4f5788d77fc83e82acb034cae159f65"
+        },
+        {
+          "event": "e-4d6c3962855fcc62-c000000029",
+          "sequence": 29,
+          "before": "e-4d6c3962855fcc62-c000000028",
+          "before_screen_domain_sha256": "234d11543aa4e0fcb1d084b48ef800e7185f26db53507a40c24b7a5eefc88434",
+          "pointer": [
+            15,
+            25
+          ],
+          "pointer_color": 14,
+          "role_color": 14,
+          "role_pixels": 8,
+          "observed_class": {
+            "owner": "bound",
+            "zone": "support"
+          },
+          "action": {
+            "id": 2
+          },
+          "origin": [
+            15,
+            24
+          ],
+          "expected": [
+            0,
+            3
+          ],
+          "measured": [
+            0,
+            3
+          ],
+          "response_sha256": "c683541ba0877abad423c7c93b9b6dd6410411ff1d9a046efc58751a32815e3c"
+        }
+      ],
+      "refutations": [
+        {
+          "event": "e-4d6c3962855fcc62-c000000047",
+          "sequence": 47,
+          "before": "e-4d6c3962855fcc62-c000000046",
+          "before_screen_domain_sha256": "20162772e0205b2702a1fb5d907edecb47524ab0b2d5914e0178d913c289ac87",
+          "pointer": [
+            30,
+            31
+          ],
+          "pointer_color": 14,
+          "role_color": 14,
+          "role_pixels": 8,
+          "observed_class": {
+            "owner": "rival",
+            "zone": "support"
+          },
+          "action": {
+            "id": 2
+          },
+          "origin": [
+            18,
+            30
+          ],
+          "expected": [
+            0,
+            3
+          ],
+          "measured": [
+            0,
+            0
+          ],
+          "response_sha256": "d319357947ca2d0ef381928f16d28f759f465f2c858b2d637388a266f136fc61"
+        }
+      ],
+      "held": {
+        "event": "e-4d6c3962855fcc62-c000000067",
+        "sequence": 67,
+        "before": "e-4d6c3962855fcc62-c000000066",
+        "before_screen_domain_sha256": "346225de6332a0c7f2098c5922746d5f05155d056c7e88c3a908bf7cb3aa1ceb",
+        "pointer": [
+          16,
+          25
+        ],
+        "pointer_color": 0,
+        "role_color": 14,
+        "role_pixels": 8,
+        "observed_class": {
+          "owner": "bound",
+          "zone": "hole"
+        },
+        "action": {
+          "id": 2
+        },
+        "origin": [
+          15,
+          24
+        ],
+        "expected": [
+          0,
+          3
+        ],
+        "measured": [
+          0,
+          3
+        ],
+        "response_sha256": "e1dac08a5cb29b637a4b6a57d021ea29ae2dc430dc6378244fa056ea47397029"
+      },
+      "agreement": "split",
+      "consistent_hypotheses": 4,
+      "applicable_hypotheses": 2,
+      "observed_motion_agrees": true
+    }
+  ],
+  "prior_bounding_box_admitted_source": 1,
+  "heldout_candidates": {
+    "event": "e-4d6c3962855fcc62-c000000067",
+    "concrete_motion_contracts": 1,
+    "contracts_matching_observed_motion": 1,
+    "fitting_geometry_conditions": 4,
+    "expecting_motion": 2,
+    "qualified_source_contracts": 0
+  },
+  "directed_fixture": {
+    "test": "tests/julia/role_boundary_contrasts.jl",
+    "geometry": "colored ring with an open notch and an enclosed hole",
+    "first_hole": "split, unverified, concrete action experiment",
+    "same_gap_after_refutation": "excluded, positive contract withdrawn",
+    "later_hole": "replicated after independent positive trials on two origins and a negative trial on the notch"
+  },
+  "evidence_inputs": {
+    "RelationTasks.jl": "42159d8bd93d51b070b5cfcdbb81ffc23e8a98e225124584da9329bb9ec2bf64",
+    "JointMechanisms.jl": "75d5f10419da00bb09d4279708c690eeae303b8a3d4cd2bb68520dc98252efb4",
+    "replay_competing_pointer.py": "fb1f10b46aa37dc3b73233890a889961c88839cf92e6bd7097ecc9cdd65f36b0",
+    "role_boundary_contrasts.jl": "3c61e1a1eef4ea4bf0ec1fdc91c084aa87de6d4271d7a466f6f04e0adcf6ac3c"
+  }
+}

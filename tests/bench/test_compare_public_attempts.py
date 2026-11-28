@@ -122,19 +122,21 @@ class PublicAttemptComparison(TestCase):
 
     def test_rejects_a_read_without_a_decision(self):
         self.differing_choices()
-        self.step(
-            self.right,
-            3,
-            1,
-            [self.after],
-            check={
-                "public_relation_feedback": {
-                    "fact_flow": {"inputs": [dict(**self.write, usage="task_read")]}
-                }
-            },
-        )
-        with self.assertRaisesRegex(ValueError, "missing before dispatch"):
-            compare_attempts(self.left, self.right)
+        for usage in ("task_read", "policy_preparation_read", "outcome_preparation_read"):
+            with self.subTest(usage=usage):
+                self.step(
+                    self.right,
+                    3,
+                    1,
+                    [self.after],
+                    check={
+                        "public_relation_feedback": {
+                            "fact_flow": {"inputs": [dict(**self.write, usage=usage)]}
+                        }
+                    },
+                )
+                with self.assertRaisesRegex(ValueError, "missing before dispatch"):
+                    compare_attempts(self.left, self.right)
 
     def test_earlier_response_difference_precludes_action_attribution(self):
         self.step(self.left, 1, 0, [self.before, self.after])

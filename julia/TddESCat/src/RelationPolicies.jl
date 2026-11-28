@@ -8,8 +8,40 @@ function policy_edge_input(fact,agenda,writer,consumer,id,gained)
         get(agenda.producers,fact.tested_producer,nothing) === consumer)
 end
 
-active_policy_outcomes(agenda) = Set((w.outcome,i,w.comparison)
-    for w in agenda.outcome_relations for (i,_) in w.steps)
+function active_policy_outcomes(agenda)
+    active = Set{Tuple{Int,Int,Int}}()
+    for witness in agenda.outcome_relations
+        comparisons = witness.comparisons
+        for input in relation_inputs(agenda,witness.outcome)
+            input.usage == :omission_contrast && input.comparison in comparisons &&
+                (input.writer=>input.producer) in witness.steps || continue
+            push!(active,(witness.outcome,input.writer,input.comparison))
+        end
+    end
+    return active
+end
+
+# Each writer must have its own matched intervention at the very same reader.
+# Ambiguous alternatives and historical experiments alone do not bind a port.
+function policy_preparation_inputs(agenda,index,active)
+    incoming = relation_inputs(agenda,index)
+    count(f->f.usage==:omission_contrast,incoming) >= 2 || return NamedTuple[]
+    row = agenda.samples[index]
+    facts = filter(incoming) do f
+        f.usage == :omission_contrast && f.comparison > 0 && f.output_port > 0 || return false
+        row.advanced && return (index,f.writer,f.comparison) in active
+        comparison = agenda.samples[f.comparison]
+        visits = get(agenda.visits,(comparison.context,action_key(row.effects.action)),Int[])
+        return !any(visits) do i
+            i > index && same_relation_response(row,agenda.samples[i]) &&
+                relation_history_key(agenda,comparison.context,agenda.samples[i].preceding) ==
+                    relation_history_key(agenda,comparison.context,comparison.preceding)
+        end
+    end
+    length(facts) >= 2 && allunique(f.writer for f in facts) && allunique(f.comparison for f in facts) ||
+        return NamedTuple[]
+    return sort!(facts;by=f->f.writer)
+end
 
 """Build policy edges from confirmed transfers and still-readable preparation facts."""
 function witnessed_relation_steps(agenda,entries)
@@ -66,9 +98,12 @@ function witnessed_relation_steps(agenda,entries)
     for (index,row) in enumerate(agenda.samples)
         row.state == "GAME_OVER" && continue
         groups = Dict{Int,Vector{NamedTuple}}()
-        for fact in relation_inputs(agenda,index)
-            # A directly witnessed omission adds a condition even on an adjacent edge.
-            fact.writer < row.preceding || fact.usage == :omission_contrast || continue
+        incoming = relation_inputs(agenda,index)
+        adjacent_contrast = any(f->f.writer==row.preceding && f.usage==:omission_contrast &&
+            (!row.advanced || (index,f.writer,f.comparison) in active_outcomes),incoming)
+        for fact in incoming
+            # A witnessed omission retains all observed role bindings at that edge.
+            fact.writer < row.preceding || adjacent_contrast || continue
             row.advanced && fact.usage == :omission_contrast &&
                 (index,fact.writer,fact.comparison) ∉ active_outcomes && continue
             push!(get!(Vector{NamedTuple},groups,fact.writer),fact)
@@ -104,12 +139,18 @@ function witnessed_relation_steps(agenda,entries)
             descriptors[writer] = policy_step(left,isnothing(producer) ? String[] : agenda.producers[producer].relations)
         end
     end
+    joint = Dict{Int,Vector{NamedTuple}}()
+    for index in keys(descriptors)
+        facts = policy_preparation_inputs(agenda,index,active_outcomes)
+        isempty(facts) && continue
+        joint[index] = facts
+    end
     followers = Dict{Int,Vector{Int}}()
     for (source,target) in sort!(collect(keys(links)))
-        push!(get!(Vector{Int},followers,source),target)
+        haskey(joint,target) || push!(get!(Vector{Int},followers,source),target)
     end
     source_producer = Dict(i=>agenda.producers[key] for (i,key) in by_sample)
-    return (;descriptors,links,followers,by_ref,outcomes_after,source_producer,active_outcomes)
+    return (;descriptors,links,joint,followers,by_ref,outcomes_after,source_producer,active_outcomes)
 end
 
 function public_role_links(previous,current)
@@ -138,6 +179,7 @@ function source_policy_episodes(agenda,trace)
     identify(rows) = semantic_hash([[descriptors[i] for i in rows],
         [trace.links[pair].layout for pair in zip(rows,rows[2:end])]])
     for (writer,reader) in keys(trace.links)
+        hasproperty(trace,:joint) && haskey(trace.joint,reader) && continue
         rows = [writer,reader]
         push!(get!(Vector{Vector{Int}},families,identify(rows)),rows)
     end
@@ -234,10 +276,60 @@ function sequence_policy(trace,members)
     return first
 end
 
+function joint_preparation_episodes(agenda,entries,trace,continuity)
+    # Independently contrasted inputs form one conjunction at the reader. The
+    # observed ordering of the preparatory actions asserts no dependency between them.
+    episodes = NamedTuple[]
+    joined = Dict{String,Vector{NamedTuple}}()
+    for (reader,inputs) in trace.joint
+        all(f->haskey(trace.links,(f.writer,reader)),inputs) || continue
+        members = [[f.writer for f in inputs];reader]
+        body = policy_expr("RelationTask";layout=trace.descriptors[first(members)])
+        for position in 2:length(members)
+            source,consumer = members[position-1],members[position]
+            edge = get(trace.links,(source,consumer),nothing)
+            layout = isnothing(edge) ? Dict{String,Any}("shared"=>[]) : copy(edge.layout)
+            if consumer == reader
+                layout["preparations"] = map(enumerate(inputs)) do (i,f)
+                    original = trace.links[(f.writer,reader)].layout
+                    selected = any(p->first(p)==f.output_port && last(p)=="selected_role",
+                        get(original,"required_outputs",[]))
+                    shared = [j for (out,j) in original["shared"] if out==f.output_port]
+                    (length(inputs)-i+1,f.output_port,selected,shared)
+                end
+                # All these roles, including the last writer, have explicit slots.
+                delete!(layout,"required_outputs")
+            end
+            task = policy_expr("RelationTask";layout=trace.descriptors[consumer])
+            body = policy_expr("RelationSequence",body,task;layout)
+        end
+        reads = unique([ref for input in inputs for ref in input.reads])
+        evidence_only = setdiff(vcat(collect(first(members):reader),[f.comparison for f in inputs]),members)
+        events = unique([reduce(vcat,relation_refs.(agenda.samples[members]));reads;
+            relation_ref.(agenda.samples[evidence_only])])
+        episode = (;body,members,structure="sequence",events,evidence_only,public_outcomes=NamedTuple[],
+            preparations=[(f.writer,f.comparison) for f in inputs])
+        verify_relation_episode(body,episode,agenda,entries;by_ref=trace.by_ref,
+            source_producer=trace.source_producer,active_outcomes=trace.active_outcomes,continuity) || continue
+        push!(get!(Vector{NamedTuple},joined,semantic_hash(body)),episode)
+    end
+    for occurrences in values(joined)
+        last_reader = 0
+        independent = NamedTuple[]
+        for episode in sort!(occurrences;by=e->last(e.members))
+            first(episode.members) > last_reader || continue
+            push!(independent,episode)
+            last_reader = last(episode.members)
+        end
+        length(independent) >= 2 && append!(episodes,independent)
+    end
+    return episodes
+end
+
 function policy_episodes(agenda,entries;solver=nothing,snapshot="trajectory")
     trace = witnessed_relation_steps(agenda,entries)
     families = source_policy_episodes(agenda,trace)
-    isempty(families) && return NamedTuple[]
+    isempty(families) && isempty(trace.joint) && return NamedTuple[]
     episodes = NamedTuple[]
     features = Dict{String,Set{String}}()
     continuity = Dict{Tuple{Int,Int},Bool}()
@@ -282,6 +374,7 @@ function policy_episodes(agenda,entries;solver=nothing,snapshot="trajectory")
             by_ref=trace.by_ref,source_producer=trace.source_producer,active_outcomes=trace.active_outcomes,continuity) || return
         push!(episodes,episode)
     end
+    append!(episodes,joint_preparation_episodes(agenda,entries,trace,continuity))
     ordered = sort!(collect(families);by=first)
     for (_,members) in ordered
         representative = first(members)
@@ -448,16 +541,31 @@ mutable struct RelationPolicyCursor
     pending::Vector{NamedTuple}
     observed::Vector{String}
     outputs::Vector{Any}
+    output_history::Vector{Vector{Any}}
+    max_lookback::Int
     loop_states::Set{Tuple{String,String}}
     purpose::Union{Nothing,NamedTuple}
 end
 
+function preparation_lookback(node)
+    here = maximum((first(slot) for slot in get(node["layout"],"preparations",[]));init=0)
+    return maximum(preparation_lookback,node["children"];init=here)
+end
+
+function save_policy_outputs!(cursor,outputs)
+    cursor.outputs = outputs
+    cursor.max_lookback == 0 && return
+    push!(cursor.output_history,cursor.outputs)
+    length(cursor.output_history) > cursor.max_lookback && popfirst!(cursor.output_history)
+end
+
 RelationPolicyCursor(policy) = RelationPolicyCursor(policy,
-    [(node=policy.body["tree"],iteration=0,shared=Any[])],String[],Any[],Set{Tuple{String,String}}(),nothing)
+    [(node=policy.body["tree"],iteration=0,shared=Any[])],String[],Any[],Vector{Any}[],
+    get(()->preparation_lookback(policy.body["tree"]),policy.body,"preparation_lookback"),Set{Tuple{String,String}}(),nothing)
 
 function peek_relation_instruction(cursor,scene)
     candidate = RelationPolicyCursor(cursor.policy,copy(cursor.pending),copy(cursor.observed),
-        copy(cursor.outputs),copy(cursor.loop_states),cursor.purpose)
+        copy(cursor.outputs),copy(cursor.output_history),cursor.max_lookback,copy(cursor.loop_states),cursor.purpose)
     result = next_relation_instruction!(candidate,scene)
     return merge(result,(;cursor=candidate))
 end
@@ -472,7 +580,7 @@ function next_relation_instruction!(cursor,scene)
             return (;instruction,branches,status=:task)
         elseif kind == "RelationSequence"
             push!(cursor.pending,(node=children[2],iteration=0,shared=layout["shared"],
-                required_outputs=get(layout,"required_outputs",[])))
+                required_outputs=get(layout,"required_outputs",[]),preparations=get(layout,"preparations",[])))
             push!(cursor.pending,merge(instruction,(node=children[1],iteration=0)))
         elseif kind == "RelationBranch"
             yes = relation_predicate(first(children)["layout"],scene,cursor.outputs)
@@ -482,7 +590,7 @@ function next_relation_instruction!(cursor,scene)
                 layout["shared_by_branch"][yes ? 1 : 2] : instruction.shared
             outputs = haskey(layout,"outputs_by_branch") ?
                 layout["outputs_by_branch"][yes ? 1 : 2] : get(instruction,:required_outputs,[])
-            push!(cursor.pending,(node=children[yes ? 2 : 3],iteration=0,shared,required_outputs=outputs))
+            push!(cursor.pending,merge(instruction,(node=children[yes ? 2 : 3],iteration=0,shared,required_outputs=outputs)))
         elseif kind == "RelationRepeat"
             yes = relation_predicate(first(children)["layout"],scene,cursor.outputs)
             isnothing(yes) && return (;instruction=nothing,branches,status=:unknown_guard)
@@ -561,7 +669,7 @@ function verify_relation_episode(tree,episode,agenda,entries;
     end
     earlier = nothing
     prior_index = 0
-    for index in episode.members
+    for (position,index) in enumerate(episode.members)
         row = agenda.samples[index]
         before = by_ref[row.effects.before_id]
         skipped = prior_index != 0 && row.preceding != prior_index
@@ -580,6 +688,28 @@ function verify_relation_episode(tree,episode,agenda,entries;
             groups = public_components(last(prepared.frames))
             required_policy_outputs(next.instruction,cursor.outputs,groups,row.effects.action) || return false
         end
+        inputs = policy_preparation_inputs(agenda,index,active_outcomes)
+        slots = get(next.instruction,:preparations,[])
+        if !isempty(slots) || !isempty(inputs)
+            length(slots) == length(inputs) > 1 || return false
+            groups = public_components(last(prepared.frames))
+            for ((back,port,selected,shared),input) in zip(slots,inputs)
+                0 < back < position && episode.members[position-back]==input.writer &&
+                    port == input.output_port || return false
+                outputs = cursor.output_history[end-back+1]
+                checkbounds(Bool,outputs,port) && outputs[port] in groups || return false
+                links = filter(f->f.writer==input.writer && f.output_port==port,relation_inputs(agenda,index))
+                selected == any(f->f.usage==:selected_role,links) || return false
+                if selected
+                    row.effects.action["id"]==6 && point_component(groups,action_key(row.effects.action)[2:3])==outputs[port] || return false
+                end
+                valid = filter(f->policy_edge_input(f,agenda,get(source_producer,input.writer,nothing),producer,
+                    row.effects.action["id"],false),links)
+                shared == sort!(unique([f.input_port for f in valid if f.input_port > 0])) || return false
+                all(j->j<=length(row.effects.effects) && outputs[port]==row.effects.effects[j].before,shared) || return false
+                policy_edge_continues(agenda,input.writer,index,(input,),by_ref) || return false
+            end
+        end
         if skipped
             row.effects.action["id"] in prepared.available_actions || return false
             writer_model = get(source_producer,prior_index,nothing)
@@ -590,8 +720,12 @@ function verify_relation_episode(tree,episode,agenda,entries;
                     (index,prior_index,f.comparison) in active_outcomes) &&
                     policy_edge_input(f,agenda,writer_model,producer,id,gained)
             end
-            isempty(inputs) && return false
-            intact = get!(continuity,(prior_index,index)) do
+            # Two independently contrasted preparers need no edge to each other.
+            # Rebind the next preparer on the earlier public observation instead.
+            independent = isempty(inputs) && hasproperty(episode,:preparations) &&
+                any(pair->first(pair)==index,episode.preparations) && !isnothing(producer)
+            isempty(inputs) && !independent && return false
+            intact = independent || get!(continuity,(prior_index,index)) do
                 policy_edge_continues(agenda,prior_index,index,inputs,by_ref)
             end
             intact || return false
@@ -599,7 +733,7 @@ function verify_relation_episode(tree,episode,agenda,entries;
             canonical_bytes(shared) == canonical_bytes(next.instruction.shared) || return false
             required = sort!(unique([(f.output_port,string(f.usage)) for f in inputs
                 if f.output_port > 0 && f.input_port==0]))
-            canonical_bytes(required)==canonical_bytes(get(next.instruction,:required_outputs,[])) || return false
+            isempty(slots) && canonical_bytes(required)!=canonical_bytes(get(next.instruction,:required_outputs,[])) && return false
             groups = public_components(last(prepared.frames))
             if !isnothing(producer)
                 check = evaluate_joint_rule(producer.rule,last(prepared.frames),groups,enclosure_pairs(groups),
@@ -617,7 +751,7 @@ function verify_relation_episode(tree,episode,agenda,entries;
             canonical_bytes(next.instruction.shared) ==
                 canonical_bytes(public_role_links(earlier.effects,row.effects)) || return false
         end
-        cursor.outputs = isnothing(producer) ? Any[] : witnessed_policy_ports(row)
+        save_policy_outputs!(cursor,isnothing(producer) ? Any[] : witnessed_policy_ports(row))
         earlier = row
         prior_index = index
     end
@@ -653,7 +787,7 @@ function trajectory_counterexamples(reads,cutoff,agenda)
     return sort!(collect(conflicts))
 end
 
-function policy_task_options(agenda,instruction,obs,decision;meters=(),test_precondition=false)
+function policy_task_options(agenda,instruction,obs,decision;meters=(),test_precondition=false,preparers=())
     op = instruction.node["layout"]
     id = op["id"]
     id in obs.available_actions || return NamedTuple[]
@@ -676,7 +810,7 @@ function policy_task_options(agenda,instruction,obs,decision;meters=(),test_prec
             allowed = reduce(intersect,(Set(get(agenda.by_relation,relation,String[])) for relation in sought))
             observed = prepare_relation_tests(agenda,context,obs,decision.groups,action;meters,condition_view)
             [test for test in observed if test.key in allowed && test.relations == sought &&
-                (test.scope in (:bound,:replicated) || test_precondition && test.scope==:unverified &&
+                (test.scope in (:bound,:replicated) || (test_precondition || test.key in preparers) && test.scope==:unverified &&
                     !unverified_competing_role(test)) &&
                 all(other->other.expected == test.expected,observed)]
         end
@@ -765,8 +899,12 @@ function bind_policy_outcome(cursor,op,obs,decision,agenda)
         action["id"] == op["id"] || continue
         key = action_key(action)
         visits = get(agenda.visits,(context,key),Int[])
+        comparisons = String[]
         exact = filter(index->relation_history_key(agenda,context,agenda.samples[index].preceding) == history,visits)
-        if !isempty(exact)
+        if cursor.max_lookback > 0 && any(i->!agenda.samples[i].advanced,exact)
+            continue
+        end
+        if !isempty(exact) && cursor.max_lookback == 0
             all(index->agenda.samples[index].advanced,exact) || continue
             recorded = findlast(exact) do index
                 row = agenda.samples[index]
@@ -779,6 +917,8 @@ function bind_policy_outcome(cursor,op,obs,decision,agenda)
                 observed = agenda.samples[witness.outcome]
                 relation_ref(observed) in training && Set(observed.available) == available &&
                     matches(observed,action) || return false
+                cursor.max_lookback == 0 || length(witness.steps) == cursor.max_lookback &&
+                    length(witness.comparisons) == cursor.max_lookback || return false
                 live = frontier_prior(agenda,previous,length(witness.steps))
                 length(live) == length(witness.steps) <= length(cursor.observed) || return false
                 relation_ref.(agenda.samples[live]) == cursor.observed[end-length(live)+1:end] || return false
@@ -787,28 +927,97 @@ function bind_policy_outcome(cursor,op,obs,decision,agenda)
             end
             scope = :hypothesis
             if isnothing(match)
+                cursor.max_lookback == 0 || continue
                 outcome = witnessed_policy_availability(cursor,agenda,training,matches,action)
                 isnothing(outcome) && continue
                 comparison = nothing
             else
                 witness = agenda.outcome_relations[match]
                 outcome, comparison = agenda.samples[[witness.outcome,witness.comparison]]
+                cursor.max_lookback == 0 || append!(comparisons,relation_ref.(agenda.samples[witness.comparisons]))
             end
         end
         reads = unique([cursor.policy.training;cursor.policy.available_after;cursor.observed;
-            relation_refs(outcome);isnothing(comparison) ? String[] : relation_refs(comparison)])
+            relation_refs(outcome);comparisons;isnothing(comparison) ? String[] : relation_refs(comparison)])
         obligation = (;definition=cursor.policy.definition,wait=false,sought=String[],shared=[],
             public_outcome=op["public_outcome"],scope,preparation,outcome=relation_ref(outcome),
             comparison=isnothing(comparison) ? nothing : relation_ref(comparison))
+        isempty(comparisons) || (obligation=merge(obligation,(;comparisons)))
         return (;action,intent=:execute_relation_policy,tests=NamedTuple[],reads,obligation)
     end
     return nothing
 end
 
+function bound_policy_preparations(instruction,cursor,agenda,groups)
+    reads = NamedTuple[]
+    for (back,port,_,_) in get(instruction,:preparations,[])
+        0 < back <= length(cursor.output_history) && back <= length(cursor.observed) || return nothing
+        outputs = cursor.output_history[end-back+1]
+        checkbounds(Bool,outputs,port) || return nothing
+        support = outputs[port]
+        support isa MotionShape && support in groups || return nothing
+        # A role that disappeared and later reappeared has a different origin.
+        fact = get(agenda.uses.roles,support,nothing)
+        writer = cursor.observed[end-back+1]
+        !isnothing(fact) && fact.output_port == port &&
+            relation_ref(agenda.samples[fact.writer]) == writer || return nothing
+        push!(reads,(;writer,port,usage="omission_contrast",support=semantic_hash(support)))
+    end
+    return reads
+end
+
 function bind_relation_instruction(cursor,instruction,obs,decision,agenda;meters=())
+    isempty(get(instruction,:preparations,())) && return bind_policy_task(cursor,instruction,obs,decision,agenda;meters)
+    roles = bound_policy_preparations(instruction,cursor,agenda,decision.groups)
+    isnothing(roles) && return nothing
+    proposal = bind_policy_task(cursor,instruction,obs,decision,agenda;meters)
+    isnothing(proposal) && return nothing
+    return merge(proposal,(obligation=merge(proposal.obligation,(role_reads=roles,)),))
+end
+
+# On a novel binding, corroborated preparation rules can be tested before a
+# policy reaches its target. Every prediction stays unverified until its receipt.
+function policy_preparer_trials(cursor,agenda)
+    position = length(cursor.observed)+1
+    width = cursor.max_lookback
+    0 < position <= width || return ()
+    support = Dict{String,Vector{Int}}()
+    training = Set(cursor.policy.training)
+    function record(reader,facts)
+        length(facts)==width || return
+        relation_ref(agenda.samples[reader]) in training || return
+        fact = facts[position]
+        fact.writer_event in training && relation_ref(agenda.samples[fact.comparison]) in training || return
+        push!(get!(Vector{Int},support,fact.producer),reader)
+    end
+    for witness in agenda.outcome_relations
+        length(witness.steps)==width && length(witness.comparisons)==width || continue
+        facts = sort!([f for f in relation_inputs(agenda,witness.outcome)
+            if f.usage==:omission_contrast && f.comparison in witness.comparisons &&
+                (f.writer=>f.producer) in witness.steps];by=f->f.writer)
+        record(witness.outcome,facts)
+    end
+    for source in get(cursor.policy.body,"preparation_trials",[])
+        reader = policy_atom_field(source,:reader)
+        checkbounds(Bool,agenda.samples,reader) || continue
+        facts = policy_preparation_inputs(agenda,reader,())
+        [(f.writer,f.comparison) for f in facts] == Tuple.(policy_atom_field(source,:inputs)) || continue
+        record(reader,facts)
+    end
+    return [model for (model,readers) in support if length(unique(readers)) >= 2]
+end
+
+function bind_policy_task(cursor,instruction,obs,decision,agenda;meters=())
     op = instruction.node["layout"]
-    required(action) = isempty(get(instruction,:required_outputs,[])) ||
-        required_policy_outputs(instruction,cursor.outputs,decision.groups,action)
+    slots = get(instruction,:preparations,[])
+    function required(action)
+        isempty(slots) && isempty(get(instruction,:required_outputs,())) && return true
+        required_policy_outputs(instruction,cursor.outputs,decision.groups,action) || return false
+        return all(slots) do (back,port,selected,_)
+            !selected || action["id"]==6 && point_component(decision.groups,action_key(action)[2:3]) ==
+                cursor.output_history[end-back+1][port]
+        end
+    end
     if haskey(op,"public_outcome") || haskey(op,"public_available")
         options = filter(row->required(row.action),decision.ranked)
         isempty(options) && return nothing
@@ -820,11 +1029,22 @@ function bind_relation_instruction(cursor,instruction,obs,decision,agenda;meters
     # observation. Keep the original unverified scope on the dispatched test.
     purpose = cursor.purpose
     test_precondition = !isnothing(purpose) && purpose.kind==:test_policy_precondition &&
-        purpose.action==op["id"] && (purpose.output_port,"omission_contrast") in
-            [(port,usage) for (port,usage) in get(instruction,:required_outputs,[])]
-    options = policy_task_options(agenda,instruction,obs,decision;meters,test_precondition)
-    filter!(row->required(row.action),options)
+        purpose.action==op["id"] && (!isempty(get(instruction,:preparations,[])) ||
+            any(p->first(p)==purpose.output_port && last(p)=="omission_contrast",get(instruction,:required_outputs,[])))
+    preparers = policy_preparer_trials(cursor,agenda)
+    options = policy_task_options(agenda,instruction,obs,decision;meters,test_precondition,preparers)
+    filter!(options) do option
+        required(option.action) && all(slots) do (back,port,_,shared)
+            all(option.tests) do test
+                all(j->j<=length(test.fragments) && test.fragments[j].basis==cursor.output_history[end-back+1][port],shared)
+            end
+        end
+    end
     if test_precondition
+        if hasproperty(purpose,:reader)
+            inputs = policy_preparation_inputs(agenda,purpose.reader,())
+            [relation_ref(agenda.samples[f.comparison]) for f in inputs] == purpose.comparisons || return nothing
+        end
         filter!(row->(:policy_precondition,purpose.trial,action_key(row.action)) ∉ agenda.checked_effects,options)
     end
     sharing = instruction.shared
@@ -870,6 +1090,8 @@ function policy_advancement_purpose(candidate,ends,agenda,obs,decision)
         id = outcome.effects.action["id"]
         role = isnothing(outcome.binding) ? nothing : outcome.binding.appearance
         any(op->op["id"] == id && op["role"] == role,ends) || continue
+        width = candidate.cursor.max_lookback
+        width == 0 || length(witness.steps) == width && length(witness.comparisons) == width || continue
         at,producer = first(witness.steps)
         Set(agenda.samples[at].available) == available || continue
         matched = findfirst(test->test.key == producer,candidate.proposal.tests)
@@ -882,7 +1104,12 @@ function policy_advancement_purpose(candidate,ends,agenda,obs,decision)
         purpose = (;kind=:establish_public_outcome,scope=:hypothesis,target,producer,
             sought=candidate.proposal.tests[matched].relations,
             outcome=relation_ref(outcome),comparison=relation_ref(comparison))
-        reads = unique([relation_refs(outcome);relation_refs(comparison);reduce(vcat,relation_refs.(sources))])
+        comparisons = width == 0 ? [witness.comparison] : witness.comparisons
+        reads = unique([relation_refs(outcome);reduce(vcat,relation_refs.(agenda.samples[comparisons]));
+            reduce(vcat,relation_refs.(sources))])
+        if width > 0
+            purpose = merge(purpose,(comparisons=relation_ref.(agenda.samples[comparisons]),))
+        end
         return (;purpose,reads)
     end
     return nothing
@@ -987,8 +1214,35 @@ function observed_policy_preconditions(episode,agenda)
     return facts
 end
 
+function joint_effect_precondition(candidate,agenda,obs)
+    policy = candidate.cursor.policy
+    for source in get(policy.body,"preparation_trials",[])
+        index = policy_atom_field(source,:reader)
+        checkbounds(Bool,agenda.samples,index) || continue
+        row = agenda.samples[index]
+        event = policy_atom_field(source,:event)
+        relation_ref(row) == event || continue
+        current = policy_preparation_inputs(agenda,index,())
+        [(f.writer,f.comparison) for f in current] == Tuple.(policy_atom_field(source,:inputs)) || continue
+        initial = first(current)
+        any(test->test.key==initial.producer,candidate.proposal.tests) || continue
+        id = row.effects.action["id"]
+        id in obs.available_actions || continue
+        comparisons = [relation_ref(agenda.samples[f.comparison]) for f in current]
+        trial = semantic_hash([policy.body["scope"],event,comparisons,candidate.context,
+            relation_history_key(agenda,candidate.context,agenda.previous),action_key(candidate.proposal.action)])
+        id != 6 && (:policy_precondition,trial,action_key(Dict("id"=>id))) in agenda.checked_effects && continue
+        purpose = (;kind=:test_policy_precondition,scope=:hypothesis,trial,action=id,
+            producer=initial.producer,output_port=initial.output_port,source=initial.writer_event,
+            consumer=event,comparison=first(comparisons),comparisons,reader=index)
+        return (;purpose,reads=unique([event;[ref for f in current for ref in f.reads]]))
+    end
+    return nothing
+end
+
 function policy_effect_precondition(candidate,agenda,obs)
     cursor = candidate.cursor
+    cursor.max_lookback > 0 && return joint_effect_precondition(candidate,agenda,obs)
     isempty(cursor.pending) && return nothing
     next = last(cursor.pending)
     ports = [port for (port,kind) in get(next,:required_outputs,[]) if kind == "omission_contrast"]
@@ -1034,8 +1288,8 @@ function relation_policy_choice(policies,cursor,attempted,agenda,obs,decision;me
         if !isempty(required)
             isempty(next.cursor.observed) && return nothing
             writer = last(next.cursor.observed)
-            role_reads = [(;writer,port,usage,support=semantic_hash(next.cursor.outputs[port]))
-                for (port,usage) in required]
+            role_reads = [get(proposal.obligation,:role_reads,NamedTuple[]);
+                [(;writer,port,usage,support=semantic_hash(next.cursor.outputs[port])) for (port,usage) in required]]
             proposal = merge(proposal,(;obligation=merge(proposal.obligation,(;role_reads))))
         end
         candidate = (;cursor=next.cursor,proposal,next.branches,context)
@@ -1061,7 +1315,10 @@ function relation_policy_choice(policies,cursor,attempted,agenda,obs,decision;me
             b_effects = Set(semantic_hash(test.expected) for test in b.tests)
             a_effects == b_effects || continue
             (isempty(current.cursor.pending) || current.cursor.pending == next.cursor.pending) || continue
+            next.cursor.max_lookback <= current.cursor.max_lookback || continue
             next.cursor.observed = copy(current.cursor.observed)
+            next.cursor.outputs = copy(current.cursor.outputs)
+            next.cursor.output_history = copy(current.cursor.output_history)
             next.cursor.loop_states = copy(current.cursor.loop_states)
             proposal = merge(b,(reads=unique([a.reads;b.reads]),))
             replacement = merge(next,(;proposal))
@@ -1069,7 +1326,7 @@ function relation_policy_choice(policies,cursor,attempted,agenda,obs,decision;me
         end
         return current
     end
-    sort!(choices;by=policy->policy.body["structure"] == "sequence")
+    sort!(choices;by=policy->(!haskey(policy.body,"preparation_trials"),policy.body["structure"] == "sequence"))
     preparation = nothing
     comparison = nothing
     for policy in choices
@@ -1126,11 +1383,12 @@ function confirm_relation_policy!(selection,agenda,feedback,after)
         return (;cursor=nothing,result=:withdrawn,branches=NamedTuple[],experiment_after)
     end
     row.advanced && return (;cursor=nothing,result=:stopped_at_public_advance,branches=NamedTuple[],experiment_after)
-    cursor.outputs = if isempty(task.tests)
+    outputs = if isempty(task.tests)
         []
     else
         [observed_policy_port(row.effects,part) for part in first(task.tests).fragments]
     end
+    save_policy_outputs!(cursor,outputs)
     # Peek through zero-action control nodes only after the receipt.
     next = next_relation_instruction!(cursor,after.observation)
     if next.status == :task

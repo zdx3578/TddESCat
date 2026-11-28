@@ -108,6 +108,34 @@ class PublicCoverage:
                 )
                 counters["outcome_task_advanced"] += advanced
 
+    def record_preparation_use(self, event, task, relation, control, advanced):
+        flow = relation.get("fact_flow") or {}
+        for trial in flow.get("proposed_omissions", ()):
+            control["omission_candidates"] += 1
+            control["single_factor_omission_candidates"] += trial["isolated"]
+        feedback = relation.get("feedback") or {}
+        if task.get("intent") == "test_preparation_omission" and (omitted := feedback.get("omission")):
+            assert parameter_key(task["action"]) == parameter_key(event["action"])
+            control["omission_dispatched"] += 1
+            control["omission_" + omitted["status"]] += 1
+
+        usages = {"outcome_preparation_read", "policy_preparation_read"}
+        declared = [edge for edge in task.get("fact_reads", ()) if edge["usage"] in usages]
+        consumed = [edge for edge in flow.get("inputs", ()) if edge["usage"] in usages]
+        if not (declared or consumed):
+            return
+        assert all(edge in declared for edge in consumed) and all(edge in consumed for edge in declared)
+        assert parameter_key(task["action"]) == parameter_key(event["action"])
+        writers = {edge["writer_event"] for edge in consumed}
+        assert event["event_id"] not in writers
+        control["tasks_reading_live_preparations"] += 1
+        control["live_preparation_writers_read"] += len(writers)
+        control["tasks_reading_multiple_preparations"] += len(writers) > 1
+        control["advancements_after_live_preparation_read"] += advanced
+        if writers & self.followup_events:
+            control["tasks_reading_live_object_followups"] += 1
+            control["advancements_after_live_followup_read"] += advanced
+
     def observe(self, receipt, response):
         if response["state"] in ("GAME_OVER", "WIN"):
             return
@@ -156,6 +184,7 @@ class PublicCoverage:
                 relation.get("feedback") or {}
             ).get("result") == "established"
         self.record_object_followup(event, response, decision, relation, advanced)
+        self.record_preparation_use(event, operation, relation, control, advanced)
 
     def report(self):
         available = sorted(set(self.domains) | set(self.tested))

@@ -34,7 +34,10 @@ struct OutcomeRelationWitness
     steps::Vector{Pair{Int,String}}
     comparison::Int
     outcome::Int
+    comparisons::Vector{Int}
 end
+
+OutcomeRelationWitness(steps,comparison,outcome) = OutcomeRelationWitness(steps,comparison,outcome,[comparison])
 
 mutable struct RelationAgenda
     samples::Vector{RelationSample}
@@ -130,9 +133,10 @@ function witnessed_outcome_relation(agenda,index)
     # experimental comparison; the outcome record labels the link a hypothesis.
     contrasts = unique([(f.writer,f.producer,f.comparison) for f in relation_inputs(agenda,index)
         if f.usage == :omission_contrast && !isnothing(f.producer) && f.comparison > 0])
-    if length(contrasts) == 1
-        source,producer,comparison = only(contrasts)
-        return OutcomeRelationWitness([source=>producer],comparison,index)
+    if !isempty(contrasts)
+        steps = unique([source=>producer for (source,producer,_) in contrasts])
+        comparisons = unique([at for (_,_,at) in contrasts])
+        return OutcomeRelationWitness(steps,first(comparisons),index,comparisons)
     end
     steps = Pair{Int,String}[]
     current = outcome
@@ -197,7 +201,8 @@ function record_public_outcome!(agenda,index,fact_flow)
         attempt=row.attempt,level=row.level,preparation,requirements,dependency=row.dependency,
         relationship=isnothing(witness) ? nothing : (;producer=first(chain).producer,
             preparation=first(chain).event,chain,
-            comparison=relation_ref(agenda.samples[witness.comparison]),status=:hypothesis),
+            comparison=relation_ref(agenda.samples[witness.comparison]),
+            comparisons=relation_ref.(agenda.samples[witness.comparisons]),status=:hypothesis),
         local_effects_complete=row.effects.complete && isempty(row.effects.residual))
     isempty(withdrawals) || (outcome=merge(outcome,(withdrawn_preparations=withdrawals,)))
     push!(agenda.outcomes,outcome)
@@ -267,6 +272,55 @@ function relation_checks(proposal,after,effects;groups=nothing)
     return (;intent=proposal.intent,result,tests=results)
 end
 
+# Only record continuity of the publicly observed colored support. Treat a
+# replacement at the pointer, including a transient replacement, as unknown.
+function stationary_click_support(support,point,frames,regions)
+    x,y = point
+    for (i,frame) in enumerate(frames)
+        checkbounds(Bool,frame,y+1,x+1) || return false
+        parts = isnothing(regions) ? color_components(frame) : regions.frames[i]
+        parts.groups[parts.owner[y+1,x+1]] == support || return false
+    end
+    return true
+end
+
+# Flood the complement of the role's support within its bounding box. Escape to
+# any edge distinguishes an open notch from a hole enclosed in all four directions.
+function pointer_zone(region,point)
+    support = effect_points(region.support)
+    point in support && return :support
+    left,right,top,bottom = region.bounds
+    queue = Pixel[point]
+    seen = Set(queue)
+    for (x,y) in queue
+        (x==left || x==right || y==top || y==bottom) && return :box_gap
+        for (dx,dy) in FOUR_NEIGHBORS
+            cell = (x+dx,y+dy)
+            (cell in seen || cell in support) && continue
+            push!(seen,cell)
+            push!(queue,cell)
+        end
+    end
+    return :hole
+end
+
+function preceding_click_role(agenda,previous,part)
+    regions = get(part,:rival_regions,nothing)
+    (previous == 0 || isnothing(regions)) && return nothing
+    row = agenda.samples[previous]
+    (row.advanced || row.state != "NOT_FINISHED" || isnothing(row.binding) ||
+        !get(row.binding,:stationary_pointer,false)) && return nothing
+    x,y = row.binding.point
+    hits = filter(regions) do region
+        left,right,top,bottom = region.bounds
+        left <= x <= right && top <= y <= bottom
+    end
+    length(hits) == 1 || return nothing
+    region = only(hits)
+    owner = part.basis == region.support ? :bound : :rival
+    return (;owner,zone=pointer_zone(region,(x,y)))
+end
+
 function observe_relations!(agenda,before,after,effects,contact,site_changes,proposal;
                             groups=nothing,after_groups=nothing,after_regions=nothing)
     prev,next = before.observation,after.observation
@@ -277,7 +331,8 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
         support = point_component(isnothing(groups) ? public_components(last(prev.frames)) : groups,point)
         if !isnothing(support)
             lineage = get!(() -> effects.before_id * "-" * join(point,"-"),agenda.lineages,support)
-            (;lineage,point,appearance=click_profile(support,point))
+            stationary_pointer = stationary_click_support(support,point,next.frames,after_regions)
+            (;lineage,point,appearance=click_profile(support,point),stationary_pointer)
         end
     end
     prior = agenda.previous == 0 ? nothing : agenda.samples[agenda.previous]
@@ -325,7 +380,9 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
         same = same_relation_response(sample,source)
         status = sample.unchanged ? :changed_to_no_effect : same ? :same_response : :different_response
         feedback = merge(feedback,(;result=:observed,omission=(;status,writer=proposal.obligation.writer,
-            consumer=relation_ref(source),baseline_effects=length(source.effects.effects))))
+            consumer=relation_ref(source),baseline_effects=length(source.effects.effects),
+            candidates=proposal.obligation.candidates,uncontrolled=proposal.obligation.uncontrolled,
+            isolated=proposal.obligation.isolated)))
     elseif !isnothing(proposal) && proposal.intent == :prepare_public_outcome
         legal = proposal.obligation.action in next.available_actions
         feedback = merge(feedback,(result=next.state == "NOT_FINISHED" && legal ? :established : :refuted,))
@@ -352,7 +409,8 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
             if !isnothing(moving) && row.status in (:established,:refuted)
                 part = test.fragments[moving]
                 trials = get!(Vector{NamedTuple},producer.competition_trials,part.entry_alternatives)
-                push!(trials,(;index,origin=part.value,layout=part.rival_layout,row.status))
+                click_role = preceding_click_role(agenda,sample.preceding,part)
+                push!(trials,(;index,origin=part.value,layout=part.rival_layout,click_role,row.status))
             end
             if !isnothing(history) && row.status in (:established,:refuted)
                 scope = effect_experiment_scope(sample.level,action,history,test)
@@ -501,7 +559,7 @@ unverified_competing_role(test) = test.scope == :unverified &&
     any(part->haskey(part,:entry_alternatives),get(test,:fragments,()))
 
 function outcome_preparation_step(agenda,witness,step,obs,decision,context,target;
-                                  meters,condition_view,confirmed=String[])
+                                  meters,condition_view,confirmed=String[],prepared_roles=NamedTuple[])
     at, producer = witness.steps[step]
     source = agenda.samples[at]
     Set(source.available) == Set(obs.available_actions) || return nothing
@@ -538,12 +596,51 @@ function outcome_preparation_step(agenda,witness,step,obs,decision,context,targe
             preparation=relation_ref(source),outcome=relation_ref(outcome),index=witness.outcome,
             sought=contract.relations,scope=:hypothesis,chain,step,confirmed)
         isnothing(equivalence) || (obligation = merge(obligation,(;role_equivalence=equivalence)))
-        reads = unique([relation_refs(comparison);relation_refs(outcome);confirmed;
+        reads = unique([reduce(vcat,relation_refs.(agenda.samples[witness.comparisons]));relation_refs(outcome);confirmed;
             [ref for (index,_) in witness.steps for ref in relation_refs(agenda.samples[index])]])
         intent = step == 1 ? :establish_outcome_relation : :continue_outcome_preparation
-        return (;action,intent,tests=[contract],reads,obligation,witness)
+        role_reads = outcome_preparation_reads(agenda,prepared_roles)
+        isnothing(role_reads) && continue
+        isempty(role_reads) || (obligation=merge(obligation,(;role_reads)))
+        return (;action,intent,tests=[contract],reads,obligation,witness,prepared_roles)
     end
     return nothing
+end
+
+function outcome_preparation_reads(agenda,roles)
+    reads = NamedTuple[]
+    for role in roles
+        fact = get(agenda.uses.roles,role.support,nothing)
+        !isnothing(fact) && fact.writer==role.writer && fact.output_port==role.port || return nothing
+        writer = relation_ref(agenda.samples[role.writer])
+        push!(reads,(;writer,role.port,usage="outcome_preparation",support=semantic_hash(role.support)))
+    end
+    return reads
+end
+
+function confirmed_outcome_roles(agenda,proposal)
+    current = length(agenda.samples)
+    sample = agenda.samples[current]
+    source = first(proposal.witness.steps[proposal.obligation.step])
+    prior = get(proposal,:prepared_roles,NamedTuple[])
+    roles = NamedTuple[]
+    # Only a source input and a matching current receipt can license replacing
+    # an earlier port. Unrelated changes and transient losses remain unknown.
+    observed = relation_inputs(agenda,current)
+    training = relation_inputs(agenda,source)
+    for role in prior
+        consumed = any(training) do a
+            a.usage==:observed_input && a.writer==role.source && a.output_port==role.port &&
+                any(b->b.usage==:observed_input && b.writer==role.writer &&
+                    b.output_port==role.port && b.input_port==a.input_port,observed)
+        end
+        consumed || push!(roles,role)
+    end
+    for (port,effect) in enumerate(sample.effects.effects)
+        effect.family in (:pigment,:translation) && !isempty(effect.after) || continue
+        push!(roles,(;source,writer=current,port,support=effect.after))
+    end
+    return roles
 end
 
 function prepare_outcome_relation(agenda,obs,decision,context;meters,condition_view)
@@ -647,6 +744,45 @@ function verified_instance(agenda,producer,context,action,previous,level;conditi
         length(unique(row.lineage for row in witnesses)) >= 2 && !contradicted ? :replicated : :unverified
 end
 
+function compare_pointer_roles(agenda,producer,trials,previous,part,level,context)
+    refined_history(history_scope(agenda,context)) && return nothing
+    role = preceding_click_role(agenda,previous,part)
+    isnothing(role) && return nothing
+    checked = [t for t in trials if !isnothing(get(t,:click_role,nothing)) &&
+        agenda.samples[t.index].level == level && agenda.samples[t.index].state == "NOT_FINISHED" &&
+        !refined_history(history_scope(agenda,agenda.samples[t.index].context))]
+    passed = filter(t->t.status == :established,checked)
+    failed = filter(t->t.status == :refuted,checked)
+    (isempty(failed) || length(unique(t.origin for t in passed)) < 2 ||
+        length(unique(agenda.samples[t.index].context for t in passed)) < 2) && return nothing
+    owner = first(passed).click_role.owner
+    all(t->t.click_role.owner == owner,passed) || return nothing
+    # Preserve the finite version space. Body, enclosed complements and open
+    # notches can be indistinguishable in training and disagree at a new point.
+    zones = (:support,:hole,:box_gap)
+    hypotheses = NamedTuple[]
+    for mask in 1:7
+        accepted = [z for (i,z) in enumerate(zones) if !iszero(mask & (1 << (i-1)))]
+        all(t->t.click_role.zone in accepted,passed) || continue
+        any(t->t.click_role.owner == owner && t.click_role.zone in accepted,failed) && continue
+        push!(hypotheses,(;owner,zones=accepted,accepts=role.owner == owner && role.zone in accepted))
+    end
+    isempty(hypotheses) && return nothing
+    agreement = all(h->h.accepts,hypotheses) ? :supported :
+        any(h->h.accepts,hypotheses) ? :split : :excluded
+    matching = filter(t->t.click_role == role,passed)
+    replicated = agreement == :supported && length(unique(t.origin for t in matching)) >= 2 &&
+        length(unique(agenda.samples[t.index].context for t in matching)) >= 2
+    excluded = Set(t.index for t in failed)
+    any(i->agenda.samples[i].level == level && i ∉ excluded,producer.refuted) && return nothing
+    refs = reduce(vcat,(vcat(relation_refs(agenda.samples[t.index]),
+        relation_refs(agenda.samples[agenda.samples[t.index].preceding])) for t in checked))
+    append!(refs,relation_refs(agenda.samples[previous]))
+    return (;kind=:preceding_click_in_competing_region,observed=role,hypotheses,agreement,replicated,
+        supports=[relation_ref(agenda.samples[t.index]) for t in passed],
+        excludes=[relation_ref(agenda.samples[t.index]) for t in failed],reads=unique!(refs))
+end
+
 function competition_scope(agenda,producer,context,previous,level,scope,part,models)
     trials = get(producer.competition_trials,part.entry_alternatives,())
     history = relation_history_key(agenda,context,previous)
@@ -672,6 +808,12 @@ function competition_scope(agenda,producer,context,previous,level,scope,part,mod
             witnessed |= row.context == context && trial.origin == part.value
         end
     end
+    pointer = compare_pointer_roles(agenda,producer,trials,previous,part,level,context)
+    if !isnothing(pointer)
+        append!(reads,pointer.reads)
+        pointer.agreement == :excluded && return (:withdrawn,reads,pointer)
+        return (pointer.replicated ? :replicated : :unverified,reads,pointer)
+    end
     if last_negative > 0
         new_support = any(producer.support) do at
             at > last_negative || return false
@@ -681,12 +823,19 @@ function competition_scope(agenda,producer,context,previous,level,scope,part,mod
                 any(e->e.family == :translation && e.before == part.basis &&
                     Tuple(e.values) == part.expected,row.effects.effects)
         end
-        return (new_support ? :unverified : :withdrawn,reads)
+        return (new_support ? :unverified : :withdrawn,reads,nothing)
     end
     # A unique palette is a hypothesis. Transfer needs positive receipts from
     # distinct competing roles and the regular condition/replication checks.
     qualified = witnessed || scope == :replicated && length(positions) >= 2
-    return (qualified ? scope : :unverified,reads)
+    return (qualified ? scope : :unverified,reads,nothing)
+end
+
+function witnessed_motion_channel(rule,fragments,frame)
+    length(rule.effects) == length(fragments) == 1 || return false
+    part = only(fragments)
+    part.family == :translation && part.expected != (0,0) || return false
+    return visible_support(frame,part.basis) && destination_colors(frame,[part]) == rule.entry_colors
 end
 
 function prepare_relation_tests(agenda,context,obs,groups,action;meters=(),condition_view=nothing,
@@ -705,7 +854,8 @@ function prepare_relation_tests(agenda,context,obs,groups,action;meters=(),condi
     tests = NamedTuple[]
     for key in ids
         producer = agenda.producers[key]
-        if competing_only
+        models = isnothing(condition_view) ? () : get(condition_view.models,relation_condition_key(producer.rule),())
+        if competing_only && !any(m->!isnothing(role_boundary_condition(m.condition)),models)
             targets = [role.target for role in enclosure]
             ambiguous(effect) = effect.family == :translation &&
                 length(model_candidates(effect,groups,targets,role_index)) > 1
@@ -717,7 +867,6 @@ function prepare_relation_tests(agenda,context,obs,groups,action;meters=(),condi
         # experiments until there are concrete outcomes at multiple bindings.
         rule = producer.rule
         first_comparison = isnothing(role_index) ? 1 : length(role_index.comparisons)+1
-        models = isnothing(condition_view) ? () : get(condition_view.models,relation_condition_key(rule),())
         conditions = NamedTuple[]
         if isempty(models)
             eval = evaluate_joint_rule(rule,frame,groups,enclosure,action;meters,relative_transfer=true,role_index)
@@ -737,7 +886,7 @@ function prepare_relation_tests(agenda,context,obs,groups,action;meters=(),condi
                         part -> conjunction(model.condition.atoms,frame,MotionBinding(part.basis,part.value),
                             part.expected,condition_view.history;transients=condition_view.transients)
                     evaluate_joint_rule(rule,frame,groups,enclosure,action;meters,relative_transfer=true,
-                        role_index,binding_guard)
+                        role_index,binding_guard,role_condition=role_boundary_condition(model.condition))
                 end
                 assessable_binding(bound) && plan_channels(bound.fragments) == plan_channels(known.fragments) || continue
                 push!(matches,(;model,bound))
@@ -758,15 +907,30 @@ function prepare_relation_tests(agenda,context,obs,groups,action;meters=(),condi
         isnothing(expected) && continue
         competing = findfirst(part->haskey(part,:entry_alternatives),eval.fragments)
         competition_reads = String[]
+        pointer = nothing
+        projection_scope = :not_requested
         if !isnothing(competing)
-            scope,competition_reads = competition_scope(agenda,producer,context,previous,obs.levels_completed,
+            scope,competition_reads,pointer = competition_scope(agenda,producer,context,previous,obs.levels_completed,
                 scope,eval.fragments[competing],isempty(conditions) ? () : (match.model for match in matches))
             scope == :withdrawn && continue
+            isnothing(pointer) || push!(conditions,(;version=semantic_hash([string(pointer.kind),[(string(h.owner),string.(h.zones)) for h in pointer.hypotheses],
+                pointer.supports,pointer.excludes]),reads=pointer.reads,comparison=pointer))
         end
-        if scope != :bound && (isnothing(rule.click) ? scope == :replicated : !rule.click.local_pigment)
+        if scope == :unverified && !isnothing(pointer) && pointer.agreement != :excluded &&
+                witnessed_motion_channel(rule,eval.fragments,frame)
+            projection_scope = :candidate_motion_channel
+        elseif scope != :bound && (isnothing(rule.click) ? scope == :replicated : !rule.click.local_pigment)
             guard = (complete=true,)
             projected = projection_patch((model=(;rule,condition=guard),fragments=eval.fragments),frame)
-            isnothing(projected) && continue
+            if !isnothing(projected)
+                projection_scope = :frame_patch
+            elseif !isnothing(pointer) && pointer.agreement != :excluded && witnessed_motion_channel(rule,eval.fragments,frame)
+                # Only the measured displacement is under test. Residual pixels
+                # and the successor scene have no prediction in this contract.
+                projection_scope = pointer.replicated ? :witnessed_motion_channel : :candidate_motion_channel
+            else
+                continue
+            end
         end
         reads = unique([ref for index in [producer.support;producer.refuted]
             for ref in relation_refs(agenda.samples[index])])
@@ -783,7 +947,7 @@ function prepare_relation_tests(agenda,context,obs,groups,action;meters=(),condi
             append!(reads,query.reads)
         end
         push!(tests,(;key,rule,scope,expected,eval.fragments,reads=unique!(reads),conditions,
-            relations=producer.relations,comparisons))
+            relations=producer.relations,comparisons,projection_scope))
     end
     if any(test->test.scope == :bound,tests)
         filter!(test->test.scope == :bound,tests)
@@ -798,6 +962,11 @@ function experimental_response_score(scores,action,groups)
     support = point_component(groups,point)
     isnothing(support) && return 0.0
     return get(scores,(id,click_profile(support,point)),0.0)
+end
+
+function separates_current_effects(obligation,tests)
+    !isnothing(obligation) && get(obligation,:comparison,nothing) == :distinguish_concrete_effects &&
+        distinguish_predictions([test.expected for test in tests]).separated > 0
 end
 
 function relation_experiment(agenda,obs,decision,intervention,context;meters=(),uncertainty=Dict{Int,Float64}(),
@@ -824,6 +993,18 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
                     :recover_confirmed_progress : :restore_failure_experiment_context
                 return (;action,intent,tests=NamedTuple[],
                     reads=unique([failure.event;relation_refs(row)]),obligation)
+            end
+        end
+        if !isnothing(frontier) && !isempty(agenda.uses.omissions) && obs.levels_completed == failure.level
+            omitted = current_omission_experiment(frontier,agenda,obs,decision,context)
+            if isnothing(omitted)
+                node = frontier_state(agenda,context,previous)
+                prior_events = frontier_prior(agenda,previous,history_scope(agenda,context).width)
+                history_reads = relation_ref.(agenda.samples[prior_events])
+                omitted = frontier_omission_route(frontier,agenda,obs,decision,first(decision.ranked).action,node,history_reads)
+            end
+            if !isnothing(omitted)
+                return merge(omitted,(;revises_failure=failure.event,reads=unique([failure.event;omitted.reads])))
             end
         end
         # The original first action is excluded only in its own public context.
@@ -865,7 +1046,9 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
         if get(plan,:kind,nothing) == :outcome_relation
             target = plan.obligation.target
             outcome = agenda.samples[plan.witness.outcome]
-            if !isnothing(prior) && relation_ref(prior) == plan.event && context == plan.context
+            role_reads = outcome_preparation_reads(agenda,plan.prepared_roles)
+            if !isnothing(prior) && relation_ref(prior) == plan.event && context == plan.context &&
+                    !isnothing(role_reads) && plan.witness in agenda.outcome_relations
                 if target["id"] ∉ obs.available_actions || !matches_outcome_binding(outcome,target,decision.groups)
                     target = rebound_outcome_action(outcome,decision)
                 end
@@ -874,13 +1057,13 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
                     confirmed = plan.confirmed
                     if step > length(plan.witness.steps)
                         if !observed_failure(agenda,context,action_key(target),previous)
-                            obligation = merge(plan.obligation,(;target,confirmed,established=plan.event))
+                            obligation = merge(plan.obligation,(;target,confirmed,established=plan.event,role_reads))
                             return (;action=target,intent=:continue_outcome_relation,tests=NamedTuple[],
                                 reads=plan.reads,obligation)
                         end
                     else
                         next = outcome_preparation_step(agenda,plan.witness,step,obs,decision,context,target;
-                            meters,condition_view,confirmed)
+                            meters,condition_view,confirmed,prepared_roles=plan.prepared_roles)
                         isnothing(next) || return next
                     end
                 end
@@ -912,12 +1095,11 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
     comparison = isnothing(intervention) ? nothing : get(intervention,:effect_experiment,nothing)
     # Alternative roles can make compatible claims on disjoint channels. Give
     # a concrete contrast precedence when a shared observable separates them.
-    if !isnothing(comparison) && comparison.comparison == :distinguish_concrete_effects &&
-            distinguish_predictions([test.expected for test in intervention.tests]).separated > 0
+    if !isnothing(intervention) && separates_current_effects(comparison,get(intervention,:tests,()))
         return (;intervention.action,intent=:test_concrete_effect,intervention.tests,
             reads=String[],obligation=comparison)
     end
-    omission = omitted_preparation_experiment(agenda,obs,decision,context)
+    omission = current_omission_experiment(frontier,agenda,obs,decision,context)
     isnothing(omission) || return omission
     sought = observed_relation_task(agenda,obs,decision,context;meters)
     isnothing(sought) || return sought
@@ -1051,6 +1233,7 @@ function task_arbitration(item,spatial,intervention,relation,experiment;
     end
     if !isnothing(relation)
         priority = relation.intent in (:recover_confirmed_progress,:restore_failure_experiment_context) ? -1 :
+            hasproperty(relation,:revises_failure) ? 1 :
             relation.intent in (:revise_failed_trace,:complete_preparation,:continue_outcome_preparation,
                 :continue_outcome_relation) ? 1 :
             relation.intent in (:test_preparation_omission,:test_concrete_effect,:distinguish_changed_context,:test_delayed_effect,
@@ -1081,7 +1264,9 @@ function task_arbitration(item,spatial,intervention,relation,experiment;
             continuing_policy || choice.priority <= 2
         elseif choice.source == :relation
             choice.priority <= 2 || relation.intent in
-                (:test_preparation_omission,:establish_preparation,:probe_observed_advancement,:prepare_public_outcome,:establish_outcome_relation)
+                (:test_preparation_omission,:establish_preparation,:probe_observed_advancement,:prepare_public_outcome,:establish_outcome_relation) ||
+                (relation.intent == :test_concrete_effect && separates_current_effects(
+                    get(relation,:obligation,nothing),get(relation,:tests,())))
         elseif choice.source == :experiment
             get(experiment,:independent,false)
         else
@@ -1187,14 +1372,33 @@ function relation_task_record(proposal)
     reads = sort!(unique([proposal.reads;[ref for test in proposal.tests for ref in test.reads]]))
     contracts = [(producer=test.key,scope=test.scope,relations=test.relations,expected=test.expected,
         roles=[(family=part.family,port=program_input(part)) for part in test.fragments],reads=test.reads,
-        conditions=get(test,:conditions,NamedTuple[]))
+        conditions=get(test,:conditions,NamedTuple[]),projection_scope=get(test,:projection_scope,:not_requested))
         for test in proposal.tests]
     comparisons = [q for test in proposal.tests for q in get(test,:comparisons,())]
     record = (;intent=proposal.intent,action=proposal.action,reads,contracts,obligation=proposal.obligation)
+    if hasproperty(proposal,:revises_failure)
+        record = merge(record,(;proposal.revises_failure))
+    end
     if haskey(proposal,:fact_reads)
         record = merge(record,(fact_reads=proposal.fact_reads,))
     end
     return isempty(comparisons) ? record : merge(record,(;competing_bindings=comparisons))
+end
+
+function agreed_role_contract(tests)
+    at = findfirst(t->t.scope in (:bound,:replicated),tests)
+    isnothing(at) && return nothing
+    basis = tests[at]
+    length(tests) == 1 && return basis
+    function operands(t)
+        haskey(t,:roles) && return t.roles
+        return [(family=p.family,port=program_input(p)) for p in t.fragments]
+    end
+    ports = operands(basis)
+    # Counts and meters have additional visibility and range obligations.
+    all(p->p.family in (:translation,:pigment),ports) || return nothing
+    all(t->t.expected == basis.expected && operands(t) == ports,tests) || return nothing
+    return basis
 end
 
 function relation_prediction(rec,item,prediction,task;role_proof=nothing,resource_proof=nothing)
@@ -1203,7 +1407,8 @@ function relation_prediction(rec,item,prediction,task;role_proof=nothing,resourc
     if !isnothing(role_proof) && get(role_proof,:reused,false)
         role_proof.proved_at in reads || push!(reads,role_proof.proved_at)
     end
-    admitted = length(task.contracts) == 1 && only(task.contracts).scope in (:bound,:replicated)
+    representative = agreed_role_contract(task.contracts)
+    admitted = !isnothing(representative)
     if !isnothing(role_proof)
         admitted &= role_proof.execution == "completed" && role_proof.answer == "value" &&
             get(role_proof.value,"entailed",false) === true
@@ -1211,7 +1416,7 @@ function relation_prediction(rec,item,prediction,task;role_proof=nothing,resourc
     admitted &= isnothing(resource_proof) || resource_proof.status == :proven
     values = Dict{String,Any}()
     if admitted
-        for (channel,value) in only(task.contracts).expected
+        for (channel,value) in representative.expected
             values["relation-" * channel] = value
         end
     end
@@ -1222,8 +1427,14 @@ function relation_prediction(rec,item,prediction,task;role_proof=nothing,resourc
         admitted = true
     end
     if isnothing(prediction)
+        model_version = if length(task.contracts) == 1
+            "relation-" * only(task.contracts).producer
+        elseif !isnothing(representative)
+            sources = sort!(unique(t.producer for t in task.contracts if t.scope in (:bound,:replicated)))
+            "relation-" * semantic_hash(["matching-role-contracts",sources])
+        end
         return (before_ref=rec.before_ref,payload=Dict{String,Any}(
-            "model_version"=>length(task.contracts) == 1 ? "relation-" * only(task.contracts).producer : nothing,
+            "model_version"=>model_version,
             "binding"=>[],"action"=>item.action,"guard_truth"=>admitted ? true : "unknown",
             "query_scope"=>sort!(collect(keys(values))),"predicted_values"=>values,
             "event_reads"=>reads,"enumeration_complete"=>false,"assumptions"=>[string(task.intent)]))
@@ -1252,7 +1463,12 @@ function failure_retry!(agenda;frontier=nothing)
         length(first_sample.available) > 1 || 6 in first_sample.available || return nothing
     else
         origin = frontier_state(agenda,first_sample.context,first_sample.preceding)
-        if isempty(frontier_untried(frontier,origin))
+        omission = frontier_omission_at(agenda,first_sample.context,first_sample.preceding,first_sample.available)
+        directed = if isnothing(omission) && !isempty(agenda.uses.omissions)
+            frontier_path(frontier,agenda,origin;seek_omission=true)
+        end
+        # Rebind the pending experiment after reopening, using its current witnesses.
+        if isnothing(omission) && isnothing(directed) && isempty(frontier_untried(frontier,origin))
             reachable = frontier_path(frontier,agenda,origin)
             if isnothing(reachable) && isnothing(frontier_new_configuration(frontier,origin,first_sample.available))
                 reachable = frontier_path(frontier,agenda,origin;include_configurations=true)
@@ -1314,6 +1530,9 @@ function finish_relation_dispatch!(agenda,proposal;feedback=nothing)
                 row.state == "NOT_FINISHED"
             agenda.restart = merge(restart,(cursor=restart.cursor+1,))
         end
+    elseif proposal.intent == :explore_observed_frontier_path && hasproperty(proposal,:revises_failure) &&
+            !isnothing(feedback) && feedback.result == :established
+        agenda.restart = restart
     elseif proposal.intent == :establish_preparation
         plan = proposal.obligation
         push!(agenda.preparations,(agenda.attempt,plan.context,plan.index))
@@ -1324,7 +1543,7 @@ function finish_relation_dispatch!(agenda,proposal;feedback=nothing)
         if row.state == "NOT_FINISHED" && !row.advanced
             confirmed = [proposal.obligation.confirmed;relation_ref(row)]
             agenda.preparing = (;kind=:outcome_relation,event=relation_ref(row),context=row.next_context,
-                proposal.witness,proposal.obligation,confirmed,reads=unique([proposal.reads;relation_refs(row)]))
+                prepared_roles=confirmed_outcome_roles(agenda,proposal),proposal.witness,proposal.obligation,confirmed,reads=unique([proposal.reads;relation_refs(row)]))
         end
     elseif proposal.intent == :establish_observed_relation
         push!(agenda.relation_replays,proposal.obligation.route)

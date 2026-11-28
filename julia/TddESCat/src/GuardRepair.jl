@@ -277,3 +277,44 @@ function claim_record(claim)
         "excluded_counterexamples"=>claim.guard.excluded, "search_complete"=>claim.guard.complete,
         "feasible"=>claim.guard.feasible, "query_scope"=>["bound_support_displacement"])
 end
+
+"""A finite set of equally consistent, role-relative one-cell boundary conditions."""
+struct RoleBoundary <: MotionPredicate
+    offsets::Vector{Tuple{Pixel,UInt8}}
+    colors::Vector{UInt8}
+    reads::Vector{String}
+end
+
+function role_boundary_condition(condition)
+    at = findfirst(atom->atom isa RoleBoundary,condition.atoms)
+    return isnothing(at) ? nothing : condition.atoms[at]
+end
+
+predicate_record(p::RoleBoundary) = Dict("kind"=>"motion_role_boundary","offsets"=>p.offsets,
+    "witnessed_role_colors"=>p.colors)
+
+function evaluate_predicate(p::RoleBoundary,frame,binding,delta,history)
+    isnothing(binding) && return unknown_truth
+    first(binding.support)[3] in p.colors || return unknown_truth
+    answers = Set{Bool}()
+    for ((dx,dy),pigment) in p.offsets
+        x,y = binding.anchor .+ (dx,dy)
+        checkbounds(Bool,frame,y+1,x+1) || return unknown_truth
+        push!(answers,frame[y+1,x+1] == pigment)
+        length(answers) == 1 || return unknown_truth
+    end
+    return only(answers) ? proven : disproven
+end
+
+function role_boundary_pixels(shape,frame)
+    cells = Set(effect_points(shape))
+    origin = anchor(shape)
+    result = Set{Tuple{Pixel,UInt8}}()
+    for point in cells, step in ((-1,0),(1,0),(0,-1),(0,1))
+        x,y = point .+ step
+        (x,y) in cells && continue
+        checkbounds(Bool,frame,y+1,x+1) || continue
+        push!(result,(((x,y) .- origin),frame[y+1,x+1]))
+    end
+    return result
+end
