@@ -93,6 +93,9 @@ def verify_site(public, row, key, direction):
     require(len(hits) == 1, "Point does not distinguish the roles")
     hit = next(shape for pos, shape in roles if pos == hits[0])
     observed_class = dict(owner="bound" if hits[0] == origin else "rival", zone=zone(hit, point))
+    role = color, hit
+    require(role in previous and all(role in components(frame) for frame in frames),
+            "Role around the pointer changed during a confirmed frame")
 
     # Access the response after deriving the binding from the prior public frames.
     event = load(public / "events" / (row["event"] + ".json"))
@@ -110,7 +113,7 @@ def verify_site(public, row, key, direction):
     return dict(event=event["event_id"], sequence=event["sequence"], before=click["event_id"],
                 before_screen_domain_sha256=sha256(context).hexdigest(),
                 pointer=point, pointer_color=frames[-1][point[1]][point[0]], role_color=color,
-                role_pixels=len(hit), observed_class=observed_class, action=event["action"],
+                role_pixels=len(hit), role_continuity_frames=len(frames)+1, observed_class=observed_class, action=event["action"],
                 origin=origin, expected=direction,
                 measured=direction if arrived else (0, 0), response_sha256=event["response_blob"])
 

@@ -1,0 +1,476 @@
+{
+  "window_report_sha256": "194e4fabb0bcaee772b15807a5b27f0a37e08950dab1ed4649e5bd45460a14ad",
+  "windows": 13,
+  "truncated_prefixes": 12,
+  "observations": 205,
+  "proposals": 45,
+  "click_proposals": 0,
+  "screening": {
+    "pairs": 305,
+    "reconstructed_writer_references": 89,
+    "source_roles_present": 14
+  },
+  "with_restored_roles_and_external_changes": 13,
+  "strict_history_opportunities": 3,
+  "strict": [
+    {
+      "game": "ls20-9607627b",
+      "source": "e-0a1ac997674cc3ca-c000000011",
+      "source_sha256": "eeccefa38c02c7494785c4a7ac7b1bc609dfd9e9fd18ba7707d9a4883ae9a984",
+      "issued": "e-0a1ac997674cc3ca-c000000014",
+      "issued_sha256": "c78b1b755f75889d183c3e9f5afa2da9da03e19d615d9b54edd5382f44cca4c7",
+      "before": "e-0a1ac997674cc3ca-c000000024",
+      "before_sha256": "3dcc40a4b33870e4d715cb67da18b9a48bc9f3065ee3fd93175b4eac4cb5d189",
+      "offer": {
+        "id": 2
+      },
+      "domain": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "matched_action_history": [
+        {
+          "id": 1
+        }
+      ],
+      "source_visible_history": 1,
+      "live_visible_history": 14,
+      "protected_cells": 80,
+      "external_pixels": 30,
+      "external_delta_sha256": "6884b5dab3d4cab84629d08d596b390dbecf2fb4aef26ae79f39ea9d1366a5ce",
+      "external_bounds_xyxy": [
+        3,
+        57,
+        32,
+        62
+      ],
+      "shifted_colors": [
+        [
+          11,
+          3,
+          22
+        ],
+        [
+          9,
+          5,
+          4
+        ],
+        [
+          5,
+          9,
+          4
+        ]
+      ],
+      "writer_events": [
+        {
+          "event": "e-0a1ac997674cc3ca-c000000012",
+          "port": 1,
+          "relation": "translation-5feb60188b23440e4cad69ceea0279f402df0161fc041a1c2a156f098eb042be",
+          "response_sha256": "3b94e37a1eb3e2f61349df1b94bf048a920bcc2d2938381cc5ef4b0d5a0626ba"
+        },
+        {
+          "event": "e-0a1ac997674cc3ca-c000000012",
+          "port": 2,
+          "relation": "translation-bbec8b9ae163d40688d9058d87ee0aa4d00ad64131994b37fde423529e728fb4",
+          "response_sha256": "3b94e37a1eb3e2f61349df1b94bf048a920bcc2d2938381cc5ef4b0d5a0626ba"
+        }
+      ],
+      "archived_action": {
+        "id": 1
+      },
+      "archived_event": "e-0a1ac997674cc3ca-c000000025",
+      "archived_response_sha256": "38831990d0b477af6560d0ed3a61047d8c21daa92c1b8a3470d7191735320945",
+      "archived_contact": {
+        "decision_sha256": "3815358428cb157b25eeac00fd7db600176139bfd18a44d6a87159166d683e23",
+        "role": [
+          34,
+          10
+        ],
+        "signature": 15,
+        "judgment": "unknown",
+        "fitted_rules": 65,
+        "admitting": 8,
+        "excluding": 57,
+        "training": [
+          {
+            "event": "e-0a1ac997674cc3ca-c000000013",
+            "response_sha256": "8b419745baa5378597ae9f51acb10d5221f85444b9f0f8df5125cd6d6399b1e2"
+          }
+        ]
+      }
+    },
+    {
+      "game": "ls20-9607627b",
+      "source": "e-0a1ac997674cc3ca-c000000227",
+      "source_sha256": "7a1b06b045563e10fed43bc51de0fe5ef2f289b7b5e047573a753d0a9bbf0f87",
+      "issued": "e-0a1ac997674cc3ca-c000000229",
+      "issued_sha256": "e29957b753d7f29ea28f4363251c076ba4aebd435321a5ebb50abc98d28e4dec",
+      "before": "e-0a1ac997674cc3ca-c000000229",
+      "before_sha256": "e29957b753d7f29ea28f4363251c076ba4aebd435321a5ebb50abc98d28e4dec",
+      "offer": {
+        "id": 1
+      },
+      "domain": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "matched_action_history": [
+        {
+          "id": 1
+        }
+      ],
+      "source_visible_history": 12,
+      "live_visible_history": 14,
+      "protected_cells": 80,
+      "external_pixels": 16,
+      "external_delta_sha256": "ba10bbbc7f7ea7bfaa33c55cf42d67aa22d45a355c9c0b5b8acea96c0efd0bcf",
+      "external_bounds_xyxy": [
+        3,
+        57,
+        42,
+        62
+      ],
+      "shifted_colors": [
+        [
+          11,
+          3,
+          8
+        ],
+        [
+          5,
+          9,
+          4
+        ],
+        [
+          9,
+          5,
+          4
+        ]
+      ],
+      "writer_events": [
+        {
+          "event": "e-0a1ac997674cc3ca-c000000228",
+          "port": 1,
+          "relation": "translation-a6c137a7505b5dc4bd08dafedfde3420a741468e731cc7fbd0db67a135c3df78",
+          "response_sha256": "4d9abdfeeea57218dfe6f1ee8fb3dffbbdc94522fe49c0381456a71456cb3429"
+        },
+        {
+          "event": "e-0a1ac997674cc3ca-c000000228",
+          "port": 3,
+          "relation": "translation-c9d453b54afb8fa95f974ac5886815dedb953b5c7eafa410cd166ebea14800b6",
+          "response_sha256": "4d9abdfeeea57218dfe6f1ee8fb3dffbbdc94522fe49c0381456a71456cb3429"
+        }
+      ],
+      "archived_action": {
+        "id": 4
+      },
+      "archived_event": "e-0a1ac997674cc3ca-c000000230",
+      "archived_response_sha256": "921cafedacb8625aec2f76d8d166883b1be589ecf695f80a7aa7af6b479c9d36",
+      "archived_contact": {
+        "decision_sha256": "69e7d27b17c545eb63729b6a67e241d89b01c92485ee8039f8836d375fbe463e",
+        "role": [
+          54,
+          50
+        ],
+        "signature": 15,
+        "judgment": "admitted",
+        "fitted_rules": 4,
+        "admitting": 4,
+        "excluding": 0,
+        "training": [
+          {
+            "event": "e-0a1ac997674cc3ca-c000000013",
+            "response_sha256": "8b419745baa5378597ae9f51acb10d5221f85444b9f0f8df5125cd6d6399b1e2"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000026",
+            "response_sha256": "702f528f96841dc4af5bcd3bdf39342cfa9c7ac8853d1a14776431656c6cbd04"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000160",
+            "response_sha256": "18dbc2a958ee6cc45aae87a12e028d3114b858068e3b053132e6a9b4d8443f95"
+          }
+        ]
+      }
+    },
+    {
+      "game": "ls20-9607627b",
+      "source": "e-0a1ac997674cc3ca-c000000937",
+      "source_sha256": "49f41ffc49276844d88ed7c05754ab8c0460d0917e40a2052916ec8b89e6206b",
+      "issued": "e-0a1ac997674cc3ca-c000000940",
+      "issued_sha256": "697bb82fc62aa484ae50eec680c00877710992ca3f5c029e6b8505247ff1bd7a",
+      "before": "e-0a1ac997674cc3ca-c000000948",
+      "before_sha256": "9171b9b8d735c2cf29d4bb5bc2331b045f7a03c87a8f0f43d033afce12508861",
+      "offer": {
+        "id": 1
+      },
+      "domain": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "matched_action_history": [
+        {
+          "id": 1
+        }
+      ],
+      "source_visible_history": 1,
+      "live_visible_history": 12,
+      "protected_cells": 10,
+      "external_pixels": 988,
+      "external_delta_sha256": "efb396931e6254cdd21be9b2e005d5239b737402c7d9b8b1b8edcd13c725fddd",
+      "external_bounds_xyxy": [
+        3,
+        12,
+        60,
+        62
+      ],
+      "shifted_colors": [
+        [
+          3,
+          5,
+          287
+        ],
+        [
+          5,
+          3,
+          246
+        ],
+        [
+          5,
+          4,
+          193
+        ],
+        [
+          4,
+          5,
+          137
+        ],
+        [
+          11,
+          3,
+          44
+        ],
+        [
+          8,
+          5,
+          16
+        ],
+        [
+          3,
+          9,
+          15
+        ],
+        [
+          9,
+          3,
+          15
+        ],
+        [
+          5,
+          8,
+          12
+        ],
+        [
+          3,
+          12,
+          10
+        ],
+        [
+          12,
+          3,
+          10
+        ],
+        [
+          5,
+          0,
+          3
+        ]
+      ],
+      "writer_events": [
+        {
+          "event": "e-0a1ac997674cc3ca-c000000938",
+          "port": 1,
+          "relation": "translation-b2c6eb788caa3d6742ff6f49154240c497840e1e1592cda87a9d4802972fb2a1",
+          "response_sha256": "d39f2f051bbb4a86a161e24c549169d18cb17767b5d5d6a841fac885bd6e6e70"
+        }
+      ],
+      "archived_action": {
+        "id": 2
+      },
+      "archived_event": "e-0a1ac997674cc3ca-c000000949",
+      "archived_response_sha256": "bc0fed5e1fb8a7eeeaa636f1c84e77258d1a3876264020ee5aa1826e73fd73b7",
+      "archived_contact": {
+        "decision_sha256": "8584f60a5763fe5d40a89923fb261f7969dbedd0aec59becc2530a48c64dfef5",
+        "role": [
+          29,
+          50
+        ],
+        "signature": 15,
+        "judgment": "admitted",
+        "fitted_rules": 4,
+        "admitting": 4,
+        "excluding": 0,
+        "training": [
+          {
+            "event": "e-0a1ac997674cc3ca-c000000013",
+            "response_sha256": "8b419745baa5378597ae9f51acb10d5221f85444b9f0f8df5125cd6d6399b1e2"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000026",
+            "response_sha256": "702f528f96841dc4af5bcd3bdf39342cfa9c7ac8853d1a14776431656c6cbd04"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000160",
+            "response_sha256": "18dbc2a958ee6cc45aae87a12e028d3114b858068e3b053132e6a9b4d8443f95"
+          },
+          {
+            "event": "e-0a1ac997674cc3ca-c000000332",
+            "response_sha256": "b87da4fe01178f2af8343747b060a573ad4532cce575285c087aa865614f4844"
+          }
+        ]
+      }
+    }
+  ],
+  "difference_digest_encoding": "SHA256 of row-major [x,y,old,new] entries encoded as compact JSON",
+  "ambiguous_click_controls": {
+    "unique": {
+      "frame_sha256": "ccd7f151da70074b884dbe624f1c4ca3ac28f4ccee25b875885c3658e712f7a2",
+      "bindings": [
+        [
+          11,
+          7
+        ]
+      ],
+      "unique": true
+    },
+    "ambiguous": {
+      "frame_sha256": "23961aff733d71e51e14111980a3c732a1ad3da329a9aef0704ad16341365454",
+      "bindings": [
+        [
+          7,
+          7
+        ],
+        [
+          11,
+          7
+        ]
+      ],
+      "unique": false
+    },
+    "recolored_target": {
+      "frame_sha256": "43b428d342c9890300263005c4788b644f029b8a00a8d3940169836e6bf5e36d",
+      "bindings": [],
+      "unique": false
+    }
+  },
+  "scope": "Only the archived advancement windows were replayed. Hypothetical offers have no new outcome. Coordinate ambiguity uses separate fixture frames.",
+  "source_sha256": {
+    "julia/TddESCat/src/RelationUse.jl": "663e7c0b1ba38554c353aa9363d0d36abcbe70d879742f108ba15ea561d36dcf",
+    "julia/TddESCat/src/RelationTasks.jl": "f7cf9c641d01124037beb8e81074dbe6d459e972fb939f9b5358d6f1983e7332",
+    "julia/TddESCat/src/PublicFrontier.jl": "522b22b9d61ae03daa98f678e5956d80225a9880a98516ae265560760e0d00f7",
+    "tests/julia/replay_rebound_omissions.jl": "8baa253d6aed6ab2a3e21d5de35321476edaf184b7033e72303d570b91f80b5e",
+    "tests/bench/replay_omission_rebinding.py": "26a76450ad20958cef2c6d3a665a723b14de063f3be2e299d692d57897f64cd1"
+  },
+  "previous_arbitration": {
+    "offers": [
+      {
+        "before": "e-0a1ac997674cc3ca-c000000024",
+        "intent": "test_rebound_omission",
+        "winner": null,
+        "chosen": {
+          "id": 1
+        },
+        "chosen_source": "spatial",
+        "chosen_reason": "experiment_on_contact_relation",
+        "archived_action": {
+          "id": 1
+        },
+        "counterfactual_difference": false
+      },
+      {
+        "before": "e-0a1ac997674cc3ca-c000000229",
+        "intent": "test_rebound_omission",
+        "winner": null,
+        "chosen": {
+          "id": 4
+        },
+        "chosen_source": "spatial",
+        "chosen_reason": "learned_visual_contact",
+        "archived_action": {
+          "id": 4
+        },
+        "counterfactual_difference": false
+      },
+      {
+        "before": "e-0a1ac997674cc3ca-c000000948",
+        "intent": "test_rebound_omission",
+        "winner": null,
+        "chosen": {
+          "id": 2
+        },
+        "chosen_source": "spatial",
+        "chosen_reason": "learned_visual_contact",
+        "archived_action": {
+          "id": 2
+        },
+        "counterfactual_difference": false
+      }
+    ],
+    "controller_sha256": "43a5f3c5009a7647e76d8240c7b8072bdaf05e64f95f23435e0023010928a4f7",
+    "new_dispatches": 0
+  },
+  "production_replay": {
+    "offers": [
+      {
+        "before": "e-0a1ac997674cc3ca-c000000024",
+        "intent": "test_rebound_omission",
+        "winner": null,
+        "chosen": {
+          "id": 1
+        },
+        "chosen_source": "spatial",
+        "chosen_reason": "experiment_on_contact_relation",
+        "archived_action": {
+          "id": 1
+        },
+        "counterfactual_difference": false
+      },
+      {
+        "before": "e-0a1ac997674cc3ca-c000000229",
+        "intent": "test_rebound_omission",
+        "winner": null,
+        "chosen": {
+          "id": 4
+        },
+        "chosen_source": "spatial",
+        "chosen_reason": "learned_visual_contact",
+        "archived_action": {
+          "id": 4
+        },
+        "counterfactual_difference": false
+      },
+      {
+        "before": "e-0a1ac997674cc3ca-c000000948",
+        "intent": "test_rebound_omission",
+        "winner": null,
+        "chosen": {
+          "id": 2
+        },
+        "chosen_source": "spatial",
+        "chosen_reason": "learned_visual_contact",
+        "archived_action": {
+          "id": 2
+        },
+        "counterfactual_difference": false
+      }
+    ],
+    "controller_sha256": "76e8394ff87b9c44be746a361882c40d56f63d8f742d60c3ebc36f816506f4bc",
+    "new_dispatches": 0
+  }
+}

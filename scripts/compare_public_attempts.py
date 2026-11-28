@@ -234,10 +234,10 @@ def branch_after_choice(public, start, rest, before_response):
         inputs = [f for f in feedback.get("inputs", ()) if fact_id(f) in roots]
         for edge in inputs:
             key = fact_id(edge)
-            historical = (
-                edge["usage"] == "omission_test"
-                and edge.get("scope") == "historical_contrast"
-            )
+            historical = (edge["usage"], edge.get("scope")) in {
+                ("omission_test", "historical_contrast"),
+                ("rebound_omission_test", "confounded_rebinding"),
+            }
             require(
                 key in active or historical,
                 f"Read after loss of support at {observed['event_id']}: {key}",

@@ -114,7 +114,13 @@ class PublicCoverage:
             control["omission_candidates"] += 1
             control["single_factor_omission_candidates"] += trial["isolated"]
         feedback = relation.get("feedback") or {}
-        if task.get("intent") == "test_preparation_omission" and (omitted := feedback.get("omission")):
+        if task.get("intent") == "test_rebound_omission" and (omitted := feedback.get("omission")):
+            obligation = task["obligation"]
+            assert obligation["paired_scope"] == "confounded_rebinding" and obligation["isolated"] is False
+            assert parameter_key(task["action"]) == parameter_key(event["action"])
+            control["rebound_omission_dispatched"] += 1
+            control["rebound_omission_" + omitted["status"]] += 1
+        elif task.get("intent") == "test_preparation_omission" and (omitted := feedback.get("omission")):
             assert parameter_key(task["action"]) == parameter_key(event["action"])
             control["omission_dispatched"] += 1
             control["omission_" + omitted["status"]] += 1

@@ -12,6 +12,13 @@ from tests.bench.measurement_audit import receipts
 from tddesc_tools.run import runtime_paths, write_json
 
 
+CASES = {
+    "relation-use": ([0, 1, 2, 4, 4, 3], "test_preparation_omission"),
+    "reachable-omission": ([0, 4, 4, 1, 2, 3, 4, 1, 0, 4], "explore_observed_frontier_path"),
+    "rebound-omission": ([0, 5, 1, 2, 3, 5], "test_rebound_omission"),
+}
+
+
 def run_case(root, source, path, mode):
     def compare(_, runtime, public, settings, store, **options):
         return solver_process(
@@ -33,7 +40,7 @@ def run_case(root, source, path, mode):
     result = json.loads((public / "choice.json").read_bytes())
     assert result["receipt"] == events[-1][0]["event_id"]
     assert result["choice"]["action"] == events[-1][0]["action"]
-    prefix = [0, 1, 2, 4, 4, 3] if mode == "relation-use" else [0, 4, 4, 1, 2, 3, 4, 1, 0, 4]
+    prefix, _ = CASES[mode]
     assert [event["action"]["id"] for event, _ in events[:-1]] == prefix
     return result, public
 
@@ -44,11 +51,11 @@ def main(baseline, directory, mode="relation-use"):
     new, new_public = run_case(root, root, directory / "candidate", mode)
     pair = compare_attempts(old_public, new_public)
     assert pair["status"] == "first_action_difference"
-    matched = {"resets": 1, "actions": 5} if mode == "relation-use" else {"resets": 2, "actions": 8}
+    prefix, intent = CASES[mode]
+    matched = {"resets": prefix.count(0), "actions": len(prefix) - prefix.count(0)}
     assert pair["matched"] == matched
     assert pair["reference"]["first"]["event"] == old["receipt"]
     assert pair["candidate"]["first"]["event"] == new["receipt"]
-    intent = "test_preparation_omission" if mode == "relation-use" else "explore_observed_frontier_path"
     assert new["intent"] == intent
     report = dict(
         baseline=old,
@@ -64,6 +71,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("baseline", type=Path)
     parser.add_argument("directory", type=Path)
-    parser.add_argument("--mode", choices=("relation-use", "reachable-omission"), default="relation-use")
+    parser.add_argument("--mode", choices=tuple(CASES), default="relation-use")
     args = parser.parse_args()
     main(args.baseline.resolve(), args.directory.resolve(), args.mode)

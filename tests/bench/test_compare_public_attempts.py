@@ -138,6 +138,20 @@ class PublicAttemptComparison(TestCase):
                 with self.assertRaisesRegex(ValueError, "missing before dispatch"):
                     compare_attempts(self.left, self.right)
 
+    def test_rebound_experiment_can_quote_an_invalidated_historical_writer(self):
+        self.differing_choices()
+        self.step(self.right, 3, 1, [self.before], check={
+            "public_relation_feedback": {"fact_flow": {"invalidated": [dict(**self.write, frame=1)]}}
+        })
+        edge = dict(**self.write, usage="rebound_omission_test", scope="confounded_rebinding")
+        self.step(self.right, 4, 2, [self.before],
+                  decision={"public_relation_task": {"fact_reads": [edge]}},
+                  check={"public_relation_feedback": {"fact_flow": {"inputs": [edge]}}})
+        branch = compare_attempts(self.left, self.right)["candidate"]
+        [quoted] = branch["subsequent_direct_uses"]
+        self.assertFalse(quoted["public_support_before_dispatch"])
+        self.assertTrue(quoted["declared_before_dispatch"])
+
     def test_earlier_response_difference_precludes_action_attribution(self):
         self.step(self.left, 1, 0, [self.before, self.after])
         self.step(self.right, 1, 0, [self.after, self.after])

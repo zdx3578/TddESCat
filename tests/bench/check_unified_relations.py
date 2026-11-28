@@ -78,6 +78,7 @@ class Fixture(ARCBaseGame):
             "bridge-partition": [5], "concrete-object-followup": [5, 6],
             "frontier-dispatch": [1, 2], "policy-yield": [1, 2],
             "relation-use": [1, 2, 3, 4],
+            "rebound-omission": [1, 2, 3, 4, 5],
             "partial-omission": [1, 6],
             "frontier-route": [2], "frontier-remote-coordinate": [2],
             "sequence-experiment": [1, 2, 3], "mixed-sequence": [1, 2, 3, 6],
@@ -158,7 +159,7 @@ class Fixture(ARCBaseGame):
             elif action == 6 and pixels[10, 8] == 5 and pixels[20, 12] == 7:
                 if (self.action.data["x"], self.action.data["y"]) == (44, 40):
                     self.next_level()
-        elif MODE == "relation-use":
+        elif MODE in ("relation-use", "rebound-omission"):
             if action == 1:
                 pixels[10:13, 8:11] = 3
             elif action == 2 and pixels[10, 8] == 3:
@@ -166,6 +167,8 @@ class Fixture(ARCBaseGame):
             elif action == 3:
                 pixels[10:13, 8:11] = 4
                 pixels[40:42, 44:46] = 2
+                if MODE == "rebound-omission":
+                    pixels[50, 55:57] = 8
             elif action == 4:
                 pixels[30, 30] = 0 if pixels[30, 30] else 9
         elif MODE == "coordinate-restart":
@@ -458,6 +461,7 @@ def capture(
         "relation-use",
         "partial-omission",
         "reachable-omission",
+        "rebound-omission",
         "policy-yield",
         "frontier-route",
         "frontier-remote-coordinate",
@@ -511,6 +515,7 @@ def capture(
             "relation-use": "relation_use_public.jl",
             "partial-omission": "partial_omission_public.jl",
             "reachable-omission": "reachable_omission_public.jl",
+            "rebound-omission": "rebound_omission_public.jl",
             "advancement-refutation": "advancement_refutation_public.jl",
             "concrete-object-followup": "concrete_object_followup_public.jl",
             "history-dispatch": "history_public.jl",
@@ -642,6 +647,33 @@ def observed_steps(public):
 
 
 def verify(mode, public):
+    if mode == "rebound-omission":
+        rows = list(receipts(public).values())
+        assert [e["action"]["id"] for e, _ in rows] == [0, 5, 1, 2, 3, 5, 2]
+        assert all(reply["levels_completed"] == 0 and reply["state"] == "NOT_FINISHED" for _, reply in rows)
+        assert len({tuple(o["available_actions"]) for _, o in rows}) == 1
+        frames = [r["frame"][-1] for _, r in rows]
+        assert frames[0] == frames[1] and frames[4] == frames[5] == frames[6]
+        changes = {(x, y, a, b) for y, (u, v) in enumerate(zip(frames[1], frames[5], strict=True))
+                   for x, (a, b) in enumerate(zip(u, v, strict=True)) if a != b}
+        assert changes == {(55, 50, 0, 8), (56, 50, 0, 8)}
+        assert frames[1][10][8] == frames[5][10][8] == 4 and frames[2][10][8] == 3
+        assert frames[2][40][44] == frames[5][40][44] == 2 and frames[3][40][44] == 7
+        seen = read(public / "rebound-omission.json")
+        task, trial = seen["task"], seen["task"]["obligation"]
+        assert task["intent"] == "test_rebound_omission" and task["action"] == rows[-1][0]["action"]
+        assert trial["source_event"] == rows[1][0]["event_id"] and trial["source_context"] != trial["comparison_context"]
+        assert trial["isolated"] is False and trial["paired_scope"] == "confounded_rebinding"
+        assert trial["uncontrolled"]["pixel_spans"] == [[50, 55, 56, 0, 8]]
+        assert set(task["reads"]) <= {e["event_id"] for e, _ in rows[:-1]}
+        assert task["fact_reads"] and all(e["usage"] == "rebound_omission_test" for e in task["fact_reads"])
+        assert all(e in seen["inputs"] for e in task["fact_reads"])
+        assert all(e["usage"] != "omission_contrast" for e in seen["inputs"])
+        command = rows[-1][0]["command_ref"]
+        prediction = read(public / "predictions" / (command + ".json"))
+        assert prediction["guard_truth"] == "unknown" and not prediction["predicted_values"]
+        assert set(task["reads"]) <= set(prediction["event_reads"])
+        return [rows[i][0]["event_id"] for i in (1, 2, 3, 5, 6)]
     if mode == "reachable-omission":
         rows = list(receipts(public).values())
         assert [e["action"]["id"] for e, _ in rows] == [0, 4, 4, 1, 2, 3, 4, 1, 0, 4, 4, 2]
@@ -1494,6 +1526,7 @@ def main(config, run):
         "relation-use",
         "partial-omission",
         "reachable-omission",
+        "rebound-omission",
     )
     with ThreadPoolExecutor(max_workers=len(modes)) as pool:
         cases = {
@@ -1528,6 +1561,7 @@ if __name__ == "__main__":
                 "relation-use",
                 "partial-omission",
                 "reachable-omission",
+                "rebound-omission",
                 "progress-restart",
                 "restart-choices",
                 "history-refinement",

@@ -112,7 +112,7 @@ end
     post = entry("s1",[after],action,"s0")
     first_seen = TC.observe_relations!(agenda,pre,post,TC.observed_effects(pre,post),nothing,NamedTuple[],nothing)
     key = first_seen.producer.key
-    function prepare(id,live,rival,point;replacement=false)
+    function prepare(id,live,rival,point;replacement=false,replaced_surround=false)
         frame = zeros(UInt8,32,32)
         for (x,y) in (live,rival,live .+ (3,0))
             frame[y+2,x+2] = 13
@@ -127,7 +127,11 @@ end
             # A different support at the same coordinates invalidates pointer continuity.
             draw!(transient,point,8)
         end
-        clicked = entry(id * "-click",replacement ? [transient,frame] : [frame],
+        if replaced_surround
+            # The distinct centre support keeps its pigment and four-connected identity.
+            draw!(transient,live,8)
+        end
+        clicked = entry(id * "-click",replacement || replaced_surround ? [transient,frame] : [frame],
             Dict("id"=>6,"x"=>point[1],"y"=>point[2]),id * "-pre")
         TC.observe_relations!(agenda,pre,clicked,TC.observed_effects(pre,clicked),nothing,NamedTuple[],nothing)
         tests = TC.prepare_relation_tests(agenda,TC.relation_context(clicked.observation),clicked.observation,
@@ -205,6 +209,10 @@ end
     @test later.known.scope == :replicated && verified.replicated
     @test only(verified.hypotheses).zones == [:support,:hole]
     @test all(in(verified.supports),["hole1-motion","hole2-motion"]) && "gap-motion" in verified.excludes
+    lost_ring = prepare("ring-restored",(7,19),(23,4),(8,20);replaced_surround=true)
+    @test last(agenda.samples).binding.stationary_pointer
+    @test !last(agenda.samples).binding.static_pointer_scene
+    @test lost_ring.known.scope == :unverified && isempty(lost_ring.known.conditions)
     feedback!(prepare("counter",(14,23),(21,7),(14,23)),false)
     withdrawn = prepare("withdrawn",(15,23),(22,7),(15,23))
     @test isempty(withdrawn.known.conditions) && withdrawn.known.scope == :unverified

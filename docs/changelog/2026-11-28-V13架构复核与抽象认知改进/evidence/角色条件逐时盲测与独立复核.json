@@ -16,7 +16,7 @@
   "admitted_supported": 0,
   "replay": "tests/julia/competitive_role_replay.jl <archive> <input> sequential",
   "independent": "python -m tests.bench.replay_competing_pointer <archive> <replay-json>",
-  "check": "从每笔动作之前的原帧计算前一点击的角色和区域。从色块补集的四邻域连通性区分内部孔与通向外界的凹口。Python 独立枚举与每个正反回执一致的区域组合，随后核对留出回执的局部实际位移。",
+  "check": "从每笔动作之前的原帧计算前一点击的角色和区域。从色块补集的四邻域连通性区分内部孔与通向外界的凹口。Python 独立枚举与每个正反回执一致的区域组合，随后核对留出回执的局部实际位移。 四个样本分别确认所点角色在点击前和完整回执的每帧均保持其支持。",
   "limited_scope": "24 个冻结查询的正式来源预测为 0。留出 67 保留一项待检验的具体位移；4 种与训练一致的条件中 2 种允许该位移，实际测得方向相同。其余动作没有新增此类正式晋级或通关证据。",
   "results": [
     {
@@ -856,6 +856,7 @@
           "pointer_color": 14,
           "role_color": 14,
           "role_pixels": 8,
+          "role_continuity_frames": 2,
           "observed_class": {
             "owner": "bound",
             "zone": "support"
@@ -889,6 +890,7 @@
           "pointer_color": 14,
           "role_color": 14,
           "role_pixels": 8,
+          "role_continuity_frames": 2,
           "observed_class": {
             "owner": "bound",
             "zone": "support"
@@ -924,6 +926,7 @@
           "pointer_color": 14,
           "role_color": 14,
           "role_pixels": 8,
+          "role_continuity_frames": 2,
           "observed_class": {
             "owner": "rival",
             "zone": "support"
@@ -958,6 +961,7 @@
         "pointer_color": 0,
         "role_color": 14,
         "role_pixels": 8,
+        "role_continuity_frames": 2,
         "observed_class": {
           "owner": "bound",
           "zone": "hole"
@@ -999,12 +1003,13 @@
     "geometry": "colored ring with an open notch and an enclosed hole",
     "first_hole": "split, unverified, concrete action experiment",
     "same_gap_after_refutation": "excluded, positive contract withdrawn",
-    "later_hole": "replicated after independent positive trials on two origins and a negative trial on the notch"
+    "later_hole": "replicated after independent positive trials on two origins and a negative trial on the notch",
+    "restored_surround": "unverified when only the clicked hole persists and the enclosing support changes in one intermediate frame"
   },
   "evidence_inputs": {
-    "RelationTasks.jl": "42159d8bd93d51b070b5cfcdbb81ffc23e8a98e225124584da9329bb9ec2bf64",
+    "RelationTasks.jl": "455b027ed69247a325cefdfaa93e53ccfa3862f6aa85cb07c9b2ed96d82caf46",
     "JointMechanisms.jl": "75d5f10419da00bb09d4279708c690eeae303b8a3d4cd2bb68520dc98252efb4",
-    "replay_competing_pointer.py": "fb1f10b46aa37dc3b73233890a889961c88839cf92e6bd7097ecc9cdd65f36b0",
-    "role_boundary_contrasts.jl": "3c61e1a1eef4ea4bf0ec1fdc91c084aa87de6d4271d7a466f6f04e0adcf6ac3c"
+    "replay_competing_pointer.py": "04ed03c42ca90efdf187c4f1edd87b30ea29808d49b2d23ca7769de885e64c2e",
+    "role_boundary_contrasts.jl": "cefcedbf1a3ac3377ef912d331dd52cf10e424b64deff83fd37b5752e0e56de0"
   }
 }

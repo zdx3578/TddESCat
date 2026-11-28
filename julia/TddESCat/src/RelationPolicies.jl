@@ -69,6 +69,9 @@ function witnessed_relation_steps(agenda,entries)
         same_stage = !left.advanced && left.attempt == row.attempt && left.level == row.level
         same_stage || continue
         if row.advanced
+            # The terminal result is public even when its local preparation is
+            # unidentified. A confounded trial cannot turn adjacency into that input.
+            index in agenda.uses.rebound_receipts && !enabled && continue
             isnothing(earlier) && !enabled && continue
             left.next_context == row.context || continue
             row.effects.action["id"] == 6 && isnothing(row.binding) && continue

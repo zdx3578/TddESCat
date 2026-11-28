@@ -365,7 +365,7 @@ function confirm_frontier_route!(search,agenda,proposal)
     return (;status=:confirmed,step=route.cursor,next=search.route.cursor)
 end
 
-function frontier_choice(search,agenda,obs,decision,intervention,preferred)
+function frontier_choice(search,agenda,obs,decision,intervention,preferred;allow_coverage=true)
     context = relation_context(obs)
     node = frontier_state(agenda,context,agenda.previous)
     frontier_options!(search,context,decision.ranked,intervention)
@@ -377,6 +377,7 @@ function frontier_choice(search,agenda,obs,decision,intervention,preferred)
     end
     directed = frontier_omission_route(search,agenda,obs,decision,preferred,node,history_reads)
     isnothing(directed) || return directed
+    allow_coverage || return nothing
     repeated = get(get(search.outcomes,node,Dict()),action_key(preferred),nothing)
     isnothing(repeated) && return nothing
     latest = agenda.samples[last(repeated)]

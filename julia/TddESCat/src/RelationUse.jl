@@ -6,9 +6,11 @@ mutable struct RelationUseIndex
     omissions::Dict{String,Dict{PublicActionKey,NamedTuple}}
     omission_screens::Set{Tuple{Int,PublicActionKey,UInt}}
     signatures::Dict{String,UInt}
+    rebound::Dict{Tuple,Dict{MotionShape,Vector{NamedTuple}}}
+    rebound_receipts::Set{Int}
 end
 
-RelationUseIndex() = RelationUseIndex(Dict(),Dict(),Dict(),Dict(),Set(),Dict())
+RelationUseIndex() = RelationUseIndex(Dict(),Dict(),Dict(),Dict(),Set(),Dict(),Dict(),Set())
 
 relation_inputs(agenda,index) = get(agenda.uses.inputs,index,NamedTuple[])
 
@@ -29,14 +31,16 @@ function bind_relation_reads(agenda,proposal,obs,action)
     edges = NamedTuple[]
     permission = get(agenda.uses.permissions,action["id"],nothing)
     isnothing(permission) || push!(edges,input_edge(agenda,permission,0,:dispatch_legality))
-    if proposal.intent == :test_preparation_omission
+    if proposal.intent in (:test_preparation_omission,:test_rebound_omission)
         trial = proposal.obligation
         relation_context(obs) == trial.comparison_context || error("Omission context changed before dispatch")
         original = agenda.samples[trial.consumer]
         for cause in trial.candidates
             fact = (;cause.writer,kind=:role_support,cause.producer,cause.relation,cause.output_port,action=nothing)
-            edge = input_edge(agenda,fact,0,:omission_test)
-            push!(edges,merge(edge,(scope=:historical_contrast,through=cause.writer,
+            rebound = proposal.intent == :test_rebound_omission
+            usage = rebound ? :rebound_omission_test : :omission_test
+            edge = input_edge(agenda,fact,0,usage)
+            push!(edges,merge(edge,(scope=rebound ? :confounded_rebinding : :historical_contrast,through=cause.writer,
                 baseline=relation_ref(original),reads=unique([edge.reads;relation_refs(original)]))))
         end
     elseif proposal.intent in (:execute_relation_policy,:continue_outcome_preparation,:continue_outcome_relation) &&
@@ -209,6 +213,7 @@ end
 
 function comparable_visits(agenda,context,action,writer)
     seen = get(agenda.visits,(context,action),Int[])
+    isempty(agenda.uses.rebound_receipts) || (seen=filter(i->i ∉ agenda.uses.rebound_receipts,seen))
     refined_history(history_scope(agenda,context)) || return seen
     context == writer.context || return Int[]
     history = relation_history_key(agenda,context,writer.preceding)
@@ -274,6 +279,7 @@ function omission_inputs!(edges,agenda,index,before,contract,before_groups)
         if isempty(seen)
             obligations = get!(Dict{PublicActionKey,NamedTuple},agenda.uses.omissions,context)
             obligations[action] = trial
+            index_rebound_omission!(agenda,trial,fact.source_frame,action,groups)
             push!(proposed,(;context,action=concrete_action(action),trial.candidates,trial.isolated,
                 observed_before=trial.uncontrolled.observed_before,prepared_before=trial.uncontrolled.prepared_before,
                 uncontrolled_pixels=sum((r[3]-r[2]+1 for r in trial.uncontrolled.pixel_spans);init=0),
@@ -305,6 +311,113 @@ function omission_evidence_refs(agenda,obligation)
     sources = [obligation.writer,obligation.consumer]
     append!(sources,(fact.writer for fact in obligation.candidates))
     return unique([ref for i in unique(sources) for ref in relation_refs(agenda.samples[i])])
+end
+
+# Exact source supports are lookup keys; a protected pixel is never considered an
+# external change. Keep the original public frame only once per source record.
+function index_rebound_omission!(agenda,trial,reference,action,groups)
+    source=agenda.samples[trial.writer]
+    target=agenda.samples[trial.consumer]
+    source.preceding==0 && return
+    Set(source.available)==Set(target.available) || return
+    parts=[agenda.samples[f.writer].effects.effects[f.output_port] for f in trial.candidates]
+    any(p->isempty(p.before) || isempty(p.after),parts) && return
+    selected=action[1]==6 ? point_component(groups,action[2:3]) : nothing
+    action[1]==6 && isnothing(selected) && return
+    protected=Set{Pixel}()
+    function protect(shape)
+        for (x,y,_) in shape
+            push!(protected,(x,y))
+            for (dx,dy) in FOUR_NEIGHBORS
+                u,v=x+dx,y+dy
+                checkbounds(Bool,reference,v+1,u+1) && push!(protected,(u,v))
+            end
+        end
+    end
+    for part in parts
+        protect(part.before)
+        protect(part.after)
+    end
+    isnothing(selected) || protect(selected)
+    anchor=argmin(length,[p.before for p in parts])
+    bucket=(source.attempt,source.level,Tuple(sort(source.available)),previous_key(agenda,source.preceding))
+    by_role=get!(Dict{MotionShape,Vector{NamedTuple}},agenda.uses.rebound,bucket)
+    support_id=semantic_hash([(p.before,p.after) for p in parts])
+    push!(get!(Vector{NamedTuple},by_role,anchor),(;trial,reference,action,selected,protected,support_id,
+        inputs=[p.before for p in parts]))
+end
+
+function unindex_rebound_omission!(agenda,trial,action)
+    source=agenda.samples[trial.writer]
+    bucket=(source.attempt,source.level,Tuple(sort(source.available)),previous_key(agenda,source.preceding))
+    by_role=get(agenda.uses.rebound,bucket,nothing)
+    isnothing(by_role) && return
+    anchor=argmin(length,[agenda.samples[f.writer].effects.effects[f.output_port].before for f in trial.candidates])
+    records=get(by_role,anchor,nothing)
+    isnothing(records) && return
+    filter!(r->r.action!=action || r.trial!==trial,records)
+    isempty(records) && delete!(by_role,anchor)
+    isempty(by_role) && delete!(agenda.uses.rebound,bucket)
+end
+
+function rebound_omission_experiment(agenda,obs,decision,context)
+    uses=agenda.uses
+    (isempty(uses.rebound) || agenda.previous==0 || obs.state!="NOT_FINISHED") && return nothing
+    bucket=(agenda.attempt,obs.levels_completed,Tuple(sort(obs.available_actions)),previous_key(agenda,agenda.previous))
+    by_role=get(uses.rebound,bucket,nothing)
+    isnothing(by_role) && return nothing
+    groups=get(decision,:groups,nothing)
+    isnothing(groups) && (groups=public_components(last(obs.frames)))
+    matched=[record for shape in groups for record in get(by_role,shape,())]
+    isempty(matched) && return nothing
+    sort!(matched;by=r->(r.trial.consumer,r.trial.writer,r.action))
+    seen_groups=Set(groups)
+    frame=last(obs.frames)
+    for record in matched
+        trial=record.trial
+        # An exact trial remains available through the original scheduler.
+        context==trial.comparison_context && continue
+        table=get(uses.omissions,trial.comparison_context,nothing)
+        (isnothing(table) || get(table,record.action,nothing)!==trial) && continue
+        all(in(seen_groups),record.inputs) || continue
+        size(frame)==size(record.reference) || continue
+        all(p->frame[p[2]+1,p[1]+1]==record.reference[p[2]+1,p[1]+1],record.protected) || continue
+        if !isnothing(record.selected)
+            record.selected in seen_groups || continue
+            template=shape_template(record.selected)
+            count(g->length(g)==length(template) && shape_template(g)==template,groups)==1 || continue
+        end
+        source=agenda.samples[trial.writer]
+        a,b=history_scope(agenda,source.context),history_scope(agenda,context)
+        scope=RelationHistoryScope(max(a.width,b.width),a.receipts||b.receipts)
+        sources=frontier_prior(agenda,source.preceding,scope.width)
+        latest=frontier_prior(agenda,agenda.previous,scope.width)
+        all(i->agenda.samples[i].attempt==source.attempt && agenda.samples[i].level==source.level &&
+            !agenda.samples[i].advanced && agenda.samples[i].state=="NOT_FINISHED",Iterators.flatten((sources,latest))) || continue
+        source_history=relation_history_key(agenda,source.context,source.preceding;scope)
+        live_history=relation_history_key(agenda,context,agenda.previous;scope)
+        length(source_history)==scope.width && source_history==live_history || continue
+        observed_failure(agenda,context,record.action,agenda.previous) && continue
+        observed_failure(agenda,source.context,record.action,source.preceding) && continue
+        check=(:rebound_omission,bucket,record.support_id,record.action,live_history,context)
+        check in agenda.checked_effects && continue
+        # A confirmed action at this same binding and history already tested it.
+        any(i->relation_history_key(agenda,context,agenda.samples[i].preceding;scope)==live_history,
+            get(agenda.visits,(context,record.action),Int[])) && continue
+        spans=uncontrolled_spans(record.reference,frame,record.protected)
+        isempty(spans) && continue
+        current=relation_ref(agenda.samples[agenda.previous])
+        uncontrolled=(;pixel_spans=spans,available_added=Int[],available_removed=Int[],
+            observed_before=source.effects.before_id,prepared_before=current)
+        obligation=merge(trial,(;comparison_context=context,source_context=source.context,source_event=source.effects.before_id,
+            paired_scope=:confounded_rebinding,uncontrolled,source_uncontrolled=trial.uncontrolled,isolated=false,
+            before=current,history_width=scope.width,history_receipts=scope.receipts))
+        indices=[sources;latest]
+        reads=unique([omission_evidence_refs(agenda,trial);relation_ref.(agenda.samples[indices]);current])
+        return (;action=concrete_action(record.action),intent=:test_rebound_omission,tests=NamedTuple[],reads,obligation,
+            rebound_check=check)
+    end
+    return nothing
 end
 
 function omitted_preparation_experiment(agenda,obs,decision,context)
@@ -369,7 +482,15 @@ function record_relation_use!(agenda,index,before,after,proposal,contract,feedba
     unresolved_conditions = !isnothing(proposal) &&
         any(test->test.scope==:unverified,proposal.tests)
     edges = observed_inputs!(copy(task_inputs),agenda,sample)
-    omissions = omission_inputs!(edges,agenda,index,before,contract,before_groups)
+    rebound = !isnothing(proposal) && proposal.intent==:test_rebound_omission
+    omissions = if rebound
+        push!(agenda.uses.rebound_receipts,index)
+        push!(agenda.checked_effects,proposal.rebound_check)
+        (;ambiguous=true,proposed=NamedTuple[],confounded=NamedTuple[])
+    else
+        omission_inputs!(edges,agenda,index,before,contract,before_groups)
+    end
+    (sample.advanced || sample.state!="NOT_FINISHED") && empty!(agenda.uses.rebound)
     ambiguous_omission = omissions.ambiguous
     unresolved_conditions |= ambiguous_omission
     isempty(edges) || (agenda.uses.inputs[index]=edges)
@@ -416,10 +537,11 @@ function record_relation_use!(agenda,index,before,after,proposal,contract,feedba
         end
     end
     pending = get(agenda.uses.omissions,sample.context,nothing)
-    if !isnothing(pending)
+    if !isnothing(pending) && !rebound
         action = action_key(sample.effects.action)
         trial = get(pending,action,nothing)
         if !isnothing(trial) && compatible_omission_history(agenda,sample.context,sample.preceding,trial)
+            unindex_rebound_omission!(agenda,trial,action)
             delete!(pending,action)
         end
         isempty(pending) && delete!(agenda.uses.omissions,sample.context)

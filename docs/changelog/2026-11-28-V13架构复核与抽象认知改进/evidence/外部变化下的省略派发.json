@@ -1,0 +1,337 @@
+{
+  "scope": "固定受控SDK场景，两版使用同一已观察前缀，动作无坐标，未晋级；混杂的省略实验无正式因果结论。",
+  "baseline_revision": "70cbbd105bc6e80af64b8268dc1d1119572da57b",
+  "fixture": "u196-000000c4",
+  "match": {
+    "resets": 1,
+    "actions": 5
+  },
+  "reference_decision": {
+    "choice": {
+      "source": "relation",
+      "action": {
+        "id": 1
+      },
+      "reason": "test_delayed_effect",
+      "priority": 3
+    },
+    "intent": "test_delayed_effect",
+    "receipt": "e-ed0483f7025e6465-c000000008"
+  },
+  "public_comparison": {
+    "task": {
+      "intent": "test_rebound_omission",
+      "action": {
+        "id": 2
+      },
+      "reads": [
+        "e-079c26e8778387b4-c000000003",
+        "e-079c26e8778387b4-c000000004",
+        "e-079c26e8778387b4-c000000005",
+        "e-079c26e8778387b4-c000000007"
+      ],
+      "contracts": [],
+      "obligation": {
+        "writer": 2,
+        "output_port": 1,
+        "producer": "cf3d75ecdfd9c44a715f0b28a63a98e0ecc53eeefd6d3be61a711e97d51982ce",
+        "relation": "pigment-49e8c6e8770daecc5c0c52b4a52e6908a5435ab8b884b8ba34c797f93adeb227",
+        "consumer": 3,
+        "comparison_context": "708e23a2180fe327e8311cdfcab9810d0c1135fceec53e6c43e472d126311087",
+        "candidates": [
+          {
+            "writer": 2,
+            "output_port": 1,
+            "producer": "cf3d75ecdfd9c44a715f0b28a63a98e0ecc53eeefd6d3be61a711e97d51982ce",
+            "relation": "pigment-49e8c6e8770daecc5c0c52b4a52e6908a5435ab8b884b8ba34c797f93adeb227"
+          }
+        ],
+        "uncontrolled": {
+          "pixel_spans": [
+            [
+              50,
+              55,
+              56,
+              0,
+              8
+            ]
+          ],
+          "available_added": [],
+          "available_removed": [],
+          "observed_before": "e-079c26e8778387b4-c000000003",
+          "prepared_before": "e-079c26e8778387b4-c000000007"
+        },
+        "isolated": false,
+        "source_context": "9702d3f0447881191281f5fdf1b1b76e15dd25daf944ad0eb317f5222ec74953",
+        "source_event": "e-079c26e8778387b4-c000000003",
+        "paired_scope": "confounded_rebinding",
+        "source_uncontrolled": {
+          "pixel_spans": [],
+          "available_added": [],
+          "available_removed": [],
+          "observed_before": "e-079c26e8778387b4-c000000003",
+          "prepared_before": "e-079c26e8778387b4-c000000004"
+        },
+        "before": "e-079c26e8778387b4-c000000007",
+        "history_width": 1,
+        "history_receipts": false
+      },
+      "fact_reads": [
+        {
+          "writer": 2,
+          "writer_event": "e-079c26e8778387b4-c000000004",
+          "kind": "role_support",
+          "producer": "cf3d75ecdfd9c44a715f0b28a63a98e0ecc53eeefd6d3be61a711e97d51982ce",
+          "relation": "pigment-49e8c6e8770daecc5c0c52b4a52e6908a5435ab8b884b8ba34c797f93adeb227",
+          "output_port": 1,
+          "action": null,
+          "input_port": 0,
+          "usage": "rebound_omission_test",
+          "comparison": 0,
+          "tested_producer": null,
+          "since": 2,
+          "through": 2,
+          "reads": [
+            "e-079c26e8778387b4-c000000003",
+            "e-079c26e8778387b4-c000000004",
+            "e-079c26e8778387b4-c000000007",
+            "e-079c26e8778387b4-c000000005"
+          ],
+          "scope": "confounded_rebinding",
+          "baseline": "e-079c26e8778387b4-c000000005"
+        }
+      ]
+    },
+    "event": "e-079c26e8778387b4-c000000008",
+    "feedback": {
+      "intent": "test_rebound_omission",
+      "result": "observed",
+      "tests": [],
+      "omission": {
+        "status": "changed_to_no_effect",
+        "writer": 2,
+        "consumer": "e-079c26e8778387b4-c000000005",
+        "baseline_effects": 1,
+        "candidates": [
+          {
+            "writer": 2,
+            "output_port": 1,
+            "producer": "cf3d75ecdfd9c44a715f0b28a63a98e0ecc53eeefd6d3be61a711e97d51982ce",
+            "relation": "pigment-49e8c6e8770daecc5c0c52b4a52e6908a5435ab8b884b8ba34c797f93adeb227"
+          }
+        ],
+        "uncontrolled": {
+          "pixel_spans": [
+            [
+              50,
+              55,
+              56,
+              0,
+              8
+            ]
+          ],
+          "available_added": [],
+          "available_removed": [],
+          "observed_before": "e-079c26e8778387b4-c000000003",
+          "prepared_before": "e-079c26e8778387b4-c000000007"
+        },
+        "isolated": false,
+        "scope": "confounded_rebinding"
+      }
+    },
+    "inputs": [
+      {
+        "writer": 2,
+        "writer_event": "e-079c26e8778387b4-c000000004",
+        "kind": "role_support",
+        "producer": "cf3d75ecdfd9c44a715f0b28a63a98e0ecc53eeefd6d3be61a711e97d51982ce",
+        "relation": "pigment-49e8c6e8770daecc5c0c52b4a52e6908a5435ab8b884b8ba34c797f93adeb227",
+        "output_port": 1,
+        "action": null,
+        "input_port": 0,
+        "usage": "rebound_omission_test",
+        "comparison": 0,
+        "tested_producer": null,
+        "since": 2,
+        "through": 2,
+        "reads": [
+          "e-079c26e8778387b4-c000000003",
+          "e-079c26e8778387b4-c000000004",
+          "e-079c26e8778387b4-c000000007",
+          "e-079c26e8778387b4-c000000005"
+        ],
+        "scope": "confounded_rebinding",
+        "baseline": "e-079c26e8778387b4-c000000005"
+      }
+    ]
+  },
+  "checked_events": [
+    "e-079c26e8778387b4-c000000003",
+    "e-079c26e8778387b4-c000000004",
+    "e-079c26e8778387b4-c000000005",
+    "e-079c26e8778387b4-c000000007",
+    "e-079c26e8778387b4-c000000008"
+  ],
+  "coverage": {
+    "rebound_omission_dispatched": 1,
+    "rebound_omission_changed_to_no_effect": 1
+  },
+  "reference_receipts": [
+    {
+      "event": "e-ed0483f7025e6465-c000000002",
+      "before": null,
+      "action": {
+        "id": 0
+      },
+      "response_sha256": "e5944eaf867162d7419183069ed8f64cfec9e43d4b5b9eef7662f558d40a4abe",
+      "frame_count": 1,
+      "level": 0,
+      "state": "NOT_FINISHED"
+    },
+    {
+      "event": "e-ed0483f7025e6465-c000000003",
+      "before": "e-ed0483f7025e6465-c000000002",
+      "action": {
+        "id": 5
+      },
+      "response_sha256": "5e263f0359d2b95d0936134d8068219cb98e1466abdd6830622c32ed4364698d",
+      "frame_count": 1,
+      "level": 0,
+      "state": "NOT_FINISHED"
+    },
+    {
+      "event": "e-ed0483f7025e6465-c000000004",
+      "before": "e-ed0483f7025e6465-c000000003",
+      "action": {
+        "id": 1
+      },
+      "response_sha256": "ee78f39763315469f1fe4a46288f821c0105445f0f26381e552447f2e3752d54",
+      "frame_count": 1,
+      "level": 0,
+      "state": "NOT_FINISHED"
+    },
+    {
+      "event": "e-ed0483f7025e6465-c000000005",
+      "before": "e-ed0483f7025e6465-c000000004",
+      "action": {
+        "id": 2
+      },
+      "response_sha256": "0c687e1608aace382a82fded923f5437488c034ed11cae5e45d6bd23718d0cc5",
+      "frame_count": 1,
+      "level": 0,
+      "state": "NOT_FINISHED"
+    },
+    {
+      "event": "e-ed0483f7025e6465-c000000006",
+      "before": "e-ed0483f7025e6465-c000000005",
+      "action": {
+        "id": 3
+      },
+      "response_sha256": "672a9e6a041448b513e12fe4496407ad0ec13f9f387ba41900786993d09de52e",
+      "frame_count": 1,
+      "level": 0,
+      "state": "NOT_FINISHED"
+    },
+    {
+      "event": "e-ed0483f7025e6465-c000000007",
+      "before": "e-ed0483f7025e6465-c000000006",
+      "action": {
+        "id": 5
+      },
+      "response_sha256": "164f623c4359ba54b28cfd9b05c12577748640aebe8171df44e05c1e2655269d",
+      "frame_count": 1,
+      "level": 0,
+      "state": "NOT_FINISHED"
+    },
+    {
+      "event": "e-ed0483f7025e6465-c000000008",
+      "before": "e-ed0483f7025e6465-c000000007",
+      "action": {
+        "id": 1
+      },
+      "response_sha256": "e1c1066769baeec8371b173ad67e4c12e9f023b01a79b695551c81858a8b23e0",
+      "frame_count": 1,
+      "level": 0,
+      "state": "NOT_FINISHED"
+    }
+  ],
+  "candidate_receipts": [
+    {
+      "event": "e-079c26e8778387b4-c000000002",
+      "before": null,
+      "action": {
+        "id": 0
+      },
+      "response_sha256": "8c16aa6058265990a70d9d410e6a9aefa3563c8ea6ccc80f3122fd866f5656f3",
+      "frame_count": 1,
+      "level": 0,
+      "state": "NOT_FINISHED"
+    },
+    {
+      "event": "e-079c26e8778387b4-c000000003",
+      "before": "e-079c26e8778387b4-c000000002",
+      "action": {
+        "id": 5
+      },
+      "response_sha256": "99b9592ff492908eb7c3268a7475f997cae866b3e76a183ba6243d05ec510e67",
+      "frame_count": 1,
+      "level": 0,
+      "state": "NOT_FINISHED"
+    },
+    {
+      "event": "e-079c26e8778387b4-c000000004",
+      "before": "e-079c26e8778387b4-c000000003",
+      "action": {
+        "id": 1
+      },
+      "response_sha256": "bc8f97b7ffd4ad7fb6311b13ef4dee8e9ff904ec433a7ceab8e0860b7bc84f2b",
+      "frame_count": 1,
+      "level": 0,
+      "state": "NOT_FINISHED"
+    },
+    {
+      "event": "e-079c26e8778387b4-c000000005",
+      "before": "e-079c26e8778387b4-c000000004",
+      "action": {
+        "id": 2
+      },
+      "response_sha256": "f894d129eda2aa0b9beb41bc117b7a5cf96f3195aae382e9f1ee9486f03324dd",
+      "frame_count": 1,
+      "level": 0,
+      "state": "NOT_FINISHED"
+    },
+    {
+      "event": "e-079c26e8778387b4-c000000006",
+      "before": "e-079c26e8778387b4-c000000005",
+      "action": {
+        "id": 3
+      },
+      "response_sha256": "17c99df930fa659ae0454a49f6b3067b52eb6d8f825df7fbf0d20c3eff76a664",
+      "frame_count": 1,
+      "level": 0,
+      "state": "NOT_FINISHED"
+    },
+    {
+      "event": "e-079c26e8778387b4-c000000007",
+      "before": "e-079c26e8778387b4-c000000006",
+      "action": {
+        "id": 5
+      },
+      "response_sha256": "7d19f7136ead0b295985520d87542458d404cd4ec883256ecaf056d5a49edb4b",
+      "frame_count": 1,
+      "level": 0,
+      "state": "NOT_FINISHED"
+    },
+    {
+      "event": "e-079c26e8778387b4-c000000008",
+      "before": "e-079c26e8778387b4-c000000007",
+      "action": {
+        "id": 2
+      },
+      "response_sha256": "0c1ee1f08f8bac08b3e9062c28962661bf20e2cf63565bc509d23b4fd0bf533a",
+      "frame_count": 1,
+      "level": 0,
+      "state": "NOT_FINISHED"
+    }
+  ]
+}

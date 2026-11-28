@@ -160,7 +160,7 @@ function witnessed_outcome_relation(agenda,index)
             row = agenda.samples[compared]
             unsuccessful = row.state == "NOT_FINISHED" || row.state == "GAME_OVER" &&
                 relation_history_key(agenda,preparation.context,row.preceding) == history
-            compared < at && !row.advanced && unsuccessful &&
+            compared < at && compared ∉ agenda.uses.rebound_receipts && !row.advanced && unsuccessful &&
                 (first(action) != 6 || !isnothing(row.binding) && row.binding.appearance == outcome.binding.appearance)
         end
         if !isnothing(comparison)
@@ -274,14 +274,27 @@ end
 
 # Only record continuity of the publicly observed colored support. Treat a
 # replacement at the pointer, including a transient replacement, as unknown.
-function stationary_click_support(support,point,frames,regions)
+function click_continuity(support,groups,point,frames,regions,static_scene)
+    static_scene && return (;stationary_pointer=true,static_pointer_scene=true,stationary_surrounds=String[])
     x,y = point
-    for (i,frame) in enumerate(frames)
-        checkbounds(Bool,frame,y+1,x+1) || return false
-        parts = isnothing(regions) ? color_components(frame) : regions.frames[i]
-        parts.groups[parts.owner[y+1,x+1]] == support || return false
+    surrounds = filter(groups) do shape
+        shape === support && return false
+        left,right = extrema(first,shape)
+        left <= x <= right || return false
+        top,bottom = extrema(c->c[2],shape)
+        return top <= y <= bottom
     end
-    return true
+    for (i,frame) in enumerate(frames)
+        parts = isnothing(regions) ? color_components(frame) : regions.frames[i]
+        if !checkbounds(Bool,frame,y+1,x+1) || parts.groups[parts.owner[y+1,x+1]] != support
+            return (;stationary_pointer=false,static_pointer_scene=false,stationary_surrounds=String[])
+        end
+        filter!(surrounds) do shape
+            u,v,_ = first(shape)
+            checkbounds(Bool,frame,v+1,u+1) && parts.groups[parts.owner[v+1,u+1]] == shape
+        end
+    end
+    return (;stationary_pointer=true,static_pointer_scene=false,stationary_surrounds=semantic_hash.(surrounds))
 end
 
 # Flood the complement of the role's support within its bounding box. Escape to
@@ -318,7 +331,11 @@ function preceding_click_role(agenda,previous,part)
     length(hits) == 1 || return nothing
     region = only(hits)
     owner = part.basis == region.support ? :bound : :rival
-    return (;owner,zone=pointer_zone(region,(x,y)))
+    zone = pointer_zone(region,(x,y))
+    if zone != :support && !get(row.binding,:static_pointer_scene,false)
+        semantic_hash(region.support) in get(row.binding,:stationary_surrounds,()) || return nothing
+    end
+    return (;owner,zone)
 end
 
 function observe_relations!(agenda,before,after,effects,contact,site_changes,proposal;
@@ -328,11 +345,12 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
     nothing_visible = same_intervention_context(prev,next) && all(==(last(prev.frames)),next.frames)
     binding = if effects.action["id"] == 6
         point = action_key(effects.action)[2:3]
-        support = point_component(isnothing(groups) ? public_components(last(prev.frames)) : groups,point)
+        observed_groups = isnothing(groups) ? public_components(last(prev.frames)) : groups
+        support = point_component(observed_groups,point)
         if !isnothing(support)
             lineage = get!(() -> effects.before_id * "-" * join(point,"-"),agenda.lineages,support)
-            stationary_pointer = stationary_click_support(support,point,next.frames,after_regions)
-            (;lineage,point,appearance=click_profile(support,point),stationary_pointer)
+            continuity = click_continuity(support,observed_groups,point,next.frames,after_regions,nothing_visible)
+            (;lineage,point,appearance=click_profile(support,point),continuity...)
         end
     end
     prior = agenda.previous == 0 ? nothing : agenda.samples[agenda.previous]
@@ -375,14 +393,15 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
                     scope=transfer,event=relation_ref(agenda.samples[counterexample]))))
             end
         end
-    elseif !isnothing(proposal) && proposal.intent == :test_preparation_omission
+    elseif !isnothing(proposal) && proposal.intent in (:test_preparation_omission,:test_rebound_omission)
         source = agenda.samples[proposal.obligation.consumer]
         same = same_relation_response(sample,source)
         status = sample.unchanged ? :changed_to_no_effect : same ? :same_response : :different_response
         feedback = merge(feedback,(;result=:observed,omission=(;status,writer=proposal.obligation.writer,
             consumer=relation_ref(source),baseline_effects=length(source.effects.effects),
             candidates=proposal.obligation.candidates,uncontrolled=proposal.obligation.uncontrolled,
-            isolated=proposal.obligation.isolated)))
+            isolated=proposal.obligation.isolated,
+            scope=get(proposal.obligation,:paired_scope,:observed_context))))
     elseif !isnothing(proposal) && proposal.intent == :prepare_public_outcome
         legal = proposal.obligation.action in next.available_actions
         feedback = merge(feedback,(result=next.state == "NOT_FINISHED" && legal ? :established : :refuted,))
@@ -421,10 +440,11 @@ function observe_relations!(agenda,before,after,effects,contact,site_changes,pro
     contract = observed_producer!(agenda,sample,last(prev.frames),last(next.frames);groups)
     fact_flow = record_relation_use!(agenda,index,prev,next,proposal,contract,feedback,groups,after_groups,after_regions)
     public_outcome = record_public_outcome!(agenda,index,fact_flow)
-    if !isnothing(contract) && !isnothing(prior) && prior.unchanged && next.state == "NOT_FINISHED"
+    if !isnothing(contract) && !isnothing(prior) && prior.unchanged && next.state == "NOT_FINISHED" &&
+            index ∉ agenda.uses.rebound_receipts && sample.preceding ∉ agenda.uses.rebound_receipts
         contrasted = any(get(agenda.visits,(sample.context,action),Int[])) do at
             row = agenda.samples[at]
-            row.unchanged && previous_key(agenda,row.preceding) != previous
+            at ∉ agenda.uses.rebound_receipts && row.unchanged && previous_key(agenda,row.preceding) != previous
         end
         if contrasted
             push!(get!(Vector{Tuple{Int,String}},agenda.delayed,prior.context),(index,contract.key))
@@ -1130,38 +1150,45 @@ function relation_experiment(agenda,obs,decision,intervention,context;meters=(),
             return (;action,intent=:test_concrete_effect,tests,reads=String[],obligation)
         end
     end
-    if !isnothing(prior) && (prior.unchanged || !isnothing(history_model))
+    rows = if !isnothing(prior) && (prior.unchanged || !isnothing(history_model))
         first_action = action_key(prior.effects.action)
-        rows = filter(decision.ranked) do row
+        filter(decision.ranked) do row
             key = action_key(row.action)
-            prior.unchanged ? (context,first_action,key) ∉ agenda.pairs :
-                !haskey(agenda.visits,(context,key))
+            prior.unchanged ? (context,first_action,key) ∉ agenda.pairs : !haskey(agenda.visits,(context,key))
         end
-        unseen(row) = !isnothing(history_model) && !haskey(history_model.edges,history_action(row.action))
-        if !isempty(rows) && (prior.unchanged || any(unseen,rows))
-            priority(row) = (row.action["id"] == 6,
-                !isnothing(intervention) && row.action != intervention.action,
-                length(get(agenda.visits,(context,action_key(row.action)),Int[])))
-            baseline = argmin(row->(priority(row),row.rank),rows)
-            entropy(row) = isnothing(circuit_ref) ? 0.0 : experimental_response_score(uncertainty,row.action,decision.groups)
-            circuit = isnothing(circuit_ref) ? baseline : argmin(row->(priority(row),-entropy(row),row.rank),rows)
-            row = isnothing(history_model) ? circuit :
-                argmin(row->(priority(row),!unseen(row),-entropy(row),row.rank),rows)
-            history = if unseen(row)
-                (;scope=history_model.scope,state=history_model.state,answer="unknown",changed_action=row.action != circuit.action)
-            end
-            history_only = isnothing(history_model) ? baseline : argmin(row->(priority(row),!unseen(row),row.rank),rows)
-            circuit_changed = row.action != history_only.action
-            tests = prepare_relation_tests(agenda,context,obs,decision.groups,row.action;meters,condition_view)
-            reads = relation_refs(prior)
-            circuit_changed && push!(reads,circuit_ref)
-            isnothing(history) || push!(reads,history.scope)
-            if prior.unchanged || !isnothing(history)
-                intent = prior.unchanged ? :test_delayed_effect : :test_history_response
-                return (;action=row.action,intent,tests,reads=unique!(reads),
-                    obligation=(prefix=relation_ref(prior),action=prior.effects.action,
-                        circuit=circuit_changed ? circuit_ref : nothing,history,baseline=baseline.action))
-            end
+    else
+        ()
+    end
+    unseen(row) = !isnothing(history_model) && !haskey(history_model.edges,history_action(row.action))
+    has_history_target = !isnothing(history_model) && any(unseen,rows)
+    # A model with no unresolved input here cannot reserve the coverage slot.
+    if !has_history_target && (isnothing(intervention) || !hasproperty(intervention,:changed_context))
+        rebound = rebound_omission_experiment(agenda,obs,decision,context)
+        isnothing(rebound) || return rebound
+    end
+    if !isempty(rows) && (prior.unchanged || has_history_target)
+        priority(row) = (row.action["id"] == 6,
+            !isnothing(intervention) && row.action != intervention.action,
+            length(get(agenda.visits,(context,action_key(row.action)),Int[])))
+        baseline = argmin(row->(priority(row),row.rank),rows)
+        entropy(row) = isnothing(circuit_ref) ? 0.0 : experimental_response_score(uncertainty,row.action,decision.groups)
+        circuit = isnothing(circuit_ref) ? baseline : argmin(row->(priority(row),-entropy(row),row.rank),rows)
+        row = isnothing(history_model) ? circuit :
+            argmin(row->(priority(row),!unseen(row),-entropy(row),row.rank),rows)
+        history = if unseen(row)
+            (;scope=history_model.scope,state=history_model.state,answer="unknown",changed_action=row.action != circuit.action)
+        end
+        history_only = isnothing(history_model) ? baseline : argmin(row->(priority(row),!unseen(row),row.rank),rows)
+        circuit_changed = row.action != history_only.action
+        tests = prepare_relation_tests(agenda,context,obs,decision.groups,row.action;meters,condition_view)
+        reads = relation_refs(prior)
+        circuit_changed && push!(reads,circuit_ref)
+        isnothing(history) || push!(reads,history.scope)
+        if prior.unchanged || !isnothing(history)
+            intent = prior.unchanged ? :test_delayed_effect : :test_history_response
+            return (;action=row.action,intent,tests,reads=unique!(reads),
+                obligation=(prefix=relation_ref(prior),action=prior.effects.action,
+                    circuit=circuit_changed ? circuit_ref : nothing,history,baseline=baseline.action))
         end
     end
     isnothing(intervention) && return nothing
@@ -1225,6 +1252,17 @@ function task_arbitration(item,spatial,intervention,relation,experiment;
             grounded = contact_ready || !isnothing(pose) || get(spatial,:effect_gain,0) > 0
             spatial_ready = contact_ready || !isnothing(pose) || witnessed_survey
             priority = grounded ? 1 : object_probes ? 7 : get(spatial,:unlocated_before,0) > 0 ? 5 : 4
+            if !isnothing(relation) && relation.intent == :test_rebound_omission && !grounded && !witnessed_survey
+                # A contact guard's unknown verdict is discriminating when
+                # fitted guards disagree for this bound target signature.
+                guard = isnothing(contact) ? nothing : contact.conditions
+                contrast = !isnothing(guard) && !isnothing(get(contact,:site,nothing)) &&
+                    guard.judgment == :unknown && !isempty(get(guard,:sample_events,())) &&
+                    !isempty(get(guard,:rules,())) && !isempty(get(guard,:reads,()))
+                if !contrast && isnothing(get(spatial,:region_probe,nothing))
+                    priority = max(priority,6)
+                end
+            end
             add(:spatial,action,spatial.reason,priority)
         end
     end
@@ -1276,7 +1314,8 @@ function task_arbitration(item,spatial,intervention,relation,experiment;
             frontier_options!(frontier.search,frontier.context,frontier.decision.ranked,intervention)
         else
             frontier_task = frontier_choice(frontier.search,frontier.agenda,frontier.observation,
-                frontier.decision,intervention,choice.action)
+                frontier.decision,intervention,choice.action;
+                allow_coverage=!(choice.source==:relation && relation.intent==:test_rebound_omission))
             if !isnothing(frontier_task)
                 add(:relation,frontier_task.action,string(frontier_task.intent),choice.priority-1)
                 choice = last(candidates)
@@ -1407,6 +1446,14 @@ function relation_prediction(rec,item,prediction,task;role_proof=nothing,resourc
     if !isnothing(role_proof) && get(role_proof,:reused,false)
         role_proof.proved_at in reads || push!(reads,role_proof.proved_at)
     end
+    if task.intent == :test_rebound_omission
+        # The historical response and the new external differences define an
+        # experiment. A spatial model's default prediction cannot certify it.
+        return (before_ref=rec.before_ref,payload=Dict{String,Any}(
+            "model_version"=>nothing,"binding"=>[],"action"=>item.action,"guard_truth"=>"unknown",
+            "query_scope"=>String[],"predicted_values"=>Dict(),"event_reads"=>reads,
+            "enumeration_complete"=>false,"assumptions"=>[string(task.intent)]))
+    end
     representative = agreed_role_contract(task.contracts)
     admitted = !isnothing(representative)
     if !isnothing(role_proof)
@@ -1516,6 +1563,7 @@ function begin_relation_attempt!(agenda,restart;observation=nothing)
     empty!(agenda.lineages)
     empty!(agenda.uses.roles)
     empty!(agenda.uses.permissions)
+    empty!(agenda.uses.rebound)
 end
 
 function finish_relation_dispatch!(agenda,proposal;feedback=nothing)
