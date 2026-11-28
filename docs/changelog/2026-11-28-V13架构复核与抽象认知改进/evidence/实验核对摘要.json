@@ -1,0 +1,626 @@
+{
+  "implementation_review_revision": "c9edd52ae7ce5830018ad9cb3bd371fad27085b0",
+  "progress_snapshot": {
+    "time": "2026-11-28T07:52:09+08:00",
+    "revision": "2b546b235541b1e720296ff40b70f4cbac6f778f",
+    "source_sha256": "360a72d9b7e94c4652bf67d330cb5b179ef3d0250785be519be3af09b15344ff",
+    "original_peak_levels": 11,
+    "original_game_peaks": {
+      "lf52-271a04aa": 1,
+      "lp85-305b61c3": 1,
+      "ls20-9607627b": 7,
+      "r11l-aa269680": 1,
+      "vc33-9851e02b": 1
+    },
+    "same_revision_recovery_peaks": {
+      "lf52-271a04aa": 1,
+      "sp80-0ee2d095": 1,
+      "g50t-5849a774": 1,
+      "vc33-9851e02b": 1
+    },
+    "same_revision_game_peaks": {
+      "g50t-5849a774": 1,
+      "lf52-271a04aa": 1,
+      "lp85-305b61c3": 1,
+      "ls20-9607627b": 7,
+      "r11l-aa269680": 1,
+      "sp80-0ee2d095": 1,
+      "vc33-9851e02b": 1
+    },
+    "same_revision_peak_levels": 13,
+    "original_verified_wins": 1,
+    "original_verdicts": {
+      "PENDING": 9,
+      "BLOCKED": 14,
+      "WIN": 1,
+      "UNVERIFIED": 1
+    },
+    "original_status": "IN_PROGRESS"
+  },
+  "same_revision_one_witness_per_game_level": [
+    {
+      "game": "g50t-5849a774",
+      "run": "v13-composed-g50t-cold-recovery",
+      "attempt": "original",
+      "event": "e-517e649a5798efda-c000001535",
+      "response_sha256": "efb9d055e7348fa779591ad62ef1f18edbae5cbb5c579cc36a73746db757d0b2",
+      "level": 1,
+      "state": "NOT_FINISHED",
+      "action": {
+        "id": 4
+      },
+      "choice": "spatial",
+      "reason": "inspect_unseen_neighborhood",
+      "baseline_action": {
+        "id": 4
+      },
+      "task_intent": null,
+      "recorded_relationship": null,
+      "outcome_requirements": 0,
+      "public_result": "advancement"
+    },
+    {
+      "game": "lf52-271a04aa",
+      "run": "v13-public25-composed",
+      "attempt": "original",
+      "event": "e-a352d43652711467-c000000019",
+      "response_sha256": "cc184867734cd3e513b3134ea19bf34586b98a3256556a5607d1041f3c67be10",
+      "level": 1,
+      "state": "NOT_FINISHED",
+      "action": {
+        "id": 6,
+        "x": 41,
+        "y": 42
+      },
+      "choice": "relation",
+      "reason": "probe_partition_binding",
+      "baseline_action": {
+        "id": 6,
+        "x": 41,
+        "y": 42
+      },
+      "task_intent": "probe_partition_binding",
+      "recorded_relationship": null,
+      "outcome_requirements": 0,
+      "public_result": "advancement"
+    },
+    {
+      "game": "lp85-305b61c3",
+      "run": "v13-public25-composed",
+      "attempt": "original",
+      "event": "e-6286746e3e5c3a88-c000000063",
+      "response_sha256": "ac2ad79b4ded6a9488e91ee16c06d6b981af497e07462b63d8cbd48d96940677",
+      "level": 1,
+      "state": "NOT_FINISHED",
+      "action": {
+        "id": 6,
+        "x": 4,
+        "y": 32
+      },
+      "choice": "relation",
+      "reason": "probe_visible_object",
+      "baseline_action": {
+        "id": 6,
+        "x": 4,
+        "y": 32
+      },
+      "task_intent": "test_delayed_effect",
+      "recorded_relationship": null,
+      "outcome_requirements": 0,
+      "public_result": "advancement"
+    },
+    {
+      "game": "ls20-9607627b",
+      "run": "v13-public25-composed",
+      "attempt": "original",
+      "event": "e-0a1ac997674cc3ca-c000000026",
+      "response_sha256": "702f528f96841dc4af5bcd3bdf39342cfa9c7ac8853d1a14776431656c6cbd04",
+      "level": 1,
+      "state": "NOT_FINISHED",
+      "action": {
+        "id": 1
+      },
+      "choice": "spatial",
+      "reason": "experiment_on_contact_relation",
+      "baseline_action": {
+        "id": 1
+      },
+      "task_intent": null,
+      "recorded_relationship": null,
+      "outcome_requirements": 0,
+      "public_result": "advancement"
+    },
+    {
+      "game": "ls20-9607627b",
+      "run": "v13-public25-composed",
+      "attempt": "original",
+      "event": "e-0a1ac997674cc3ca-c000000128",
+      "response_sha256": "7eb361f986e4abd35f378afd05f97a196eb7318250201b1cf92b8403ed45678f",
+      "level": 2,
+      "state": "NOT_FINISHED",
+      "action": {
+        "id": 2
+      },
+      "choice": "spatial",
+      "reason": "experiment_on_contact_relation",
+      "baseline_action": {
+        "id": 2
+      },
+      "task_intent": null,
+      "recorded_relationship": null,
+      "outcome_requirements": 0,
+      "public_result": "advancement"
+    },
+    {
+      "game": "ls20-9607627b",
+      "run": "v13-public25-composed",
+      "attempt": "original",
+      "event": "e-0a1ac997674cc3ca-c000000231",
+      "response_sha256": "10aa195c4eede45c8c937e9caf729fde2a371c2145a51cc427958fbb0b967203",
+      "level": 3,
+      "state": "NOT_FINISHED",
+      "action": {
+        "id": 2
+      },
+      "choice": "spatial",
+      "reason": "learned_visual_contact",
+      "baseline_action": {
+        "id": 2
+      },
+      "task_intent": null,
+      "recorded_relationship": null,
+      "outcome_requirements": 0,
+      "public_result": "advancement"
+    },
+    {
+      "game": "ls20-9607627b",
+      "run": "v13-public25-composed",
+      "attempt": "original",
+      "event": "e-0a1ac997674cc3ca-c000000317",
+      "response_sha256": "a01d40a6119b2720e5b85689053f4814d3576c100edd71ef7386d29aee31ba37",
+      "level": 4,
+      "state": "NOT_FINISHED",
+      "action": {
+        "id": 3
+      },
+      "choice": "spatial",
+      "reason": "experiment_on_contact_relation",
+      "baseline_action": {
+        "id": 3
+      },
+      "task_intent": "apply_relation",
+      "recorded_relationship": null,
+      "outcome_requirements": 0,
+      "public_result": "advancement"
+    },
+    {
+      "game": "ls20-9607627b",
+      "run": "v13-public25-composed",
+      "attempt": "original",
+      "event": "e-0a1ac997674cc3ca-c000000384",
+      "response_sha256": "391dc9589eca87388f2fa6d241a46d60231150fb2f9a7be37240f1066e50b825",
+      "level": 5,
+      "state": "NOT_FINISHED",
+      "action": {
+        "id": 1
+      },
+      "choice": "spatial",
+      "reason": "learned_visual_contact",
+      "baseline_action": {
+        "id": 1
+      },
+      "task_intent": "apply_relation",
+      "recorded_relationship": null,
+      "outcome_requirements": 0,
+      "public_result": "advancement"
+    },
+    {
+      "game": "ls20-9607627b",
+      "run": "v13-public25-composed",
+      "attempt": "original",
+      "event": "e-0a1ac997674cc3ca-c000000498",
+      "response_sha256": "cc9270b3e161e3aaeb9787b06ae0d0124fb43680381ee03b03cfe1893a779b96",
+      "level": 6,
+      "state": "NOT_FINISHED",
+      "action": {
+        "id": 2
+      },
+      "choice": "spatial",
+      "reason": "learned_visual_contact",
+      "baseline_action": {
+        "id": 2
+      },
+      "task_intent": "apply_relation",
+      "recorded_relationship": null,
+      "outcome_requirements": 0,
+      "public_result": "advancement"
+    },
+    {
+      "game": "ls20-9607627b",
+      "run": "v13-public25-composed",
+      "attempt": "original",
+      "event": "e-0a1ac997674cc3ca-c000000952",
+      "response_sha256": "5ebe1dd0efb99e17ed2d4af2d2efed78499946266ee5b5b239f0351548d8c485",
+      "level": 7,
+      "state": "WIN",
+      "action": {
+        "id": 2
+      },
+      "choice": "spatial",
+      "reason": "learned_visual_contact",
+      "baseline_action": {
+        "id": 2
+      },
+      "task_intent": "apply_relation",
+      "recorded_relationship": null,
+      "outcome_requirements": 0,
+      "public_result": "win"
+    },
+    {
+      "game": "r11l-aa269680",
+      "run": "v13-public25-composed",
+      "attempt": "original",
+      "event": "e-d819c968f967fd93-c000000364",
+      "response_sha256": "a4bd6964741355b153fbd3031b25513eaf5587bab6e4ca8fa1c782ad6483baca",
+      "level": 1,
+      "state": "NOT_FINISHED",
+      "action": {
+        "id": 6,
+        "x": 56,
+        "y": 16
+      },
+      "choice": "intervention",
+      "reason": "distinguish_uncovered_coordinate",
+      "baseline_action": {
+        "id": 6,
+        "x": 56,
+        "y": 16
+      },
+      "task_intent": null,
+      "recorded_relationship": null,
+      "outcome_requirements": 0,
+      "public_result": "advancement"
+    },
+    {
+      "game": "sp80-0ee2d095",
+      "run": "v13-composed-cold-recovery-transport-later",
+      "attempt": "original",
+      "event": "e-e170ef8a0fa719a3-c000000511",
+      "response_sha256": "019b4970509452aafc9837db385bbde54e73cfe044a2bd0b5cf856a24da5ad45",
+      "level": 1,
+      "state": "NOT_FINISHED",
+      "action": {
+        "id": 5
+      },
+      "choice": "experiment",
+      "reason": "distinguish_public_experiment",
+      "baseline_action": {
+        "id": 5
+      },
+      "task_intent": null,
+      "recorded_relationship": null,
+      "outcome_requirements": 0,
+      "public_result": "advancement"
+    },
+    {
+      "game": "vc33-9851e02b",
+      "run": "v13-public25-composed",
+      "attempt": "original",
+      "event": "e-25eff4a173823bff-c000002958",
+      "response_sha256": "c9825e20c514072a4ca7b0fbc7305e5eed657c2f3fba5f6797fcbf39d190613c",
+      "level": 1,
+      "state": "NOT_FINISHED",
+      "action": {
+        "id": 6,
+        "x": 61,
+        "y": 33
+      },
+      "choice": "intervention",
+      "reason": "probe_visible_object",
+      "baseline_action": {
+        "id": 6,
+        "x": 61,
+        "y": 33
+      },
+      "task_intent": null,
+      "recorded_relationship": null,
+      "outcome_requirements": 0,
+      "public_result": "advancement"
+    }
+  ],
+  "separate_revision_attempts": [
+    {
+      "revision": "aebe638004e1f78eb27c855330ba746643f29591",
+      "game": "lf52-271a04aa",
+      "run": "v13-endpoint-lf52",
+      "attempt": "original",
+      "peak": 1,
+      "latest": {
+        "event": "e-7b22a97cd91e7518-c000001711",
+        "action": {
+          "id": 6,
+          "x": 24,
+          "y": 16
+        },
+        "sha256": "821a92bf05aca356fb528c64e262bfff4905fcc887af2edd6661f43522b978cc",
+        "levels": 1,
+        "target": 10,
+        "state": "NOT_FINISHED"
+      }
+    },
+    {
+      "revision": "aebe638004e1f78eb27c855330ba746643f29591",
+      "game": "ls20-9607627b",
+      "run": "v13-survey-ls20",
+      "attempt": "original",
+      "peak": 2,
+      "latest": {
+        "event": "e-b4645c3acd8b6d8f-c000000427",
+        "action": {
+          "id": 1
+        },
+        "sha256": "44449d3314b09b0791bb4f9a9faed65ac459828f8be3095584cd62635e248465",
+        "levels": 2,
+        "target": 7,
+        "state": "NOT_FINISHED"
+      }
+    },
+    {
+      "revision": "a5eb9ef3054b93423da0882abbf36ec2878573d7",
+      "game": "wa30-ee6fef47",
+      "run": "v13-joint-roles-wa30",
+      "attempt": "original",
+      "peak": 0,
+      "latest": {
+        "event": "e-5af17832c6e82f35-c000001033",
+        "action": {
+          "id": 5
+        },
+        "sha256": "e3cfbe80446173c149fc6c94066f544f455a0e8e5250b723686545081fca5d2a",
+        "levels": 0,
+        "target": 9,
+        "state": "NOT_FINISHED"
+      }
+    },
+    {
+      "revision": "3c61e73022d0175b0de51709de0ee76a2762240a",
+      "game": "m0r0-dadda488",
+      "run": "v13-shared-grounding-m0r0",
+      "attempt": "original",
+      "peak": 0,
+      "latest": {
+        "event": "e-aa80e44a9a8d0ded-c000025673",
+        "action": {
+          "id": 3
+        },
+        "sha256": "0dcd2d06063ec5f2875937f6f32283ea05f0ab46711dee296c97cb4856236c72",
+        "levels": 0,
+        "target": 6,
+        "state": "NOT_FINISHED"
+      }
+    }
+  ],
+  "independent_prefix": {
+    "revision": "2b546b235541b1e720296ff40b70f4cbac6f778f",
+    "games": 25,
+    "attempts_including_discarded": 38,
+    "confirmed_resets": 1380,
+    "confirmed_actions": 123349,
+    "action_family_sums": {
+      "experiment": {
+        "confirmed": 123349,
+        "game_over": 1346,
+        "advancement": 10,
+        "wins": 0,
+        "feedback_pending": 4,
+        "tested_context_parameters": 121615,
+        "untested_context_parameters": 304356787,
+        "observed_selection_lineages": 26807
+      },
+      "model": {
+        "unexplained_changes": 74935,
+        "unresolved_transition": 112405,
+        "channel_supported": 27646,
+        "channel_unknown": 729,
+        "contract_established": 229608,
+        "contract_unresolved": 5224,
+        "channel_refuted": 109,
+        "contract_refuted": 22246
+      },
+      "control": {
+        "dispatch_intervention": 39413,
+        "changed_arbitration_baseline": 20125,
+        "dispatch_relation": 62733,
+        "changed_task_candidate": 12146,
+        "witnessed_task": 78574,
+        "established_witnessed_task": 11068,
+        "dispatch_experiment": 7673,
+        "dispatch_relation_policy": 9950,
+        "dispatch_base": 106,
+        "dispatch_spatial": 3456,
+        "dispatch_program": 14
+      }
+    },
+    "object_followups": {
+      "proposed": 4400,
+      "dispatched": 1379,
+      "advancements": 0,
+      "game_over": 42,
+      "with_concrete_contract": 1379,
+      "effect_refuted": 287,
+      "effect_supported": 1092
+    },
+    "object_followups_by_game": {
+      "bp35-0a0ad940": {
+        "proposed": 25,
+        "dispatched": 22,
+        "advancements": 0,
+        "game_over": 0,
+        "with_concrete_contract": 22,
+        "effect_refuted": 22
+      },
+      "cn04-65d47d14": {
+        "proposed": 505,
+        "dispatched": 220,
+        "advancements": 0,
+        "game_over": 2,
+        "with_concrete_contract": 220,
+        "effect_supported": 218,
+        "effect_refuted": 2
+      },
+      "ft09-0d8bbf25": {
+        "proposed": 37,
+        "dispatched": 32,
+        "advancements": 0,
+        "game_over": 0,
+        "with_concrete_contract": 32,
+        "effect_refuted": 18,
+        "effect_supported": 14
+      },
+      "lf52-271a04aa": {
+        "proposed": 246,
+        "dispatched": 244,
+        "advancements": 0,
+        "game_over": 0,
+        "with_concrete_contract": 244,
+        "effect_refuted": 232,
+        "effect_supported": 12
+      },
+      "r11l-aa269680": {
+        "proposed": 47,
+        "dispatched": 9,
+        "advancements": 0,
+        "game_over": 0,
+        "with_concrete_contract": 9,
+        "effect_refuted": 9
+      },
+      "tn36-ab4f63cc": {
+        "proposed": 2492,
+        "dispatched": 848,
+        "advancements": 0,
+        "game_over": 40,
+        "with_concrete_contract": 848,
+        "effect_supported": 848
+      },
+      "vc33-9851e02b": {
+        "proposed": 862,
+        "dispatched": 4,
+        "advancements": 0,
+        "game_over": 0,
+        "with_concrete_contract": 4,
+        "effect_refuted": 4
+      }
+    }
+  },
+  "settled_backend_counts": {
+    "totals": {
+      "stitch_jobs": 1014,
+      "stitch_completed": 402,
+      "stitch_partial": 612,
+      "circuit_candidates": 351,
+      "circuit_calibrated": 0,
+      "history_candidates": 397,
+      "history_published": 98,
+      "statistical_dispatch_changes": 0,
+      "factor_binding_proofs": 619
+    },
+    "contributors": {
+      "dc22-4c9bff3e": {
+        "stitch_jobs": 398,
+        "stitch_completed": 286,
+        "stitch_partial": 112,
+        "circuit_candidates": 264,
+        "circuit_calibrated": 0,
+        "history_candidates": 288,
+        "history_published": 94,
+        "statistical_dispatch_changes": 0,
+        "factor_binding_proofs": 600
+      },
+      "ls20-9607627b": {
+        "stitch_jobs": 134,
+        "stitch_completed": 85,
+        "stitch_partial": 49,
+        "statistical_dispatch_changes": 0,
+        "factor_binding_proofs": 19
+      },
+      "m0r0-dadda488": {
+        "stitch_jobs": 482,
+        "stitch_partial": 451,
+        "stitch_completed": 31,
+        "circuit_candidates": 87,
+        "circuit_calibrated": 0,
+        "history_candidates": 109,
+        "history_published": 4,
+        "statistical_dispatch_changes": 0
+      }
+    }
+  },
+  "ls20_win_audit": {
+    "game_id": "ls20-9607627b",
+    "states": {
+      "frames": 1825,
+      "resets": 12,
+      "actions": 939,
+      "decisions_checked": 939
+    },
+    "peak_levels": 7,
+    "latest_event": "e-0a1ac997674cc3ca-c000000952",
+    "public_state": "WIN",
+    "win_levels": 7,
+    "worker_verdict": "WIN",
+    "replay_verified": true,
+    "scorecard_win": true,
+    "verified_win": true
+  },
+  "paired_grounding_replay": [
+    {
+      "receipts": 250,
+      "compared": 248,
+      "produced": 206,
+      "checks": 264,
+      "fresh": {
+        "seconds": 4.3146607880000065,
+        "bytes": 632228712
+      },
+      "reused": {
+        "seconds": 2.146131952,
+        "bytes": 452242192
+      }
+    },
+    {
+      "receipts": 250,
+      "compared": 248,
+      "produced": 206,
+      "checks": 264,
+      "fresh": {
+        "seconds": 2.8435315990000003,
+        "bytes": 632228488
+      },
+      "reused": {
+        "seconds": 2.176926877999998,
+        "bytes": 452241552
+      }
+    },
+    {
+      "receipts": 250,
+      "compared": 248,
+      "produced": 206,
+      "checks": 264,
+      "fresh": {
+        "seconds": 2.6742527289999987,
+        "bytes": 632228232
+      },
+      "reused": {
+        "seconds": 2.3610127519999997,
+        "bytes": 452242576
+      }
+    }
+  ],
+  "source_sha256": {
+    ".runtime/v13-current-public25-progress.json": "9625dfe0d21e49622b19219026188d8afb60fc3797918bf2b57c90892c534bb3",
+    ".runtime/v13-composed-1407-audit.json": "3240580ec58bc93666e3b04b97fed0a6102f8c6b651b490d5bdba80a50e63234",
+    ".runtime/v13-composed-ls20-final-independent.json": "ef599728386693b2cad2c1cf9fb5507c0a602cd1a12e45a76e96f5f9df7464db",
+    "../TddESCat-v13-eval-composed/runs/v13-public25-composed/public25.json": "4862e06dae9bc9035591f5478e97756abb69f007aed495f26bc0c2718db096d5",
+    ".runtime/v13-reuse-grounding-replay.json": "5a7653ef9bd25127c387ea5d292bf4bcb1ad1ef11ae243a4824f19b46121e99c"
+  }
+}
