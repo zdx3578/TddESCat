@@ -1,0 +1,197 @@
+{
+  "修订基线": "393173f49b4e33a71209af78aea352f63dd5595a",
+  "代码与输入": {
+    "original_run_jl_sha256": "aa6d49e68fe184dd976faada0f924034e625245b4c051e7596e3957353072f46",
+    "fixed_run_jl_sha256": "db3184b2b3ab4fc14ec16b71d5a26413c83afcd5bc8be5edaa317000e5accd93",
+    "config": "config/v13_public25.toml",
+    "config_sha256": "7871b942129df432942754af590c53014f155bd867290bdd5f7346ff7d66b25a",
+    "julia": "1.12.6",
+    "cache": "generic, default project preference",
+    "cache_archive_sha256": "26aa7e16fa656deb6abe089ee85cd763ff6451cd62e188bc35998c64a94a60d1",
+    "platform": "local Linux x86_64 bubblewrap, same guest paths, clean first depot; no game request in check-compute",
+    "backends": [
+      "circuit_python",
+      "factor_kernel",
+      "policy_synthesis",
+      "solver_python"
+    ]
+  },
+  "计时与内存": {
+    "original-plain": {
+      "wall_seconds": 278.215,
+      "max_rss_kib": 3432312,
+      "capability_sha256": "e2a2f96b859298a80d76541f06217872e1edefb70a1bbbb698f9c2b72f3b1043",
+      "first_worker_observed_seconds": 274.5232
+    },
+    "fixed-plain": {
+      "wall_seconds": 12.524,
+      "max_rss_kib": 937520,
+      "capability_sha256": "e2a2f96b859298a80d76541f06217872e1edefb70a1bbbb698f9c2b72f3b1043",
+      "first_worker_observed_seconds": 8.893
+    },
+    "fixed-final": {
+      "wall_seconds": 14.309,
+      "max_rss_kib": 940804,
+      "capability_sha256": "e2a2f96b859298a80d76541f06217872e1edefb70a1bbbb698f9c2b72f3b1043",
+      "first_worker_observed_seconds": 10.1037
+    },
+    "branch-plain": {
+      "wall_seconds": 12.39,
+      "max_rss_kib": 933360,
+      "capability_sha256": "e2a2f96b859298a80d76541f06217872e1edefb70a1bbbb698f9c2b72f3b1043",
+      "first_worker_observed_seconds": 8.6277
+    },
+    "isolated-plain": {
+      "wall_seconds": 12.505,
+      "max_rss_kib": 938400,
+      "capability_sha256": "e2a2f96b859298a80d76541f06217872e1edefb70a1bbbb698f9c2b72f3b1043",
+      "first_worker_observed_seconds": 8.663
+    },
+    "original-trace": {
+      "wall_seconds": 282.773,
+      "max_rss_kib": 3334100,
+      "capability_sha256": "e2a2f96b859298a80d76541f06217872e1edefb70a1bbbb698f9c2b72f3b1043",
+      "julia_reported_main_compile_ms": 274576.8
+    },
+    "fixed-trace": {
+      "wall_seconds": 12.702,
+      "max_rss_kib": 941092,
+      "capability_sha256": "e2a2f96b859298a80d76541f06217872e1edefb70a1bbbb698f9c2b72f3b1043",
+      "first_worker_observed_seconds": 9.0705,
+      "julia_reported_main_compile_ms": 3451.3
+    },
+    "branch-trace": {
+      "wall_seconds": 10.792,
+      "max_rss_kib": 926016,
+      "capability_sha256": "e2a2f96b859298a80d76541f06217872e1edefb70a1bbbb698f9c2b72f3b1043",
+      "julia_reported_main_compile_ms": 3479.9
+    }
+  },
+  "规范能力输出sha256": "e2a2f96b859298a80d76541f06217872e1edefb70a1bbbb698f9c2b72f3b1043",
+  "原始标准输出sha256": "41ea9b8239562238461af5282a3a294486da07cd49ac66fab6d2421eb4a67b2c",
+  "统计口径": "每行取一个新进程。RSS 由命名空间内直接启动 Julia 的 GNU time 观测。worker 首见时间来自每 40 ms 对本次进程树的采样。trace 行取 Julia --trace-compile-timing 对 Main.main(Vector{String}) 的计时。能力专用入口逐字使用原分支。isolated-plain 载入完整原脚本后单独分派该分支。",
+  "调用前后原生方法实例数": {
+    "original": {
+      "before": {
+        "compile_evidence_sequences": 0,
+        "recover_learning!": 0,
+        "replay_run!": 0,
+        "load_run_config": 0,
+        "with_compute": 0
+      },
+      "after": {
+        "compile_evidence_sequences": 1,
+        "recover_learning!": 0,
+        "replay_run!": 1,
+        "load_run_config": 1,
+        "with_compute": 1
+      }
+    },
+    "fixed": {
+      "before": {
+        "compile_evidence_sequences": 0,
+        "recover_learning!": 0,
+        "replay_run!": 0,
+        "load_run_config": 0,
+        "with_compute": 0
+      },
+      "after": {
+        "compile_evidence_sequences": 0,
+        "recover_learning!": 0,
+        "replay_run!": 0,
+        "load_run_config": 1,
+        "with_compute": 1
+      }
+    }
+  },
+  "方法观察口径": "分别先读 Base.specializations 中各方法已缓存的非空本地调用指针，然后实际运行 --check-compute 并复查。复核明确观察到原版生成序列编译和回放的入口。recover_learning! 单独入口在此计数中为零。",
+  "归档回执输入": {
+    "fixture": "outcome-chain/u937-000003a9",
+    "recorded_events": 7,
+    "commands": 9,
+    "commands_hash": "27322beb27ebae1d32d9daa0d05ca3333f318234a276ddca3932c94e78f1c820",
+    "events_hash": "91097550948935044bb5e43820a263e23c94300fe0ba8be23f52c5d6f2f06b9f",
+    "hash_encoding": "SHA256 of sorted UTF-8 lines filename + space + file_SHA256 + LF"
+  },
+  "实际离线入口": {
+    "replay": {
+      "exit_code": 0,
+      "old_and_fixed_stdout_sha256": "f56c670d08d02cbf08436a61e44b11cd3455fbe4a618b03e4cc032902acfb29c",
+      "report": {
+        "applied": 7,
+        "total": 7,
+        "through_event": "e-2de2dc647f9a4565-c000000008"
+      }
+    },
+    "sequences": {
+      "exit_code": 0,
+      "old_and_fixed_stdout_sha256": "d4fe0110974a2df2309559f40757d1d42243aeddff6c3941a70fcd0ab0f9a009",
+      "report": {
+        "episode_count": 1,
+        "confirmed_actions": 6,
+        "approved_program_actions": 0,
+        "programs": 0,
+        "pending_actions": 6
+      },
+      "corpus_file_sha256": "58ef94d47cc8e181b14454117e740d336b3757a65a569d19ba16d5059aa25b69"
+    },
+    "invalid": {
+      "type": "ArgumentError",
+      "error": "ArgumentError: usage: run.jl --config <file> [--public-dir <dir>] | --replay <dir>"
+    },
+    "replay_missing": {
+      "type": "ArgumentError",
+      "error": "ArgumentError: Public run directory does not exist"
+    },
+    "recovery": {
+      "launcher": "project supervise(..., recovery=True) invokes the real --recover-learning CLI and services the worker",
+      "same_recorded_config": true,
+      "fixture": "restart-choices/u754-000002f2",
+      "source_events": 3,
+      "exit_code": 0,
+      "old_and_fixed_result": {
+        "pending": [],
+        "programs": []
+      },
+      "old_worker_jobs": [],
+      "fixed_worker_jobs": [],
+      "commands_hash_before_and_after": "af2e6cea574ea771666cccc4ce0ae23107358fdf6cd5819abe541c71ec58d1a6",
+      "events_hash_before_and_after": "4f6b07161a991176793b37468000d38a71764967816c3c041ddc3964df0e2d58"
+    },
+    "recovery_without_supervisor": {
+      "fixture": "archived outcome-chain/u937-000003a9",
+      "observed": "Learning supervisor exited before reporting a worker result",
+      "old_and_fixed": true
+    }
+  },
+  "实际监督入口": {
+    "arm": "fixed",
+    "fixture": "restart-choices/u754-000002f2",
+    "launcher": "systemd user scope through project supervise() and scripts/run.jl --supervised",
+    "state": "FINISHED",
+    "exit_code": 0,
+    "confirmed_requests": [
+      "/api/scorecard/open",
+      "/api/cmd/RESET",
+      "/api/cmd/ACTION6",
+      "/api/cmd/RESET",
+      "/api/scorecard/close"
+    ],
+    "events": 3
+  },
+  "复现命令": [
+    "julia --startup-file=no --project=julia/TddESCat scripts/run.jl --check-compute config/v13_public25.toml",
+    "julia --startup-file=no --project=julia/TddESCat --trace-compile=trace.jl --trace-compile-timing scripts/run.jl --check-compute config/v13_public25.toml",
+    "julia --startup-file=no --project=julia/TddESCat scripts/run.jl --replay <independent-copy-of-public>",
+    "julia --startup-file=no --project=julia/TddESCat scripts/run.jl --compile-sequences <independent-copy-of-public> <new-corpus.json>",
+    "python -m tddesc_tools.public_run --recover-learning --config <original-agent.toml> --public-dir <independent-copy-of-public>"
+  ],
+  "范围": "测量 CLI 启动、冻结的四个后端、已确认回执离线处理和本地受控 SDK。正式 Public25 成绩及 82 的启动时间另行实测。",
+  "单独撤销恢复分支编译边界的诊断": {
+    "wall_seconds": 302.289,
+    "max_rss_kib": 3209804,
+    "capability_sha256": "e2a2f96b859298a80d76541f06217872e1edefb70a1bbbb698f9c2b72f3b1043",
+    "first_worker_observed_seconds": 298.9886,
+    "改变项": "保留回放与序列编译的调用边界，只恢复 recover_learning! 的原始直接调用，使用相同的 --check-compute 参数。"
+  }
+}

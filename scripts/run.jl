@@ -100,6 +100,8 @@ function explore!(rec)
 end
 
 function main(args)
+    # Each CLI mode receives the same argument type. Defer compilation of its
+    # evidence operation until the runtime flags select that mode.
     if length(args) == 2 && first(args) == "--check-compute"
         config = load_run_config(last(args))
         capabilities = TddESCat.with_compute(config) do backends
@@ -110,21 +112,21 @@ function main(args)
         return 0
     end
     if length(args) == 3 && first(args) == "--compile-sequences"
-        println(JSON.json(TddESCat.compile_evidence_sequences(args[2],args[3])))
+        println(JSON.json(Base.invokelatest(TddESCat.compile_evidence_sequences,args[2],args[3])))
         return 0
     end
     if length(args) == 5 && first(args) == "--recover-learning" &&
             args[2] == "--config" && args[4] == "--public-dir"
         config = load_run_config(args[3])
         result = with_run(last(args)) do store
-            TddESCat.recover_learning!(store,config,ROOT)
+            Base.invokelatest(TddESCat.recover_learning!,store,config,ROOT)
         end
         println(JSON.json(result))
         return isempty(result.pending) && isempty(result.programs) ? 0 : 1
     end
     if length(args) == 2 && first(args) == "--replay"
         isdir(last(args)) || throw(ArgumentError("Public run directory does not exist"))
-        println(JSON.json(with_run(replay_run!, last(args))))
+        println(JSON.json(Base.invokelatest(with_run,replay_run!,last(args))))
         return 0
     end
     supervised = !isempty(args) && first(args) == "--supervised"
