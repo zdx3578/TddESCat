@@ -209,6 +209,11 @@ function validate_policy_bodies!(selected,released,prepared,available_after)
     corpus = prepared.corpus
     id = released.publication
     registry,definitions = registry_from(corpus.signature,released.snapshot.entries)
+    validation = if !isnothing(prepared.agenda)
+        (;by_ref=Dict(entry.event["event_id"]=>entry.observation for entry in prepared.entries),
+            source_producer=Dict(i=>p for p in values(prepared.agenda.producers) for i in p.support),
+            active_outcomes=active_policy_outcomes(prepared.agenda),continuity=Dict{Tuple{Int,Int},Bool}())
+    end
     for (i,text) in enumerate(released.bundle["rewritten_programs"])
         call = decode_program(text,registry)
         definition = get(call,"operator",nothing)
@@ -220,7 +225,7 @@ function validate_policy_bodies!(selected,released,prepared,available_after)
         isnothing(policy) && continue
         if hasproperty(policy,:tree)
             episode = corpus.episodes[i]
-            verify_relation_episode(policy.tree,episode,prepared.agenda,prepared.entries) ||
+            verify_relation_episode(policy.tree,episode,prepared.agenda,prepared.entries;validation...) ||
                 error("Policy does not reproduce its observed relation trajectory")
             refs = sort!(unique([row["definition_ref"] for row in calls]))
             depths = released.bundle["definition_depths"]
@@ -231,6 +236,13 @@ function validate_policy_bodies!(selected,released,prepared,available_after)
                 "public_outcomes"=>policy_outcome_steps(policy.tree))
             result = get!(selected,scope,LearnedPolicy(id,definition,depths[definition],corpus.model,
                 body_record,String[],available_after))
+            if any(>(1),diff(episode.members))
+                result.body["dependency_source"] = "witnessed_role_dependency"
+            end
+            preconditions = observed_policy_preconditions(episode,prepared.agenda)
+            if !isempty(preconditions)
+                union!(get!(Vector{NamedTuple},result.body,"effect_preconditions"),preconditions)
+            end
             union!(result.training,episode.events)
             continue
         end

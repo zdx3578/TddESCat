@@ -138,3 +138,45 @@ function role_factor_proof!(worker,proposal,obs,snapshot;memo=nothing)
     return merge(checked.proof,(;reused,origin,proof_scope="translated_bound_role",receipt=snapshot,
         checked.proved_at,checked.proof_origin))
 end
+
+"""Test the finite observed destination palettes against the learned entry condition."""
+function competing_entry_colors(query,expected,observed)
+    values = Tuple.(observed)
+    required = Tuple(expected)
+    # Palette equality is cheaper locally on the measured public workloads. The
+    # explicit Factor path verifies identical logical queries and worker costs.
+    if isnothing(query) || get(query,:backend,:native) != :factor ||
+            isnothing(query.worker) || length(unique(values)) <= 1
+        return (;matches=[v == required for v in values],backend=:exact_palette,reads=String[])
+    end
+    worker = query.worker
+    # The cache stores complete Boolean answers, never process-local diagram handles.
+    key(v) = (:entry_palette,required,v)
+    unseen = [v for v in unique(values) if !haskey(query.memo,key(v))]
+    if !isempty(unseen)
+        palette = sort!(unique!(UInt8[c for v in (required,unseen...) for c in v]))
+        layout = (;order=collect(0:length(palette)-1),style="balanced")
+        assignment(colors) = [(i-1,c in colors) for (i,c) in enumerate(palette)]
+        formula = (;op="cube",literals=assignment(required))
+        compiled = compute_request!(worker,query.snapshot,"compile_bool",(;layout,formula))
+        if compiled.execution == "completed" && compiled.answer == "value"
+            answer = try
+                compute_request!(worker,query.snapshot,"evaluate_bool_batch",
+                    (;value=compiled.value,assignments=assignment.(unseen)))
+            finally
+                compute_request!(worker,query.snapshot,"release",(;value=compiled.value))
+            end
+            if answer.execution == "completed" && answer.answer == "value" && answer.coverage == "complete"
+                answers = answer.value
+                length(answers) == length(unseen) && all(v->v isa Bool,answers) ||
+                    error("Factor returned an invalid entry condition result")
+                for (v,match) in zip(unseen,answers)
+                    query.memo[key(v)] = (;match,source=query.snapshot)
+                end
+            end
+        end
+    end
+    matches = [haskey(query.memo,key(v)) ? query.memo[key(v)].match : missing for v in values]
+    reads = unique(String[query.memo[key(v)].source for v in values if haskey(query.memo,key(v))])
+    return (;matches,backend=isempty(unseen) ? :factor_cache : :factor,reads)
+end

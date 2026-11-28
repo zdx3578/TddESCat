@@ -96,7 +96,7 @@ function load_run_config(path::AbstractString)
     learning = get(data, "learning", nothing)
     if !isnothing(learning)
         require_keys(learning, ("engine", "policy_file", "batch_confirmed_events");
-            optional=("prior_evidence","association","sequences","background_search"), at="learning")
+            optional=("prior_evidence","association","sequences","background_search","competing_role_backend"), at="learning")
         all(get(learning,key,false) isa Bool for key in ("association","sequences","background_search")) ||
             throw(ArgumentError("Invalid association, sequence, or background learning option"))
         check_values(learning, ("batch_confirmed_events",), positive_integer, "learning")
@@ -149,6 +149,13 @@ function load_run_config(path::AbstractString)
         isempty(compute) && throw(ArgumentError("No compute backend configured"))
         for field in keys(compute)
             compute[field] = config_path(dir,compute[field])
+        end
+    end
+    if !isnothing(learning)
+        role_backend = get(learning,"competing_role_backend","native")
+        role_backend in ("native","factor") || throw(ArgumentError("Invalid learning.competing_role_backend"))
+        if role_backend == "factor" && (isnothing(compute) || !haskey(compute,"factor_kernel"))
+            throw(ArgumentError("Factor role queries require compute.factor_kernel"))
         end
     end
     return RunConfig(path,data["run_name"],config_path(dir,data["run_root"]),env,exec,learning,search,planning,compute)

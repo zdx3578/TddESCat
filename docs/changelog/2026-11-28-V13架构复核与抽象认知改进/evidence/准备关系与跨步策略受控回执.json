@@ -1,0 +1,193 @@
+{
+  "范围": "受控公开协议夹具。训练前缀含指定动作和对照，最终测试读取实际仲裁及回执。",
+  "paired": {
+    "baseline": "59efbcd5299e2cd0e6bf85b23f4e82fb65bb0e86",
+    "matched": {
+      "resets": 1,
+      "actions": 5
+    },
+    "choices": [
+      {
+        "event": "e-a87fec9d5a2f2f7d-c000000008",
+        "action": {
+          "id": 1
+        },
+        "state": "NOT_FINISHED",
+        "level": 0,
+        "response_sha256": "a1a4bed9a6ce2438af994fc960b5c99b722e17507b18012a44e1fed3dc8d1bbd"
+      },
+      {
+        "event": "e-49d6b69955c4bb50-c000000008",
+        "action": {
+          "id": 2
+        },
+        "state": "NOT_FINISHED",
+        "level": 0,
+        "response_sha256": "dc01a8ba3962e5377911643cf0cfc7f5bcfdcbfb0bed648171a59876adace7f4"
+      }
+    ]
+  },
+  "first_level": {
+    "task": "test_preparation_omission",
+    "historical_read": {
+      "writer": 1,
+      "writer_event": "e-b7a8554782bd561c-c000000003",
+      "kind": "role_support",
+      "producer": "cf3d75ecdfd9c44a715f0b28a63a98e0ecc53eeefd6d3be61a711e97d51982ce",
+      "relation": "pigment-49e8c6e8770daecc5c0c52b4a52e6908a5435ab8b884b8ba34c797f93adeb227",
+      "output_port": 1,
+      "action": null,
+      "input_port": 0,
+      "usage": "omission_test",
+      "comparison": 0,
+      "tested_producer": null,
+      "since": 1,
+      "through": 1,
+      "reads": [
+        "e-b7a8554782bd561c-c000000002",
+        "e-b7a8554782bd561c-c000000003",
+        "e-b7a8554782bd561c-c000000007",
+        "e-b7a8554782bd561c-c000000004"
+      ],
+      "scope": "historical_contrast",
+      "baseline": "e-b7a8554782bd561c-c000000004"
+    },
+    "confirmed_comparison": {
+      "intent": "test_preparation_omission",
+      "result": "observed",
+      "tests": [],
+      "omission": {
+        "status": "changed_to_no_effect",
+        "writer": 1,
+        "consumer": "e-b7a8554782bd561c-c000000004",
+        "baseline_effects": 1
+      }
+    },
+    "confirmed_later_input": {
+      "writer": 7,
+      "writer_event": "e-b7a8554782bd561c-c000000009",
+      "kind": "role_support",
+      "producer": "cf3d75ecdfd9c44a715f0b28a63a98e0ecc53eeefd6d3be61a711e97d51982ce",
+      "relation": "pigment-49e8c6e8770daecc5c0c52b4a52e6908a5435ab8b884b8ba34c797f93adeb227",
+      "output_port": 1,
+      "action": null,
+      "input_port": 0,
+      "usage": "omission_contrast",
+      "comparison": 6,
+      "tested_producer": null,
+      "since": 7,
+      "through": 9,
+      "reads": [
+        "e-b7a8554782bd561c-c000000008",
+        "e-b7a8554782bd561c-c000000009",
+        "e-b7a8554782bd561c-c000000011",
+        "e-b7a8554782bd561c-c000000007"
+      ]
+    },
+    "receipts": [
+      {
+        "event": "e-b7a8554782bd561c-c000000008",
+        "response_sha256": "99a35c587ab4bbc81372c1fee81145cb9a43f97b9febb89e2d4307822d37c6d2",
+        "action": {
+          "id": 2
+        },
+        "frames": 1,
+        "level": 0,
+        "state": "NOT_FINISHED"
+      },
+      {
+        "event": "e-b7a8554782bd561c-c000000009",
+        "response_sha256": "6552b1efbd57b2e0e4525610828c6c1b42a34fa9164fa8789f0c13a48d6a1273",
+        "action": {
+          "id": 1
+        },
+        "frames": 1,
+        "level": 0,
+        "state": "NOT_FINISHED"
+      },
+      {
+        "event": "e-b7a8554782bd561c-c000000012",
+        "response_sha256": "bd25255bd6f799dcedbdcb5ce685ca87878e97b9c373f359f6d12ded13c3661c",
+        "action": {
+          "id": 2
+        },
+        "frames": 1,
+        "level": 0,
+        "state": "NOT_FINISHED"
+      }
+    ]
+  },
+  "policy": {
+    "publication": "f9d69f5820e1714c88a094145abcc2b14b43879327cfe174a2f762fbfaf8e572",
+    "scope": "hypothesis",
+    "observed_dependencies": [
+      {
+        "writer": "e-6b99592610ea6fb8-c000000022",
+        "port": 1,
+        "usage": "omission_contrast",
+        "support": "26ecdff03d5dd0c2984f65ecbceb3ad597e2ff43c49e11e90c3d3618dc175a3f"
+      }
+    ],
+    "receipts": [
+      {
+        "event": "e-6b99592610ea6fb8-c000000008",
+        "response_sha256": "63a85eca0e4c46ef56041f0a853cd72a70bdad5217891dd3668e7d075b3a6ef6",
+        "action": {
+          "id": 6,
+          "x": 9,
+          "y": 11
+        },
+        "frames": 2,
+        "level": 1,
+        "state": "NOT_FINISHED"
+      },
+      {
+        "event": "e-6b99592610ea6fb8-c000000010",
+        "response_sha256": "b879f8be9cea4d13ed1366be8df326c72a04d0d954eafc74ea72d0558f443883",
+        "action": {
+          "id": 6,
+          "x": 39,
+          "y": 11
+        },
+        "frames": 1,
+        "level": 1,
+        "state": "NOT_FINISHED"
+      },
+      {
+        "event": "e-6b99592610ea6fb8-c000000014",
+        "response_sha256": "09e4c118665daccbb56fd922f4f5ca4073df9100694036b93bec33a612d88e37",
+        "action": {
+          "id": 6,
+          "x": 39,
+          "y": 11
+        },
+        "frames": 2,
+        "level": 2,
+        "state": "NOT_FINISHED"
+      },
+      {
+        "event": "e-6b99592610ea6fb8-c000000022",
+        "response_sha256": "d6ef9db49171fc4e892a7d1154cbaacb4452e4e686f7ed3da6624491e52a41f6",
+        "action": {
+          "id": 5
+        },
+        "frames": 1,
+        "level": 2,
+        "state": "NOT_FINISHED"
+      },
+      {
+        "event": "e-6b99592610ea6fb8-c000000023",
+        "response_sha256": "74d77b654723aa80550568feadcf5e6390bae164e3473d24288696b44e98a67a",
+        "action": {
+          "id": 6,
+          "x": 24,
+          "y": 11
+        },
+        "frames": 1,
+        "level": 3,
+        "state": "WIN"
+      }
+    ],
+    "exit": "stopped_at_public_advance"
+  }
+}

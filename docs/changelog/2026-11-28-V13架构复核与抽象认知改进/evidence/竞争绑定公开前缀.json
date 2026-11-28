@@ -1,0 +1,230 @@
+{
+  "capture_source": "v13-public25-composed",
+  "capture_commit": "2b546b235541b1e720296ff40b70f4cbac6f778f",
+  "raw_input": "逐一复查公开事件、动作请求及回执内容哈希",
+  "selection": {
+    "roles": "每款取归档的前 200 条检查。在先前的单角色位移规则中，要求当下存在至少两个同形同色候选、所有去向可见、只有一个去向色集符合训练记录。按时间每款最多收前 8 条。筛选仅用已执行动作和动作前数据。",
+    "joins": "每款取归档的前 360 条检查。在先前的多角色共同移动规则中，取后续同动作下候选域非空且含重复外观的前 3 个匹配画面。完整关系连接允许为空集。"
+  },
+  "roles": [
+    {
+      "game": "ka59-9f096b4a",
+      "source": "e-4d6c3962855fcc62-c000000005",
+      "before": "e-4d6c3962855fcc62-c000000012",
+      "after": "e-4d6c3962855fcc62-c000000013"
+    },
+    {
+      "game": "ka59-9f096b4a",
+      "source": "e-4d6c3962855fcc62-c000000005",
+      "before": "e-4d6c3962855fcc62-c000000024",
+      "after": "e-4d6c3962855fcc62-c000000025"
+    },
+    {
+      "game": "ka59-9f096b4a",
+      "source": "e-4d6c3962855fcc62-c000000005",
+      "before": "e-4d6c3962855fcc62-c000000028",
+      "after": "e-4d6c3962855fcc62-c000000029"
+    },
+    {
+      "game": "ka59-9f096b4a",
+      "source": "e-4d6c3962855fcc62-c000000005",
+      "before": "e-4d6c3962855fcc62-c000000046",
+      "after": "e-4d6c3962855fcc62-c000000047"
+    },
+    {
+      "game": "ka59-9f096b4a",
+      "source": "e-4d6c3962855fcc62-c000000005",
+      "before": "e-4d6c3962855fcc62-c000000051",
+      "after": "e-4d6c3962855fcc62-c000000052"
+    },
+    {
+      "game": "ka59-9f096b4a",
+      "source": "e-4d6c3962855fcc62-c000000005",
+      "before": "e-4d6c3962855fcc62-c000000056",
+      "after": "e-4d6c3962855fcc62-c000000057"
+    },
+    {
+      "game": "ka59-9f096b4a",
+      "source": "e-4d6c3962855fcc62-c000000005",
+      "before": "e-4d6c3962855fcc62-c000000066",
+      "after": "e-4d6c3962855fcc62-c000000067"
+    },
+    {
+      "game": "ka59-9f096b4a",
+      "source": "e-4d6c3962855fcc62-c000000005",
+      "before": "e-4d6c3962855fcc62-c000000082",
+      "after": "e-4d6c3962855fcc62-c000000083"
+    },
+    {
+      "game": "m0r0-dadda488",
+      "source": "e-e69500bd5c44011a-c000000035",
+      "before": "e-e69500bd5c44011a-c000000050",
+      "after": "e-e69500bd5c44011a-c000000051"
+    },
+    {
+      "game": "m0r0-dadda488",
+      "source": "e-e69500bd5c44011a-c000000035",
+      "before": "e-e69500bd5c44011a-c000000056",
+      "after": "e-e69500bd5c44011a-c000000057"
+    },
+    {
+      "game": "m0r0-dadda488",
+      "source": "e-e69500bd5c44011a-c000000035",
+      "before": "e-e69500bd5c44011a-c000000066",
+      "after": "e-e69500bd5c44011a-c000000067"
+    },
+    {
+      "game": "m0r0-dadda488",
+      "source": "e-e69500bd5c44011a-c000000061",
+      "before": "e-e69500bd5c44011a-c000000080",
+      "after": "e-e69500bd5c44011a-c000000081"
+    },
+    {
+      "game": "m0r0-dadda488",
+      "source": "e-e69500bd5c44011a-c000000033",
+      "before": "e-e69500bd5c44011a-c000000177",
+      "after": "e-e69500bd5c44011a-c000000178"
+    },
+    {
+      "game": "m0r0-dadda488",
+      "source": "e-e69500bd5c44011a-c000000061",
+      "before": "e-e69500bd5c44011a-c000000186",
+      "after": "e-e69500bd5c44011a-c000000187"
+    },
+    {
+      "game": "m0r0-dadda488",
+      "source": "e-e69500bd5c44011a-c000000035",
+      "before": "e-e69500bd5c44011a-c000000187",
+      "after": "e-e69500bd5c44011a-c000000188"
+    },
+    {
+      "game": "m0r0-dadda488",
+      "source": "e-e69500bd5c44011a-c000000187",
+      "before": "e-e69500bd5c44011a-c000000197",
+      "after": "e-e69500bd5c44011a-c000000198"
+    },
+    {
+      "game": "su15-4c352900",
+      "source": "e-bc94e240b4071f6d-c000000031",
+      "before": "e-bc94e240b4071f6d-c000000032",
+      "after": "e-bc94e240b4071f6d-c000000033"
+    },
+    {
+      "game": "su15-4c352900",
+      "source": "e-bc94e240b4071f6d-c000000031",
+      "before": "e-bc94e240b4071f6d-c000000033",
+      "after": "e-bc94e240b4071f6d-c000000034"
+    },
+    {
+      "game": "su15-4c352900",
+      "source": "e-bc94e240b4071f6d-c000000031",
+      "before": "e-bc94e240b4071f6d-c000000039",
+      "after": "e-bc94e240b4071f6d-c000000040"
+    },
+    {
+      "game": "su15-4c352900",
+      "source": "e-bc94e240b4071f6d-c000000031",
+      "before": "e-bc94e240b4071f6d-c000000040",
+      "after": "e-bc94e240b4071f6d-c000000041"
+    },
+    {
+      "game": "su15-4c352900",
+      "source": "e-bc94e240b4071f6d-c000000031",
+      "before": "e-bc94e240b4071f6d-c000000043",
+      "after": "e-bc94e240b4071f6d-c000000044"
+    },
+    {
+      "game": "su15-4c352900",
+      "source": "e-bc94e240b4071f6d-c000000031",
+      "before": "e-bc94e240b4071f6d-c000000044",
+      "after": "e-bc94e240b4071f6d-c000000045"
+    },
+    {
+      "game": "su15-4c352900",
+      "source": "e-bc94e240b4071f6d-c000000031",
+      "before": "e-bc94e240b4071f6d-c000000047",
+      "after": "e-bc94e240b4071f6d-c000000048"
+    },
+    {
+      "game": "su15-4c352900",
+      "source": "e-bc94e240b4071f6d-c000000031",
+      "before": "e-bc94e240b4071f6d-c000000048",
+      "after": "e-bc94e240b4071f6d-c000000049"
+    }
+  ],
+  "joins": [
+    {
+      "game": "ka59-9f096b4a",
+      "source": "e-4d6c3962855fcc62-c000000011",
+      "before": "e-4d6c3962855fcc62-c000000014",
+      "after": "e-4d6c3962855fcc62-c000000015"
+    },
+    {
+      "game": "ka59-9f096b4a",
+      "source": "e-4d6c3962855fcc62-c000000011",
+      "before": "e-4d6c3962855fcc62-c000000016",
+      "after": "e-4d6c3962855fcc62-c000000017"
+    },
+    {
+      "game": "ka59-9f096b4a",
+      "source": "e-4d6c3962855fcc62-c000000007",
+      "before": "e-4d6c3962855fcc62-c000000018",
+      "after": "e-4d6c3962855fcc62-c000000019"
+    },
+    {
+      "game": "ls20-9607627b",
+      "source": "e-0a1ac997674cc3ca-c000000058",
+      "before": "e-0a1ac997674cc3ca-c000000058",
+      "after": "e-0a1ac997674cc3ca-c000000059"
+    },
+    {
+      "game": "ls20-9607627b",
+      "source": "e-0a1ac997674cc3ca-c000000058",
+      "before": "e-0a1ac997674cc3ca-c000000064",
+      "after": "e-0a1ac997674cc3ca-c000000065"
+    },
+    {
+      "game": "ls20-9607627b",
+      "source": "e-0a1ac997674cc3ca-c000000058",
+      "before": "e-0a1ac997674cc3ca-c000000065",
+      "after": "e-0a1ac997674cc3ca-c000000066"
+    },
+    {
+      "game": "re86-4e57566e",
+      "source": "e-97d6ac6449d0ded7-c000000067",
+      "before": "e-97d6ac6449d0ded7-c000000068",
+      "after": "e-97d6ac6449d0ded7-c000000069"
+    },
+    {
+      "game": "re86-4e57566e",
+      "source": "e-97d6ac6449d0ded7-c000000067",
+      "before": "e-97d6ac6449d0ded7-c000000069",
+      "after": "e-97d6ac6449d0ded7-c000000070"
+    },
+    {
+      "game": "re86-4e57566e",
+      "source": "e-97d6ac6449d0ded7-c000000067",
+      "before": "e-97d6ac6449d0ded7-c000000070",
+      "after": "e-97d6ac6449d0ded7-c000000071"
+    },
+    {
+      "game": "sb26-7fbdac44",
+      "source": "e-2c60205c594e25b2-c000000199",
+      "before": "e-2c60205c594e25b2-c000000199",
+      "after": "e-2c60205c594e25b2-c000000200"
+    },
+    {
+      "game": "sb26-7fbdac44",
+      "source": "e-2c60205c594e25b2-c000000199",
+      "before": "e-2c60205c594e25b2-c000000205",
+      "after": "e-2c60205c594e25b2-c000000206"
+    },
+    {
+      "game": "sb26-7fbdac44",
+      "source": "e-2c60205c594e25b2-c000000199",
+      "before": "e-2c60205c594e25b2-c000000206",
+      "after": "e-2c60205c594e25b2-c000000207"
+    }
+  ],
+  "manifest_sha256": "484eafde1edf3dc0dd8539a07fa67f34ae158b44182342b5a99c2e0a4c0bd6b3"
+}

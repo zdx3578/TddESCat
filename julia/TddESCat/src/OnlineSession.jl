@@ -103,7 +103,7 @@ function evaluate_joint_trial(rule, trial)
         meters = isnothing(trial.effects) ? MeterBinding[] : trial_meters(trial.effects)
         evaluation = evaluate_joint_rule(rule,row.before,groups,enclosure_pairs(groups),trial.action;
             meters,relative_transfer=true)
-        evaluation.truth == proven || return nothing
+        assessable_binding(evaluation) || return nothing
         assessed = measure_joint((model=rule,fragments=evaluation.fragments),row.after;effects=trial.effects)
         verdict = "refuted" in values(assessed.assessments) ? disproven :
             all(==("supported"),values(assessed.assessments)) ? proven : unknown_truth
@@ -260,9 +260,12 @@ end
 function candidate_evaluation(active, before, groups, enclosure, action, history; transients=nothing,meters=(),
                               observed_click=nothing,trained_click=nothing,role_index=nothing,relative_transfer=false)
     rule = active.rule
+    binding_guard = isempty(active.condition.atoms) || !active.condition.feasible ? nothing :
+        part -> conjunction(active.condition.atoms,before,MotionBinding(part.basis,part.value),
+            part.expected,history;transients)
     result = evaluate_joint_rule(rule,before,groups,enclosure,action;
-        meters,observed_click,trained_click,role_index,relative_transfer)
-    result.truth == proven || return result
+        meters,observed_click,trained_click,role_index,relative_transfer,binding_guard)
+    assessable_binding(result) || return result
     scope = measured_scope(result.fragments)
     if !isnothing(scope) && scope ∉ active.meter_scopes
         return (truth=unknown_truth,fragments=result.fragments,reason="measurement_interaction_unproved")
@@ -274,7 +277,8 @@ function candidate_evaluation(active, before, groups, enclosure, action, history
     binding = isnothing(moving) ? nothing : MotionBinding(moving.basis,moving.value)
     delta = isnothing(moving) ? (0,0) : moving.expected
     truth = conjunction(active.condition.atoms,before,binding,delta,history;transients)
-    return (truth, fragments=result.fragments, reason=truth == proven ? "published_joint_effects" :
+    truth == proven && return result
+    return (truth, fragments=result.fragments, reason=
         truth == disproven ? "learned_condition_false" : "learned_condition_unknown")
 end
 
@@ -339,7 +343,7 @@ end
 
 function ranked_public_actions(knowledge, observation, history, attempts, max_action_coordinates;
         composing=false, required_action=nothing, programs_pending=false, program_cursor=nothing,meters=(),
-        object_probes=false, regions=nothing)
+        object_probes=false, regions=nothing,competition=nothing)
     values = public_action_candidates(observation,max_action_coordinates;object_probes,regions)
     transients = receipt_transient_colors(observation.frames)
     if programs_pending
@@ -360,7 +364,7 @@ function ranked_public_actions(knowledge, observation, history, attempts, max_ac
     version(model) = get!(() -> active_id(model),versions,model.rule.id)
     click_roles = Dict{String,NamedTuple}()
     click_bindings = IdDict{Vector{ColorCell},NamedTuple}()
-    role_index = EffectRoleIndex()
+    role_index = EffectRoleIndex(competition)
     frame_regions = isnothing(regions) ? nothing : last(regions.frames)
     no_models = ActiveMechanism[]
     for action in values.actions
@@ -370,6 +374,7 @@ function ranked_public_actions(knowledge, observation, history, attempts, max_ac
         blocked_resources = Set{Tuple}()
         rejected = false
         relation_reads = []
+        first_comparison = length(role_index.comparisons)+1
         models = get(models_by_action,action["id"],no_models)
         observed_click = action["id"] == 6 && any(model->!isnothing(model.rule.click),models) ?
             role_at_click(values.groups,(action["x"],action["y"]),frame_regions,click_bindings) : nothing
@@ -462,7 +467,7 @@ function ranked_public_actions(knowledge, observation, history, attempts, max_ac
             priority += 1
         end
         push!(judged,(; action, chosen, reason, rejected, follow, experiment,projection,projection_contract,
-            projection_probe,relation_reads,
+            projection_probe,relation_reads,role_comparisons=role_index.comparisons[first_comparison:end],
             rank=(priority,trial_count)))
     end
     sort!(judged;by=row->row.rank,alg=Base.Sort.MergeSort)
@@ -781,6 +786,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
     exploration_frontier = isnothing(rec.limit) ? PublicFrontier(history_widths) : nothing
     responses = ResponseLearning()
     factor_role_memo = Dict{Tuple,NamedTuple}()
+    role_backend = isnothing(config.learning) ? :native : Symbol(get(config.learning,"competing_role_backend","native"))
     publications = String[]
     count = 0
     continuation = nothing
@@ -902,9 +908,12 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
         relation_tasks && knowledge.receipt.event != rec.before_ref &&
             error("Decision would consume a different grounded receipt")
         ranking_started = time_ns()
+        competition = (worker=get(backends,"factor_kernel",nothing),memo=factor_role_memo,
+            backend=role_backend,snapshot=rec.before_ref)
         decision = ranked_public_actions(knowledge,obs,history,attempts,coordinates;
-            composing,programs_pending,program_cursor,meters,object_probes,regions=knowledge.receipt)
+            composing,programs_pending,program_cursor,meters,object_probes,regions=knowledge.receipt,competition)
         condition_view = relation_tasks ? relation_condition_view(knowledge,rec,history,obs) : nothing
+        isnothing(condition_view) || (condition_view = merge(condition_view,(;competition)))
         decision = merge(decision,(;condition_view))
         click_scene = object_probes ? intervention_scene(last(obs.frames),decision.groups) : NamedTuple[]
         isempty(decision.ranked) && break
@@ -1109,7 +1118,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             choice = findfirst(row->row.action == selected.action,decision.ranked)
             if isnothing(choice)
                 decision = ranked_public_actions(knowledge,obs,history,attempts,coordinates;
-                    composing,required_action=selected.action,meters,object_probes,regions=knowledge.receipt)
+                    composing,required_action=selected.action,meters,object_probes,regions=knowledge.receipt,competition)
                 decision = merge(decision,(;condition_view))
                 choice = findfirst(row->row.action == selected.action,decision.ranked)
             end
@@ -1143,6 +1152,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 isempty(tests) ? nothing : (action=item.action,intent=:apply_relation,tests,reads=String[],obligation=nothing)
             end
         end
+        relation_proposal = bind_relation_reads(relations,relation_proposal,obs,item.action)
         role_proof = if !isnothing(relation_proposal) && haskey(backends,"factor_kernel")
             role_factor_proof!(backends["factor_kernel"],relation_proposal,obs,rec.before_ref;memo=factor_role_memo)
         end
@@ -1242,6 +1252,8 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
             "coordinate_domain"=>Dict("visible_candidates"=>decision.click_count,
                 "protocol_points"=>6 in obs.available_actions ? 4096 : 0,
                 "attempted"=>sum(key[1] == 6 for key in keys(attempts);init=0)))
+        comparisons = [(;row.action,row.role_comparisons) for row in decision.ranked if !isempty(row.role_comparisons)]
+        isempty(comparisons) || (decision_record["competing_bindings"] = comparisons)
         isnothing(policy_note) || (decision_record["policy"] = policy_note)
         isnothing(task) || (decision_record["relation_task"] = task)
         if relation_tasks
@@ -1392,7 +1404,7 @@ function run_online!(rec, entry, config, repo_root; knowledge=OnlineKnowledge(),
                 effects,groups=after_groups)
         relation_feedback = if relation_tasks
             observation = observe_relations!(relations,entry,resulting,effects,contact_feedback,site_transitions,
-                relation_proposal;groups=decision.groups,after_groups)
+                relation_proposal;groups=decision.groups,after_groups,after_regions)
             finish_relation_dispatch!(relations,relation_proposal;feedback=observation.feedback)
             if !isnothing(exploration_frontier)
                 refined = frontier_observe!(exploration_frontier,relations)

@@ -224,9 +224,11 @@ binding_view(model) = model.enclosed ? "geometry-support" : "color-support"
 struct EffectRoleIndex
     grids::IdDict{MotionShape,NamedTuple}
     signatures::Dict{Symbol,Dict{Any,Vector{MotionShape}}}
+    competition::Union{Nothing,NamedTuple}
+    comparisons::Vector{NamedTuple}
 end
 
-EffectRoleIndex() = EffectRoleIndex(IdDict(),Dict())
+EffectRoleIndex(competition=nothing) = EffectRoleIndex(IdDict(),Dict(),competition,NamedTuple[])
 
 indexed_grid(shape,::Nothing) = support_grid(shape)
 indexed_grid(shape,index::EffectRoleIndex) = get!(() -> support_grid(shape),index.grids,shape)
@@ -264,33 +266,80 @@ function model_binding(model, groups, enclosed_targets; position=nothing, role_i
     return length(candidates) == 1 ? only(candidates) : nothing
 end
 
-function joint_motion_positions(rule, movers, groups, enclosure, role_index)
-    length(movers) == length(rule.spacing) > 1 || return nothing
+"""Enumerate witnessed spacings as joins over the absolute anchors of candidate roles."""
+function motion_role_bindings(rule,movers,groups,enclosure,index;join_pairs=exact_join_pairs)
+    length(movers) == length(rule.spacing) && !isempty(movers) || return Vector{MotionShape}[]
     targets = [role.target for role in enclosure]
-    candidates = [model_candidates(rule.effects[index],groups,targets,role_index) for index in movers]
-    postings = map(candidates) do shapes
-        positions = Dict{Pixel,Int}()
-        for shape in shapes
-            point = anchor(shape)
-            positions[point] = get(positions,point,0) + 1
+    first_model = rule.effects[first(movers)]
+    source_unit = indexed_grid(first_model.template,index).unit
+    origins = model_candidates(first_model,groups,targets,index)
+    rows = [[shape] for shape in origins]
+    for (port,id) in enumerate(movers[2:end])
+        isempty(rows) && break
+        candidates = model_candidates(rule.effects[id],groups,targets,index)
+        positions = Pixel[]
+        pending = Vector{MotionShape}[]
+        for row in rows
+            delta = rule.spacing[port+1] .* indexed_grid(first(row),index).unit
+            all(v->mod(v,source_unit) == 0,delta) || continue
+            point = anchor(first(row)) .+ div.(delta,source_unit)
+            any(shape->anchor(shape) == point,row) && continue
+            push!(pending,row)
+            push!(positions,point)
         end
-        positions
+        matches = join_pairs(positions,Pixel[anchor(shape) for shape in candidates])
+        rows = [[pending[left];[candidates[right]]] for (left,right) in matches]
     end
-    source_unit = indexed_grid(rule.effects[first(movers)].template,role_index).unit
-    aligned = nothing
-    for shape in first(candidates)
-        origin = anchor(shape)
-        bound_unit = indexed_grid(shape,role_index).unit
-        offsets = [offset .* bound_unit for offset in rule.spacing]
-        all(offset->all(v->mod(v,source_unit) == 0,offset),offsets) || continue
-        positions = [origin .+ div.(offset,source_unit) for offset in offsets]
-        allunique(positions) || continue
-        multiplicities = [get(posting,point,0) for (posting,point) in zip(postings,positions)]
-        all(>(0),multiplicities) || continue
-        isnothing(aligned) && all(==(1),multiplicities) || return nothing
-        aligned = positions
+    return rows
+end
+
+function motion_fragment(model,bound,index,relative)
+    unit = indexed_grid(model.template,index).unit
+    scaled = model.values .* indexed_grid(bound,index).unit
+    all(v->mod(v,unit) == 0,scaled) || return nothing
+    return (family=:translation,basis=bound,expected=Tuple(div.(scaled,unit)),value=anchor(bound),relative=relative)
+end
+
+function destination_colors(frame,movers)
+    prior = Set(point for part in movers for point in effect_points(part.basis))
+    destination = Set((x+part.expected[1],y+part.expected[2]) for part in movers for (x,y,_) in part.basis)
+    all(((x,y),)->checkbounds(Bool,frame,y+1,x+1),destination) || return nothing
+    return sort!(unique(UInt8[frame[y+1,x+1] for (x,y) in setdiff(destination,prior)]))
+end
+
+function joint_motion_fragments(rule,movers,frame,groups,enclosure,index,guard)
+    rows = motion_role_bindings(rule,movers,groups,enclosure,index)
+    isempty(rows) && return nothing
+    fragments = [[motion_fragment(rule.effects[id],shape,index,true) for (id,shape) in zip(movers,row)] for row in rows]
+    length(rows) == 1 && return any(isnothing,only(fragments)) ? nothing : only(fragments)
+    colors = [any(isnothing,parts) ? nothing : destination_colors(frame,parts) for parts in fragments]
+    observed = findall(!isnothing,colors)
+    competition = isnothing(index) ? nothing : index.competition
+    verdicts = fill(unknown_truth,length(rows))
+    guards = [isnothing(guard) || isnothing(first(parts)) ? unknown_truth : guard(first(parts)) for parts in fragments]
+    result = competing_entry_colors(competition,rule.entry_colors,colors[observed])
+    for (at,same) in zip(observed,result.matches)
+        verdicts[at] = ismissing(same) ? unknown_truth : same ? proven : disproven
     end
-    return isnothing(aligned) ? nothing : zip(movers,aligned)
+    for i in eachindex(verdicts)
+        if guards[i] == disproven
+            verdicts[i] = disproven
+        elseif !isnothing(guard) && guards[i] == unknown_truth && verdicts[i] == proven
+            verdicts[i] = unknown_truth
+        end
+    end
+    if !isnothing(index) && !isnothing(competition)
+        push!(index.comparisons,(;rule=rule.id,training=rule.training_event,expected_entry=rule.entry_colors,
+            backend=result.backend,scope=:entry_and_guard,reads=result.reads,receipt=competition.snapshot,
+            candidates=[(;positions=anchor.(rows[i]),entry=colors[i],guard=isnothing(guard) ? "not_required" : string(guards[i]),
+                verdict=string(verdicts[i])) for i in eachindex(rows)]))
+    end
+    accepted = findall(==(proven),verdicts)
+    length(accepted) == 1 && all(!=(unknown_truth),verdicts) || return nothing
+    alternatives = Tuple(sort!([isnothing(c) ? (:outside,) : Tuple(Int.(c)) for c in colors];by=repr))
+    layout = Tuple(sort!([(Tuple(anchor.(row)),isnothing(c) ? nothing : Tuple(c))
+        for (row,c) in zip(rows,colors)];by=first))
+    return [merge(part,(;entry_alternatives=alternatives,rival_layout=layout)) for part in fragments[only(accepted)]]
 end
 
 visible_support(frame,visibility) = all(cell -> checkbounds(Bool,frame,cell[2]+1,cell[1]+1) &&
@@ -306,11 +355,7 @@ function result_model(model, before, groups, enclosure, action; meters=(),clicke
     if model.family == :translation
         bound = model_binding(model, groups, [role.target for role in enclosure];position,role_index)
         isnothing(bound) && return nothing
-        source_unit, observed_unit = indexed_grid(model.template,role_index).unit, indexed_grid(bound,role_index).unit
-        scaled = model.values .* observed_unit
-        all(v -> mod(v,source_unit) == 0,scaled) || return nothing
-        return (family=:translation, basis=bound, expected=Tuple(div.(scaled,source_unit)), value=anchor(bound),
-            relative=!isnothing(position))
+        return motion_fragment(model,bound,role_index,!isnothing(position))
     elseif model.family == :count
         visibility = isnothing(shift) ? model.visibility :
             ColorCell[(x+shift[1],y+shift[2],color) for (x,y,color) in model.visibility]
@@ -370,7 +415,7 @@ end
 click_role_signature(binding,point) = merge(binding,(;click=relative_click(point,binding.origin,binding.unit)))
 
 function evaluate_joint_rule(rule, before, groups, enclosure, action; meters=(), relative_transfer=false,
-                             observed_click=nothing, trained_click=nothing,role_index=nothing)
+                             observed_click=nothing, trained_click=nothing,role_index=nothing,binding_guard=nothing)
     clicked = nothing
     support = nothing
     relative = false
@@ -399,16 +444,15 @@ function evaluate_joint_rule(rule, before, groups, enclosure, action; meters=(),
     end
     positions = relative ? [isnothing(offset) ? nothing : anchor(support) .+ offset for offset in rule.click.offsets] :
         fill(nothing,length(rule.effects))
-    fragments = [result_model(effect,before,groups,enclosure,action;meters,clicked,position,shift,role_index)
+    fragments = Union{Nothing,NamedTuple}[result_model(effect,before,groups,enclosure,action;meters,clicked,position,shift,role_index)
         for (effect,position) in zip(rule.effects,positions)]
     if !relative && any(isnothing,fragments)
         movers = findall(effect->effect.family == :translation,rule.effects)
         if any(i->isnothing(fragments[i]),movers)
-            positions = joint_motion_positions(rule,movers,groups,enclosure,role_index)
-            if !isnothing(positions)
-                for (i,position) in positions
-                    fragments[i] = result_model(rule.effects[i],before,groups,enclosure,action;
-                        position,role_index)
+            bound = joint_motion_fragments(rule,movers,before,groups,enclosure,role_index,binding_guard)
+            if !isnothing(bound)
+                for (i,part) in zip(movers,bound)
+                    fragments[i] = part
                 end
             end
         end
@@ -441,15 +485,16 @@ function evaluate_joint_rule(rule, before, groups, enclosure, action; meters=(),
         if any(part->part.family == :count, fragments) && anchors != rule.anchors && !relative
             return (truth=unknown_truth, fragments, reason="resource_interaction_scope")
         end
-        prior = Set(pixel for item in movers for pixel in effect_points(item.basis))
-        destination = Set((x+item.expected[1],y+item.expected[2]) for item in movers for (x,y,_) in item.basis)
-        all(((x,y),)->checkbounds(Bool,before,y+1,x+1),destination) ||
-            return (truth=unknown_truth,fragments,reason="unobserved_destination")
-        colors = sort!(unique(UInt8[before[y+1,x+1] for (x,y) in setdiff(destination,prior)]))
+        colors = destination_colors(before,movers)
+        isnothing(colors) && return (truth=unknown_truth,fragments,reason="unobserved_destination")
         colors == rule.entry_colors || return (truth=disproven,fragments,reason="entry_colors_out_of_scope")
     end
+    any(part->haskey(part,:entry_alternatives),fragments) &&
+        return (truth=unknown_truth,fragments,reason="unverified_competing_binding")
     return (truth=proven, fragments, reason="published_joint_effects")
 end
+
+assessable_binding(result) = result.truth == proven || result.reason == "unverified_competing_binding"
 
 function scope_key(fragment)
     # Include the operand binding so two moving roles remain separate channels.

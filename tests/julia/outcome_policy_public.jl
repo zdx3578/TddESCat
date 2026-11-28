@@ -81,13 +81,26 @@ const MODE = ARGS[2]
         preparation = Dict("id"=>5)
         for (level,x) in enumerate((9,39))
             target = TC.click_action((x,11))
+            if MODE == "outcome-distractor-policy"
+                dispatch(Dict("id"=>1))
+            end
             omitted = dispatch(target)
             @test omitted.after.observation.levels_completed == level-1
+            if MODE == "outcome-distractor-policy"
+                dispatch(Dict("id"=>7))
+            end
             applied = dispatch(preparation)
             @test !applied.observed.reached.advanced
+            if MODE == "outcome-distractor-policy"
+                dispatch(Dict("id"=>1))
+            end
             advanced = dispatch(target)
             @test advanced.after.observation.levels_completed == level
             @test !isnothing(advanced.observed.public_outcome.relationship)
+            if MODE == "outcome-distractor-policy"
+                proof = advanced.observed.public_outcome.relationship
+                @test proof.preparation == applied.observed.event && proof.comparison == omitted.observed.event
+            end
         end
         training_outcomes = [row.event for row in agenda.outcomes if row.result == :advancement]
         @test length(training_outcomes) == 2
@@ -102,6 +115,20 @@ const MODE = ARGS[2]
         job = TC.prepare_policy_learning!(knowledge,CONFIG,store,ARGS[4],agenda;entries)
         @test !isnothing(job)
         @test any(episode->last(episode.members) == last(agenda.outcomes).index,job.corpus.episodes)
+        if MODE == "outcome-distractor-policy"
+            sources = filter(job.corpus.episodes) do episode
+                rows = agenda.samples[episode.members]
+                episode.structure == "sequence" && [row.effects.action["id"] for row in rows] == [5,6] &&
+                    isempty(episode.body["layout"]["shared"]) && rows[2].advanced && episode.members[2] == episode.members[1]+2 &&
+                    episode.members[1]+1 in episode.evidence_only
+            end
+            @test length(sources) >= 2
+            withdrawn = deepcopy(agenda)
+            empty!(withdrawn.outcome_relations)
+            trace = TC.witnessed_relation_steps(withdrawn,entries)
+            @test all(e->!haskey(trace.links,Tuple(e.members)),sources)
+            @test all(e->!TC.verify_relation_episode(e.body,e,withdrawn,entries),sources)
+        end
         status = TC.wait_worker(job.job,TC.store_path(store))
         learned = TC.collect_policy_learning!(knowledge,store,job,status;
             available_after=rec.before_ref,live_agenda=agenda)
@@ -148,7 +175,7 @@ const MODE = ARGS[2]
         result = dispatch(next.proposal.action,next)
         @test result.prediction.payload["guard_truth"] == "unknown"
         @test !haskey(result.prediction.payload["predicted_values"],"public_advancement")
-        successful = MODE == "outcome-policy"
+        successful = MODE != "outcome-policy-failure"
         @test rec.observation.state == (successful ? "WIN" : "GAME_OVER")
         @test result.policy.result == (successful ? :stopped_at_public_advance : :withdrawn)
         @test result.observed.feedback.result == (successful ? :established : :refuted)

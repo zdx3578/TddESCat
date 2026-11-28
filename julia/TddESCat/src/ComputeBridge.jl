@@ -76,7 +76,11 @@ function with_compute(f,config)
                 elseif name == "solver_python"
                     declare_compute_backend!(worker,name,"cvc5",["solve","synthesize_guard"])
                 else
-                    declare_compute_backend!(worker,name,"atddc",["compile_bool","entails_bool","release"])
+                    required = ["compile_bool","entails_bool","release"]
+                    if !isnothing(config.learning) && get(config.learning,"competing_role_backend","native") == "factor"
+                        push!(required,"evaluate_bool_batch")
+                    end
+                    declare_compute_backend!(worker,name,"atddc",required)
                 end
             end
             if haskey(config.compute,"solver_python") && !isnothing(config.learning) &&
